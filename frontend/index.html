@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAARS</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>MAARS</h1>
+        <p class="subtitle">Multi-Agent Automated Research System</p>
+
+        <section class="planner-section">
+            <h2>Planner</h2>
+            <div class="planner-content">
+                <div class="input-output-area">
+                    <div class="display-area">
+                        <div id="queryArea" class="display-content" contenteditable="true" data-placeholder="Enter your research task here..."></div>
+                    </div>
+                    <div class="display-area">
+                        <div id="outputArea" class="display-content" data-placeholder="Generated plan will appear here..."></div>
+                    </div>
+                </div>
+                <div class="button-group">
+                    <button id="settingsBtn">Settings</button>
+                    <button id="clearBtn">Clear</button>
+                    <button id="planBtn">Generate Plan</button>
+                    <button id="generateExecutionMapBtn">Generate Execution Map</button>
+                    <button id="abortPlanBtn" style="display: none;">Abort</button>
+                    <button id="loadExampleBtn">Load Example</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="dispatcher-section">
+            <h2>Dispatcher</h2>
+            <div class="diagram-area">
+                <div id="diagramArea" class="diagram-content">
+                    <div class="execution-map">
+                        <div class="map-info">No execution map found. Generate or load a plan, then click "Generate Execution Map" to build the map.</div>
+                    </div>
+                </div>
+            </div>
+            <div class="button-group">
+                <button id="loadDispatcherExampleBtn">Load Example</button>
+                <button id="mockExecutionBtn">Mock Execution</button>
+            </div>
+        </section>
+
+        <section class="executor-section">
+            <h2>Executors</h2>
+            <div class="executor-content">
+                <div class="executor-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Total:</span>
+                        <span class="stat-value" id="executorTotal">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Busy:</span>
+                        <span class="stat-value stat-busy" id="executorBusy">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Idle:</span>
+                        <span class="stat-value stat-idle" id="executorIdle">0</span>
+                    </div>
+                </div>
+                <div class="executor-grid" id="executorGrid">
+                    <!-- Populated by loadExecutorStates on page load -->
+                </div>
+            </div>
+        </section>
+
+        <section class="verifier-section">
+            <h2>Verifiers</h2>
+            <div class="verifier-content">
+                <div class="verifier-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Total:</span>
+                        <span class="stat-value" id="verifierTotal">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Busy:</span>
+                        <span class="stat-value stat-busy" id="verifierBusy">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Idle:</span>
+                        <span class="stat-value stat-idle" id="verifierIdle">0</span>
+                    </div>
+                </div>
+                <div class="verifier-grid" id="verifierGrid">
+                    <!-- Populated by loadVerifierStates on page load -->
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>API Configuration</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="apiUrl">API URL:</label>
+                    <input type="text" id="apiUrl" placeholder="https://api.siliconflow.cn/v1 or https://api.openai.com/v1">
+                    <small>Base URL (e.g., https://api.siliconflow.cn/v1) - /chat/completions will be added automatically</small>
+                </div>
+                <div class="form-group">
+                    <label for="apiKey">API Key:</label>
+                    <input type="password" id="apiKey" placeholder="Enter your API key">
+                </div>
+                <div class="form-group">
+                    <label for="model">Model:</label>
+                    <input type="text" id="model" placeholder="gpt-3.5-turbo">
+                </div>
+                <div class="form-group">
+                    <label for="temperature">Temperature:</label>
+                    <input type="number" id="temperature" step="0.1" min="0" max="2" value="0.7">
+                </div>
+                <button id="saveConfigBtn">Save Configuration</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
