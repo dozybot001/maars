@@ -1,14 +1,13 @@
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs').promises;
 const path = require('path');
 const http = require('http');
 const { Server } = require('socket.io');
 const planner = require('./planner');
-const dispatcher = require('./dispatcher');
+const monitor = require('./monitor');
+const taskCache = require('./tasks/taskCache');
 const db = require('./db');
-const executorManager = require('./executor/manager');
-const verifierManager = require('./verifier/manager');
+const { executor: executorManager, verifier: verifierManager } = require('./workers');
 const ExecutorRunner = require('./executor/runner');
 
 const app = express();
@@ -21,7 +20,9 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 3001;
-const CONFIG_FILE = path.join(__dirname, 'config.json');
+
+// AbortController for current plan run (stop button)
+let planRunAbortController = null;
 
 // Create executor runner instance
 const executorRunner = new ExecutorRunner(io);
@@ -29,311 +30,202 @@ const executorRunner = new ExecutorRunner(io);
 app.use(cors());
 app.use(express.json());
 
-// Default configuration
-const defaultConfig = {
-  apiUrl: '',
-  apiKey: '',
-  model: 'gpt-3.5-turbo',
-  temperature: 0.7
-};
-
-// Load configuration
-async function loadConfig() {
-  try {
-    const data = await fs.readFile(CONFIG_FILE, 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    return defaultConfig;
-  }
-}
-
-// Save configuration
-async function saveConfig(config) {
-  await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2));
-}
-
 // ========== API ROUTES (must come before static file serving) ==========
 
-// Get configuration endpoint
-app.get('/api/config', async (req, res) => {
-  try {
-    const config = await loadConfig();
-    res.json(config);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to load configuration' });
+// Stop current plan run
+app.post('/api/plan/stop', (req, res) => {
+  if (planRunAbortController) {
+    planRunAbortController.abort();
   }
+  res.json({ success: true });
 });
 
-// Update configuration endpoint
-app.post('/api/config', async (req, res) => {
+// Run plan: verify → decompose → format. If idea provided, create task 0 first.
+app.post('/api/plan/run', async (req, res) => {
+  planRunAbortController = new AbortController();
+  const signal = planRunAbortController.signal;
+
   try {
-    const config = req.body;
-    await saveConfig(config);
-    res.json({ success: true, config });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to save configuration' });
-  }
-});
+    const { idea } = req.body;
+    const planId = req.query.planId || req.body.planId || 'test';
 
-// AI communication endpoint
-app.post('/api/plan', async (req, res) => {
-  try {
-    const { task } = req.body;
-    const config = await loadConfig();
-
-    const result = await planner.generatePlan(task, config);
-    res.json({ result });
-  } catch (error) {
-    console.error('Plan generation error:', error.message);
-    
-    if (error.response) {
-      if (error.response.status === 401) {
-        return res.status(401).json({
-          error: 'Authentication failed. Please verify your API key.'
-        });
-      }
-
-      return res.status(error.response.status).json({
-        error: `API request failed: ${error.response.status} ${error.response.statusText || ''}`
-      });
-    } else if (error.request) {
-      return res.status(500).json({
-        error: error.message || 'No response from API. Please check your API URL and network connection.'
-      });
+    let plan = await db.getPlan(planId);
+    if (idea != null && typeof idea === 'string') {
+      const task0 = { task_id: '0', description: idea.trim(), dependencies: [] };
+      await db.savePlan({ tasks: [task0] }, planId);
+      plan = await db.getPlan(planId);
+    }
+    if (!plan || !plan.tasks || plan.tasks.length === 0) {
+      return res.status(400).json({ error: 'No plan found. Provide idea or generate plan first.' });
     }
 
-    if (error.message && (error.message.includes('API configuration') || error.message.includes('API URL'))) {
-      return res.status(400).json({
-        error: error.message
-      });
+    io.emit('plan-start');
+    taskCache.clearPlanCache(planId);
+    (plan.tasks || []).forEach(t => taskCache.appendPlanCache(planId, t));
+
+    // Emit task 0 (idea) first so it renders before decompose starts
+    const task0 = plan.tasks.find(t => t.task_id === '0');
+    if (task0) {
+      const staged = taskCache.computeStaged(taskCache.getPlanCache(planId));
+      const task0WithStage = taskCache.enrichTreeData(staged, plan.tasks).find(t => t.task_id === '0');
+      if (task0WithStage) io.emit('plan-task', { task: task0WithStage });
     }
 
-    return res.status(500).json({
-      error: error.message || 'Failed to communicate with AI.'
-    });
-  }
-});
+    const onTask = (task) => {
+      taskCache.appendPlanCache(planId, task);
+      const staged = taskCache.computeStaged(taskCache.getPlanCache(planId));
+      const taskWithStage = taskCache.enrichTreeData(staged, [task]).find(t => t.task_id === task.task_id)
+        || { ...task, stage: 1 };
+      io.emit('plan-task', { task: taskWithStage });
+    };
+    const onThinking = (chunk) => io.emit('plan-thinking', { chunk });
 
-// Dispatcher endpoint - generate execution sequence from plan
-app.post('/api/dispatcher', async (req, res) => {
-  try {
-    const { plan } = req.body;
-    
-    if (!plan) {
-      return res.status(400).json({
-        error: 'Plan is required'
-      });
-    }
+    const { tasks: mergedTasks } = await planner.runPlan(plan, onTask, onThinking, { signal });
 
-    const executionSequence = dispatcher.generateExecutionSequence(plan);
-    res.json({ result: executionSequence });
-  } catch (error) {
-    console.error('Dispatcher error:', error);
-    return res.status(500).json({
-      error: error.message || 'Failed to generate execution sequence'
-    });
-  }
-});
+    await db.savePlan({ tasks: mergedTasks }, planId);
+    const treeData = taskCache.buildTreeData(mergedTasks);
+    io.emit('plan-complete', { treeData });
 
-// Database endpoints for plans
-// Get all plans
-app.get('/api/plans', async (req, res) => {
-  try {
-    const plans = await db.getAllPlans();
-    res.json({ plans });
-  } catch (error) {
-    console.error('Error loading plans:', error);
-    res.status(500).json({ error: 'Failed to load plans' });
-  }
-});
-
-// Save a plan to database
-app.post('/api/plans', async (req, res) => {
-  try {
-    const plan = req.body;
-    
-    if (!plan.plan_id) {
-      return res.status(400).json({
-        error: 'Plan ID is required'
-      });
-    }
-
-    const result = await db.savePlan(plan);
-    res.json(result);
-  } catch (error) {
-    console.error('Error saving plan:', error);
-    res.status(500).json({
-      error: error.message || 'Failed to save plan'
-    });
-  }
-});
-
-// Clear all plans from database (must be before /api/plans/:planId)
-app.delete('/api/plans', async (req, res) => {
-  try {
-    await db.clearAllPlans();
     res.json({ success: true });
   } catch (error) {
-    console.error('Error clearing plans:', error);
-    res.status(500).json({
-      error: error.message || 'Failed to clear database'
-    });
+    const isAborted = error.name === 'AbortError' || signal?.aborted;
+    planRunAbortController = null;
+    console.error('Plan run error:', error.message);
+    io.emit('plan-error', { error: isAborted ? 'Plan generation stopped by user' : error.message });
+    if (isAborted) {
+      return res.status(499).json({ error: 'Plan generation stopped by user' });
+    }
+    if (error.message?.includes('No decomposable task') || error.message?.includes('Provide idea')) {
+      return res.status(400).json({ error: error.message });
+    }
+    res.status(500).json({ error: error.message || 'Failed to run plan' });
+  } finally {
+    planRunAbortController = null;
   }
 });
 
-// Get a plan by ID
-app.get('/api/plans/:planId', async (req, res) => {
+// Monitor - generate timetable from execution
+app.post('/api/monitor/timetable', async (req, res) => {
   try {
-    const { planId } = req.params;
-    const plan = await db.getPlanById(planId);
+    const { execution } = req.body;
     
-    if (!plan) {
-      return res.status(404).json({ error: 'Plan not found' });
+    if (!execution) {
+      return res.status(400).json({
+        error: 'Execution is required'
+      });
     }
-    
-    res.json({ plan });
-  } catch (error) {
-    console.error('Error getting plan:', error);
-    res.status(500).json({ error: 'Failed to get plan' });
-  }
-});
 
-// Delete a plan
-app.delete('/api/plans/:planId', async (req, res) => {
-  try {
-    const { planId } = req.params;
-    await db.deletePlan(planId);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error deleting plan:', error);
-    res.status(500).json({
-      error: error.message || 'Failed to delete plan'
-    });
-  }
-});
-
-// Get all execution sequences from stored plans
-app.get('/api/execution-sequences', async (req, res) => {
-  try {
-    const plans = await db.getAllPlans();
-    const executionSequences = plans.map(plan => {
-      try {
-        return dispatcher.generateExecutionSequence(plan);
-      } catch (error) {
-        console.error(`Error generating execution sequence for plan ${plan.plan_id}:`, error);
-        return null;
-      }
-    }).filter(seq => seq !== null);
-    
-    res.json({ executionSequences });
-  } catch (error) {
-    console.error('Error loading execution sequences:', error);
-    res.status(500).json({ error: 'Failed to load execution sequences' });
-  }
-});
-
-// Get database file modification time for change detection
-app.get('/api/db-timestamp', async (req, res) => {
-  try {
-    const dbFile = path.join(__dirname, 'db', 'plans.json');
-    try {
-      const stats = await fs.stat(dbFile);
-      res.json({ timestamp: stats.mtime.getTime() });
-    } catch (error) {
-      // File doesn't exist yet
-      res.json({ timestamp: 0 });
-    }
-  } catch (error) {
-    console.error('Error getting database timestamp:', error);
-    res.status(500).json({ error: 'Failed to get database timestamp' });
-  }
-});
-
-// Load mock plan from mock_plan.json and save to plans database
-app.post('/api/load-mock-plan', async (req, res) => {
-  try {
-    const mockPlanFile = path.join(__dirname, 'db', 'mock_plan.json');
-    
-    // Read mock_plan.json
-    let mockPlan;
-    try {
-      const data = await fs.readFile(mockPlanFile, 'utf8');
-      mockPlan = JSON.parse(data);
-    } catch (error) {
-      if (error.code === 'ENOENT') {
-        return res.status(404).json({ error: 'mock_plan.json file not found' });
-      }
-      if (error instanceof SyntaxError) {
-        return res.status(400).json({ error: 'Invalid JSON in mock_plan.json' });
-      }
-      throw error;
-    }
-    
-    // Validate plan structure
-    if (!mockPlan || !mockPlan.plan_id) {
-      return res.status(400).json({ error: 'Invalid mock plan: missing plan_id' });
-    }
-    
-    // Save to plans database using db module
-    const result = await db.savePlan(mockPlan);
-    res.json(result);
-  } catch (error) {
-    console.error('Error loading mock plan:', error);
-    res.status(500).json({ error: error.message || 'Failed to load mock plan' });
-  }
-});
-
-// Get timetable layout for a plan and cache it in executor runner
-app.post('/api/timetable-layout', async (req, res) => {
-  try {
-    const { planId } = req.body;
-    
-    if (!planId) {
-      return res.status(400).json({ error: 'planId is required' });
-    }
-    
-    // Get plan from database
-    const plan = await db.getPlanById(planId);
-    
-    if (!plan) {
-      return res.status(404).json({ error: 'Plan not found' });
-    }
-    
-    // Generate execution stages using dispatcher
-    const executionStages = dispatcher.generateExecutionSequence(plan);
-    
-    // Build timetable layout using dispatcher
-    const layout = dispatcher.buildTimetableLayout(executionStages);
-    
-    // Cache the layout and build chain cache in executor runner
+    const layout = monitor.buildLayoutFromExecution(execution);
     executorRunner.setTimetableLayoutCache(layout);
     
     res.json({ layout });
   } catch (error) {
-    console.error('Error generating timetable layout:', error);
-    res.status(500).json({ error: error.message || 'Failed to generate timetable layout' });
+    console.error('Monitor timetable error:', error);
+    return res.status(500).json({
+      error: error.message || 'Failed to generate timetable layout'
+    });
   }
 });
 
-// Get executor states
+// ========== Agent JSONs (planId defaults to "test") ==========
+
+// Plan (db only, no stage)
+app.get('/api/plan', async (req, res) => {
+  try {
+    const planId = req.query.planId || 'test';
+    const plan = await db.getPlan(planId);
+    res.json({ plan: plan || null });
+  } catch (error) {
+    console.error('Error loading plan:', error);
+    res.status(500).json({ error: error.message || 'Failed to load plan' });
+  }
+});
+
+// Plan tree data for rendering (cache processed, with stage)
+app.get('/api/plan/tree', async (req, res) => {
+  try {
+    const planId = req.query.planId || 'test';
+    const plan = await db.getPlan(planId);
+    if (!plan || !plan.tasks || plan.tasks.length === 0) {
+      return res.json({ treeData: [] });
+    }
+    const treeData = taskCache.buildTreeData(plan.tasks);
+    res.json({ treeData });
+  } catch (error) {
+    console.error('Error loading plan tree:', error);
+    res.status(500).json({ error: error.message || 'Failed to load plan tree' });
+  }
+});
+
+// Idea
+app.get('/api/idea', async (req, res) => {
+  try {
+    const planId = req.query.planId || 'test';
+    const idea = await db.getIdea(planId);
+    res.json({ idea });
+  } catch (error) {
+    console.error('Error loading idea:', error);
+    res.status(500).json({ error: 'Failed to load idea' });
+  }
+});
+
+// Execution endpoints
+app.get('/api/execution', async (req, res) => {
+  try {
+    const planId = req.query.planId || 'test';
+    const execution = await db.getExecution(planId);
+    res.json({ execution });
+  } catch (error) {
+    console.error('Error loading execution:', error);
+    res.status(500).json({ error: 'Failed to load execution' });
+  }
+});
+
+app.post('/api/execution', async (req, res) => {
+  try {
+    const planId = req.body.planId || req.query.planId || 'test';
+    const execution = req.body;
+    // Remove planId from execution if it was included
+    delete execution.planId;
+    const result = await db.saveExecution(execution, planId);
+    res.json(result);
+  } catch (error) {
+    console.error('Error saving execution:', error);
+    res.status(500).json({ error: error.message || 'Failed to save execution' });
+  }
+});
+
+// Verification endpoints
+app.get('/api/verification', async (req, res) => {
+  try {
+    const planId = req.query.planId || 'test';
+    const verification = await db.getVerification(planId);
+    res.json({ verification });
+  } catch (error) {
+    console.error('Error loading verification:', error);
+    res.status(500).json({ error: 'Failed to load verification' });
+  }
+});
+
+app.post('/api/verification', async (req, res) => {
+  try {
+    const planId = req.body.planId || req.query.planId || 'test';
+    const verification = req.body;
+    // Remove planId from verification if it was included
+    delete verification.planId;
+    const result = await db.saveVerification(verification, planId);
+    res.json(result);
+  } catch (error) {
+    console.error('Error saving verification:', error);
+    res.status(500).json({ error: error.message || 'Failed to save verification' });
+  }
+});
+
+// Executors
 app.get('/api/executors', (req, res) => {
   try {
-    // Get stats first (this validates and fixes any inconsistencies)
     const stats = executorManager.getExecutorStats();
-    // Then get executors (after stats validation)
     const executors = executorManager.getAllExecutors();
-    
-    // Final validation: ensure stats match executor array
-    const actualBusy = executors.filter(e => e.status === 'busy').length;
-    const actualIdle = executors.filter(e => e.status === 'idle').length;
-    
-    if (stats.busy !== actualBusy || stats.idle !== actualIdle) {
-      console.warn(`Stats mismatch in API response: stats say busy=${stats.busy}, idle=${stats.idle}, but executors show busy=${actualBusy}, idle=${actualIdle}`);
-      // Use actual values from executor array
-      stats.busy = actualBusy;
-      stats.idle = actualIdle;
-    }
-    
     res.json({ executors, stats });
   } catch (error) {
     console.error('Error getting executors:', error);
@@ -401,25 +293,11 @@ app.post('/api/executors/reset', (req, res) => {
   }
 });
 
-// Get verifier states
+// Verifiers
 app.get('/api/verifiers', (req, res) => {
   try {
-    // Get stats first (this validates and fixes any inconsistencies)
     const stats = verifierManager.getVerifierStats();
-    // Then get verifiers (after stats validation)
     const verifiers = verifierManager.getAllVerifiers();
-    
-    // Final validation: ensure stats match verifier array
-    const actualBusy = verifiers.filter(v => v.status === 'busy').length;
-    const actualIdle = verifiers.filter(v => v.status === 'idle').length;
-    
-    if (stats.busy !== actualBusy || stats.idle !== actualIdle) {
-      console.warn(`Stats mismatch in API response: stats say busy=${stats.busy}, idle=${stats.idle}, but verifiers show busy=${actualBusy}, idle=${actualIdle}`);
-      // Use actual values from verifier array
-      stats.busy = actualBusy;
-      stats.idle = actualIdle;
-    }
-    
     res.json({ verifiers, stats });
   } catch (error) {
     console.error('Error getting verifiers:', error);

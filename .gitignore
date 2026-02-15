@@ -1,6 +1,5 @@
 node_modules/
 backend/node_modules/
-backend/config.json
-backend/db/plans.json
+backend/db/test/
 *.log
 .DS_Store

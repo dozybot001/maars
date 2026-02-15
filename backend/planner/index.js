@@ -1,75 +1,172 @@
-const axios = require('axios');
 const fs = require('fs').promises;
 const path = require('path');
+const { mockChatCompletion } = require('../test/mock-stream');
 
-const SYSTEM_PROMPT_FILE = path.join(__dirname, 'system-prompt.txt');
+const DECOMPOSE_PROMPT_FILE = path.join(__dirname, 'decompose-prompt.txt');
+const VERIFY_PROMPT_FILE = path.join(__dirname, 'verify-prompt.txt');
+const FORMAT_PROMPT_FILE = path.join(__dirname, 'format-prompt.txt');
+const MOCK_AI_DIR = path.join(__dirname, '../db/test/mock-ai');
 
-// Load system prompt
-async function loadSystemPrompt() {
-  const data = await fs.readFile(SYSTEM_PROMPT_FILE, 'utf8');
+const MAX_DECOMPOSE_DEPTH = 5;
+
+async function loadDecomposePrompt() {
+  const data = await fs.readFile(DECOMPOSE_PROMPT_FILE, 'utf8');
   return data.trim();
 }
 
-// Generate plan using AI
-async function generatePlan(task, config) {
-  if (!config.apiUrl || !config.apiKey) {
-    throw new Error('API configuration is missing. Please configure API settings first.');
-  }
+async function loadVerifyPrompt() {
+  const data = await fs.readFile(VERIFY_PROMPT_FILE, 'utf8');
+  return data.trim();
+}
 
-  // Normalize API URL - append /chat/completions if not present
-  let apiUrl = config.apiUrl.trim();
-  if (!apiUrl.endsWith('/chat/completions')) {
-    apiUrl = apiUrl.replace(/\/$/, '') + '/chat/completions';
-  }
+async function loadFormatPrompt() {
+  const data = await fs.readFile(FORMAT_PROMPT_FILE, 'utf8');
+  return data.trim();
+}
 
-  // Trim API key to remove any whitespace
-  const apiKey = config.apiKey.trim();
-  
-  console.log('Making API request to:', apiUrl);
-  console.log('Using model:', config.model);
-  
-  const systemPrompt = await loadSystemPrompt();
-
-  // Call the custom API using axios
+/** Load mock AI response from db/test/mock-ai. */
+async function loadMockResponse(type, taskId) {
+  const file = path.join(MOCK_AI_DIR, `${type}.json`);
+  let data;
   try {
-    const response = await axios.post(apiUrl, {
-      model: config.model,
-      messages: [
-        {
-          role: 'system',
-          content: systemPrompt
-        },
-        {
-          role: 'user',
-          content: task
-        }
-      ],
-      temperature: config.temperature
-    }, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      }
-      // No timeout property - wait indefinitely for response
-    });
+    data = JSON.parse(await fs.readFile(file, 'utf8'));
+  } catch {
+    return null;
+  }
+  const entry = data[taskId] || data._default;
+  if (!entry) return null;
+  const content = typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content);
+  return { content, reasoning: entry.reasoning || '' };
+}
 
-    return response.data;
-  } catch (error) {
-    // Provide more detailed error information
-    if (error.code === 'ECONNREFUSED') {
-      throw new Error(`Connection refused. Please check if the API URL is correct: ${apiUrl}`);
-    } else if (error.code === 'ENOTFOUND') {
-      throw new Error(`DNS lookup failed. Please check if the API URL is correct: ${apiUrl}`);
-    } else if (error.code === 'ETIMEDOUT' || error.message.includes('timeout')) {
-      throw new Error(`Request timeout. The API did not respond. This may happen with complex tasks. Please try again or simplify your query. URL: ${apiUrl}`);
-    } else if (error.request && !error.response) {
-      throw new Error(`No response from API. URL: ${apiUrl}. Please check your API URL and network connection.`);
+/** Mock chat completion: loads from db/test/mock-ai, streams reasoning via onThinking. */
+async function callChatCompletion(messages, onThinking, mockContext, signal) {
+  const { type, taskId } = mockContext;
+  const mock = await loadMockResponse(type, taskId);
+  if (!mock) throw new Error(`No mock data for ${type}/${taskId}`);
+  return mockChatCompletion(mock.content, mock.reasoning, onThinking, { signal });
+}
+
+// Parse JSON from AI response (handles markdown code blocks)
+function parseJsonResponse(text) {
+  let cleaned = (text || '').trim();
+  const jsonMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonMatch) {
+    cleaned = jsonMatch[1].trim();
+  }
+  return JSON.parse(cleaned);
+}
+
+/** Decompose parent into phases (no atomicity, no I-O). */
+async function decomposeTask(parentTask, onThinking, signal) {
+  await loadDecomposePrompt(); // keep prompt loaded for future use
+  const content = await callChatCompletion(
+    [],
+    onThinking,
+    { type: 'decompose', taskId: parentTask.task_id },
+    signal
+  );
+  const result = parseJsonResponse(content);
+  return (result.tasks || []).filter(
+    t => t.task_id && t.description && Array.isArray(t.dependencies)
+  );
+}
+
+/** Verify if task is atomic. */
+async function verifyTask(task, onThinking, signal) {
+  await loadVerifyPrompt(); // keep prompt loaded for future use
+  const content = await callChatCompletion(
+    [],
+    onThinking,
+    { type: 'verify', taskId: task.task_id },
+    signal
+  );
+  const result = parseJsonResponse(content);
+  return { atomic: !!result.atomic, reason: result.reason || '' };
+}
+
+/** Format atomic task with input/output. */
+async function formatTask(task, onThinking, signal) {
+  await loadFormatPrompt(); // keep prompt loaded for future use
+  const content = await callChatCompletion(
+    [],
+    onThinking,
+    { type: 'format', taskId: task.task_id },
+    signal
+  );
+  const result = parseJsonResponse(content);
+  return result.input && result.output ? { input: result.input, output: result.output } : null;
+}
+
+/**
+ * Unified flow: Verify first → if atomic: Format; else: Decompose → recurse for each child.
+ * All tasks (including 0/idea) go through this.
+ */
+async function verifyAndDecomposeRecursive(task, allTasks, onTask, onThinking, depth, checkAborted, signal) {
+  if (checkAborted?.()) {
+    const e = new Error('Aborted');
+    e.name = 'AbortError';
+    throw e;
+  }
+
+  if (depth >= MAX_DECOMPOSE_DEPTH) {
+    const io = await formatTask(task, onThinking, signal);
+    if (!io) {
+      throw new Error(`Format failed for task ${task.task_id} at max depth: missing input/output`);
     }
-    // Re-throw other errors
-    throw error;
+    const idx = allTasks.findIndex(t => t.task_id === task.task_id);
+    if (idx >= 0) allTasks[idx] = { ...allTasks[idx], ...io };
+    return;
+  }
+
+  const v = await verifyTask(task, onThinking, signal);
+  const atomic = v.atomic;
+
+  if (atomic) {
+    const io = await formatTask(task, onThinking, signal);
+    if (!io) {
+      throw new Error(`Format failed for atomic task ${task.task_id}: missing input/output`);
+    }
+    const idx = allTasks.findIndex(t => t.task_id === task.task_id);
+    if (idx >= 0) allTasks[idx] = { ...allTasks[idx], ...io };
+    return;
+  }
+
+  const children = await decomposeTask(task, onThinking, signal);
+  if (children.length === 0) {
+    throw new Error(`Decompose returned no children for task ${task.task_id}`);
+  }
+
+  allTasks.push(...children);
+  children.forEach(t => onTask && onTask(t));
+
+  for (const child of children) {
+    await verifyAndDecomposeRecursive(child, allTasks, onTask, onThinking, depth + 1, checkAborted, signal);
   }
 }
 
-module.exports = {
-  generatePlan
-};
+function hasChildren(tasks, taskId) {
+  return taskId === '0'
+    ? tasks.some(t => t.task_id && /^[1-9]\d*$/.test(t.task_id))
+    : tasks.some(t => t.task_id && t.task_id.startsWith(taskId + '_'));
+}
+
+/** Run verify→decompose→format on first task without children. Uses mock data from db/test/mock-ai. */
+async function runPlan(plan, onTask, onThinking, options = {}) {
+  const { signal } = options;
+  const checkAborted = () => signal?.aborted;
+
+  const tasks = plan?.tasks || [];
+  const firstTask = tasks.find(t => t.task_id && !hasChildren(tasks, t.task_id));
+  if (!firstTask) {
+    throw new Error('No decomposable task found. Generate plan first.');
+  }
+
+  const allTasks = [...tasks];
+  const originalIds = new Set(tasks.map(t => t.task_id));
+  await verifyAndDecomposeRecursive(firstTask, allTasks, onTask, onThinking || (() => {}), 0, checkAborted, signal);
+
+  return { tasks: allTasks };
+}
+
+module.exports = { runPlan };

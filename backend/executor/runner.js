@@ -3,10 +3,7 @@
  * Handles task execution and real-time state updates via WebSocket
  */
 
-const executorManager = require('./manager');
-const verifierManager = require('../verifier/manager');
-const dispatcher = require('../dispatcher');
-const db = require('../db');
+const { executor: executorManager, verifier: verifierManager } = require('../workers');
 
 class ExecutorRunner {
   constructor(io) {
@@ -20,8 +17,8 @@ class ExecutorRunner {
     this.taskMap = new Map();
     this.reverseDependencyIndex = new Map();
     this.taskFailureCount = new Map(); // Track failure count for each task (execution + verification failures)
-    this.EXECUTION_PASS_PROBABILITY = 0.95; // 95% execution pass probability
-    this.VERIFY_PASS_PROBABILITY = 0.95; // 95% verification pass probability
+    this.EXECUTION_PASS_PROBABILITY = 0.95;
+    this.VERIFY_PASS_PROBABILITY = 0.95;
     this.MAX_FAILURES = 3; // Maximum failures before rollback (allows 2 retries, total 3 attempts)
     this.timetableLayout = null; // Cache for timetable layout from generateExecutionMap
   }
@@ -68,9 +65,9 @@ class ExecutorRunner {
       this.taskFailureCount.clear();
 
       this.chainCache.forEach(task => {
-        this.taskMap.set(task.id, task);
-        this.pendingTasks.add(task.id);
-        this.reverseDependencyIndex.set(task.id, []);
+        this.taskMap.set(task.task_id, task);
+        this.pendingTasks.add(task.task_id);
+        this.reverseDependencyIndex.set(task.task_id, []);
       });
 
       // Build reverse dependency index
@@ -79,7 +76,7 @@ class ExecutorRunner {
           task.dependencies.forEach(depId => {
             const dependents = this.reverseDependencyIndex.get(depId);
             if (dependents) {
-              dependents.push(task.id);
+              dependents.push(task.task_id);
             }
           });
         }
@@ -100,75 +97,74 @@ class ExecutorRunner {
       throw error;
     } finally {
       this.isRunning = false;
+      // Release all executors/verifiers (including any stuck in failed state)
+      executorManager.initializeExecutors();
+      verifierManager.initializeVerifiers();
+      this.broadcastExecutorStates();
+      this.broadcastVerifierStates();
     }
+  }
+
+  // Get tasks that are pending and ready to run (dependencies satisfied)
+  getPendingReadyTasks() {
+    return Array.from(this.pendingTasks)
+      .filter(taskId => {
+        if (this.runningTasks.has(taskId) || this.completedTasks.has(taskId)) return false;
+        const task = this.taskMap.get(taskId);
+        return task && this.areDependenciesSatisfied(task);
+      })
+      .map(id => this.taskMap.get(id))
+      .filter(Boolean);
   }
 
   // Execute tasks
   async executeTasks() {
     // Find initial ready tasks
-    const initialReadyTasks = this.chainCache.filter(task =>
-      this.areDependenciesSatisfied(task) && this.pendingTasks.has(task.id)
-    );
+    const initialReadyTasks = this.getPendingReadyTasks();
 
     console.log(`Found ${initialReadyTasks.length} initial ready tasks out of ${this.chainCache.length} total tasks`);
 
     // Start all initial ready tasks
     initialReadyTasks.forEach(task => {
-      const promise = this.executeTask(task).catch(async (error) => {
-        console.error(`Error executing task ${task.id}:`, error);
-        await this.releaseExecutor(task.id);
-        verifierManager.releaseVerifierByTaskId(task.id);
-        this.broadcastVerifierStates();
-        this.completedTasks.add(task.id);
-        this.runningTasks.delete(task.id);
-        this.pendingTasks.delete(task.id);
-        this.updateTaskStatus(task.id, 'verifying');
-        setTimeout(() => {
-          this.updateTaskStatus(task.id, 'done');
-        }, 300);
-        const dependents = this.reverseDependencyIndex.get(task.id) || [];
-        this.checkSpecificTasks(dependents.map(id => this.taskMap.get(id)).filter(Boolean));
-      });
-      this.taskPromises.set(task.id, promise);
+      const promise = this.executeTask(task).catch(error => this.handleTaskError(task, error));
+      this.taskPromises.set(task.task_id, promise);
     });
 
     // Polling mechanism to check for pending tasks
     const pollInterval = setInterval(() => {
-      const pendingReadyTasks = Array.from(this.pendingTasks).filter(taskId => {
-        if (this.runningTasks.has(taskId) || this.completedTasks.has(taskId)) return false;
-        const task = this.taskMap.get(taskId);
-        return task && this.areDependenciesSatisfied(task);
-      });
-
+      const pendingReadyTasks = this.getPendingReadyTasks();
       if (pendingReadyTasks.length > 0) {
-        this.checkSpecificTasks(pendingReadyTasks.map(id => this.taskMap.get(id)).filter(Boolean));
-      }
-
-      if (this.completedTasks.size === this.chainCache.length) {
-        clearInterval(pollInterval);
+        this.checkSpecificTasks(pendingReadyTasks);
       }
     }, 200);
 
-    // Wait for all promises to complete
-    const allPromises = Array.from(this.taskPromises.values());
-    await Promise.all(allPromises);
+    // Wait for all tasks to complete (including retries)
+    // Keep checking until all tasks are completed, no tasks are running, and no pending tasks can run
+    while (true) {
+      // Check if all tasks are completed
+      if (this.completedTasks.size === this.chainCache.length) {
+        // Double check: ensure no tasks are still running
+        if (this.runningTasks.size === 0) {
+          // Wait a bit more to ensure all promises have resolved
+          await new Promise(resolve => setTimeout(resolve, 300));
+          // Final verification: check again after waiting
+          if (this.completedTasks.size === this.chainCache.length && this.runningTasks.size === 0) {
+            break;
+          }
+        }
+      }
+      
+      // Check for any pending tasks that can run
+      const pendingReadyTasks = this.getPendingReadyTasks();
+      if (pendingReadyTasks.length > 0) {
+        this.checkSpecificTasks(pendingReadyTasks);
+      }
+      
+      // Wait before next check
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
 
     clearInterval(pollInterval);
-
-    // Final check
-    let finalCheckCount = 0;
-    while (this.completedTasks.size < this.chainCache.length && finalCheckCount < 50) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-      finalCheckCount++;
-      const remainingPendingTasks = Array.from(this.pendingTasks).filter(taskId => {
-        if (this.runningTasks.has(taskId) || this.completedTasks.has(taskId)) return false;
-        const task = this.taskMap.get(taskId);
-        return task && this.areDependenciesSatisfied(task);
-      });
-      if (remainingPendingTasks.length > 0) {
-        this.checkSpecificTasks(remainingPendingTasks.map(id => this.taskMap.get(id)).filter(Boolean));
-      }
-    }
 
     console.log(`Final state: ${this.completedTasks.size}/${this.chainCache.length} tasks completed`);
     this.io.emit('execution-complete', {
@@ -185,7 +181,7 @@ class ExecutorRunner {
     const maxRetries = 50;
 
     while (executorId === null && retryCount < maxRetries) {
-      executorId = executorManager.assignTask(task.id);
+      executorId = executorManager.assignTask(task.task_id);
       if (executorId === null) {
         const waitTime = Math.min(100 + retryCount * 20, 500);
         await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -198,19 +194,19 @@ class ExecutorRunner {
     }
 
     if (executorId === null) {
-      console.error(`Failed to assign executor to task ${task.id} after ${retryCount} retries`);
-      this.completedTasks.add(task.id);
-      this.runningTasks.delete(task.id);
-      this.pendingTasks.delete(task.id);
-      this.updateTaskStatus(task.id, 'done');
-      const dependents = this.reverseDependencyIndex.get(task.id) || [];
+      console.error(`Failed to assign executor to task ${task.task_id} after ${retryCount} retries`);
+      this.completedTasks.add(task.task_id);
+      this.runningTasks.delete(task.task_id);
+      this.pendingTasks.delete(task.task_id);
+      this.updateTaskStatus(task.task_id, 'done');
+      const dependents = this.reverseDependencyIndex.get(task.task_id) || [];
       this.checkSpecificTasks(dependents.map(id => this.taskMap.get(id)).filter(Boolean));
       return;
     }
 
     // Mark as running
-    this.runningTasks.add(task.id);
-    this.updateTaskStatus(task.id, 'doing');
+    this.runningTasks.add(task.task_id);
+    this.updateTaskStatus(task.task_id, 'doing');
     this.broadcastExecutorStates();
 
     try {
@@ -223,7 +219,7 @@ class ExecutorRunner {
       
       if (!executionPassed) {
         // Execution failed - mark as failed and show light red
-        this.updateTaskStatus(task.id, 'execution-failed');
+        this.updateTaskStatus(task.task_id, 'execution-failed');
         
         // Mark executor as failed before releasing
         if (executorId !== null) {
@@ -237,11 +233,11 @@ class ExecutorRunner {
         }
         
         // Get failure count for this task
-        const failureCount = this.taskFailureCount.get(task.id) || 0;
-        this.taskFailureCount.set(task.id, failureCount + 1);
+        const failureCount = this.taskFailureCount.get(task.task_id) || 0;
+        this.taskFailureCount.set(task.task_id, failureCount + 1);
         
         // Release executor
-        await this.releaseExecutor(task.id);
+        await this.releaseExecutor(task.task_id);
         this.broadcastExecutorStates();
         
         // Wait a bit to ensure the failed state is visible
@@ -249,22 +245,22 @@ class ExecutorRunner {
         
         if (failureCount < this.MAX_FAILURES - 1) {
           // Not reached max failures yet - retry
-          console.log(`Task ${task.id} execution failed (${failureCount + 1}/${this.MAX_FAILURES}), retrying...`);
+          console.log(`Task ${task.task_id} execution failed (${failureCount + 1}/${this.MAX_FAILURES}), retrying...`);
           
           // Remove from completed and running sets
-          this.runningTasks.delete(task.id);
-          this.completedTasks.delete(task.id);
+          this.runningTasks.delete(task.task_id);
+          this.completedTasks.delete(task.task_id);
           
           // Re-execute the task
           await this.executeTask(task);
           return;
         } else {
           // Reached max failures - rollback
-          console.log(`Task ${task.id} execution failed ${failureCount + 1} times (max ${this.MAX_FAILURES}), rolling back...`);
+          console.log(`Task ${task.task_id} execution failed ${failureCount + 1} times (max ${this.MAX_FAILURES}), rolling back...`);
           
           // Remove from completed and running sets
-          this.runningTasks.delete(task.id);
-          this.completedTasks.delete(task.id);
+          this.runningTasks.delete(task.task_id);
+          this.completedTasks.delete(task.task_id);
           
           // Rollback: mark all dependency tasks as undone
           await this.rollbackTask(task);
@@ -274,11 +270,11 @@ class ExecutorRunner {
 
       // Execution passed - continue with verification
       // Release executor immediately after execution
-      await this.releaseExecutor(task.id);
+      await this.releaseExecutor(task.task_id);
       this.broadcastExecutorStates();
 
       // Mark as verifying and assign verifier
-      this.updateTaskStatus(task.id, 'verifying');
+      this.updateTaskStatus(task.task_id, 'verifying');
       
       // Assign verifier for verification phase
       let verifierId = null;
@@ -286,7 +282,7 @@ class ExecutorRunner {
       const maxRetries = 50;
 
       while (verifierId === null && retryCount < maxRetries) {
-        verifierId = verifierManager.assignTask(task.id);
+        verifierId = verifierManager.assignTask(task.task_id);
         if (verifierId === null) {
           const waitTime = Math.min(100 + retryCount * 20, 500);
           await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -299,7 +295,7 @@ class ExecutorRunner {
       }
 
       if (verifierId === null) {
-        console.error(`Failed to assign verifier to task ${task.id} after ${retryCount} retries`);
+        console.error(`Failed to assign verifier to task ${task.task_id} after ${retryCount} retries`);
         // Continue without verifier (verification still happens)
       } else {
         this.broadcastVerifierStates();
@@ -315,14 +311,14 @@ class ExecutorRunner {
       // Release verifier after verification completes (only if verification passed)
       if (verificationPassed) {
         if (verifierId !== null) {
-          verifierManager.releaseVerifierByTaskId(task.id);
+          verifierManager.releaseVerifierByTaskId(task.task_id);
           this.broadcastVerifierStates();
         }
       }
       
       if (!verificationPassed) {
         // Verification failed - mark as failed and show light red
-        this.updateTaskStatus(task.id, 'verification-failed');
+        this.updateTaskStatus(task.task_id, 'verification-failed');
         
         // Mark verifier as failed before releasing
         if (verifierId !== null) {
@@ -336,36 +332,36 @@ class ExecutorRunner {
         }
         
         // Get failure count for this task (unified counter for execution + verification failures)
-        const failureCount = this.taskFailureCount.get(task.id) || 0;
-        this.taskFailureCount.set(task.id, failureCount + 1);
+        const failureCount = this.taskFailureCount.get(task.task_id) || 0;
+        this.taskFailureCount.set(task.task_id, failureCount + 1);
         
         // Wait a bit longer to ensure the failed state is visible
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Release verifier before retry or rollback
         if (verifierId !== null) {
-          verifierManager.releaseVerifierByTaskId(task.id);
+          verifierManager.releaseVerifierByTaskId(task.task_id);
           this.broadcastVerifierStates();
         }
         
         if (failureCount < this.MAX_FAILURES - 1) {
           // Not reached max failures yet - retry
-          console.log(`Task ${task.id} verification failed (${failureCount + 1}/${this.MAX_FAILURES}), retrying...`);
+          console.log(`Task ${task.task_id} verification failed (${failureCount + 1}/${this.MAX_FAILURES}), retrying...`);
           
           // Remove from completed and running sets
-          this.runningTasks.delete(task.id);
-          this.completedTasks.delete(task.id);
+          this.runningTasks.delete(task.task_id);
+          this.completedTasks.delete(task.task_id);
           
           // Re-execute the task
           await this.executeTask(task);
           return;
         } else {
           // Reached max failures - rollback
-          console.log(`Task ${task.id} verification failed ${failureCount + 1} times (max ${this.MAX_FAILURES}), rolling back...`);
+          console.log(`Task ${task.task_id} verification failed ${failureCount + 1} times (max ${this.MAX_FAILURES}), rolling back...`);
           
           // Remove from completed and running sets
-          this.runningTasks.delete(task.id);
-          this.completedTasks.delete(task.id);
+          this.runningTasks.delete(task.task_id);
+          this.completedTasks.delete(task.task_id);
           
           // Rollback: mark all dependency tasks as undone
           await this.rollbackTask(task);
@@ -374,29 +370,29 @@ class ExecutorRunner {
       }
 
     } catch (executionError) {
-      await this.releaseExecutor(task.id);
-      verifierManager.releaseVerifierByTaskId(task.id);
+      await this.releaseExecutor(task.task_id);
+      verifierManager.releaseVerifierByTaskId(task.task_id);
       this.broadcastExecutorStates();
       this.broadcastVerifierStates();
       throw executionError;
     }
 
     // Mark as completed (execution and verification both passed)
-    this.runningTasks.delete(task.id);
-    this.completedTasks.add(task.id);
-    this.pendingTasks.delete(task.id);
-    this.updateTaskStatus(task.id, 'done');
+    this.runningTasks.delete(task.task_id);
+    this.completedTasks.add(task.task_id);
+    this.pendingTasks.delete(task.task_id);
+    this.updateTaskStatus(task.task_id, 'done');
     // Reset failure count on success
-    this.taskFailureCount.delete(task.id);
+    this.taskFailureCount.delete(task.task_id);
 
     // Check dependents
-    const dependents = this.reverseDependencyIndex.get(task.id) || [];
+    const dependents = this.reverseDependencyIndex.get(task.task_id) || [];
     const candidatesToCheck = new Set(dependents);
 
     this.chainCache.forEach(t => {
       if (!t.dependencies || t.dependencies.length === 0) {
-        if (this.pendingTasks.has(t.id) && !this.runningTasks.has(t.id)) {
-          candidatesToCheck.add(t.id);
+        if (this.pendingTasks.has(t.task_id) && !this.runningTasks.has(t.task_id)) {
+          candidatesToCheck.add(t.task_id);
         }
       }
     });
@@ -419,33 +415,34 @@ class ExecutorRunner {
 
     const readyTasks = tasksToCheck.filter(task => {
       if (!task) return false;
-      if (this.completedTasks.has(task.id)) return false;
-      if (this.runningTasks.has(task.id)) return false;
-      if (!this.pendingTasks.has(task.id)) return false;
+      if (this.completedTasks.has(task.task_id)) return false;
+      if (this.runningTasks.has(task.task_id)) return false;
+      if (!this.pendingTasks.has(task.task_id)) return false;
       return this.areDependenciesSatisfied(task);
     });
 
     readyTasks.forEach(task => {
-      if (!this.taskPromises.has(task.id)) {
-        const promise = this.executeTask(task).catch(async (error) => {
-          console.error(`Error executing task ${task.id}:`, error);
-          await this.releaseExecutor(task.id);
-          verifierManager.releaseVerifierByTaskId(task.id);
-          this.broadcastExecutorStates();
-          this.broadcastVerifierStates();
-          this.completedTasks.add(task.id);
-          this.runningTasks.delete(task.id);
-          this.pendingTasks.delete(task.id);
-          this.updateTaskStatus(task.id, 'verifying');
-          setTimeout(() => {
-            this.updateTaskStatus(task.id, 'done');
-          }, 300);
-          const dependents = this.reverseDependencyIndex.get(task.id) || [];
-          this.checkSpecificTasks(dependents.map(id => this.taskMap.get(id)).filter(Boolean));
-        });
-        this.taskPromises.set(task.id, promise);
+      if (!this.taskPromises.has(task.task_id)) {
+        const promise = this.executeTask(task).catch(error => this.handleTaskError(task, error));
+        this.taskPromises.set(task.task_id, promise);
       }
     });
+  }
+
+  // Handle task execution error (release resources, mark done, trigger dependents)
+  async handleTaskError(task, error) {
+    console.error(`Error executing task ${task.task_id}:`, error);
+    await this.releaseExecutor(task.task_id);
+    verifierManager.releaseVerifierByTaskId(task.task_id);
+    this.broadcastExecutorStates();
+    this.broadcastVerifierStates();
+    this.completedTasks.add(task.task_id);
+    this.runningTasks.delete(task.task_id);
+    this.pendingTasks.delete(task.task_id);
+    this.updateTaskStatus(task.task_id, 'verifying');
+    setTimeout(() => this.updateTaskStatus(task.task_id, 'done'), 300);
+    const dependents = this.reverseDependencyIndex.get(task.task_id) || [];
+    this.checkSpecificTasks(dependents.map(id => this.taskMap.get(id)).filter(Boolean));
   }
 
   // Check if dependencies are satisfied
@@ -463,7 +460,7 @@ class ExecutorRunner {
 
   // Update task status
   updateTaskStatus(taskId, status) {
-    const task = this.chainCache.find(t => t.id === taskId);
+    const task = this.chainCache.find(t => t.task_id === taskId);
     if (task) {
       task.status = status;
       this.broadcastTaskStates();
@@ -473,7 +470,7 @@ class ExecutorRunner {
   // Broadcast task states
   broadcastTaskStates() {
     const taskStates = this.chainCache.map(task => ({
-      id: task.id,
+      task_id: task.task_id,
       status: task.status
     }));
     this.io.emit('task-states-update', { tasks: taskStates });
@@ -495,17 +492,24 @@ class ExecutorRunner {
 
   // Rollback task: mark all dependency tasks and their dependents as undone
   // 
-  // Example: If task A depends on B, and tasks A and D both depend on B:
-  // - When A fails twice, we rollback:
-  //   1. B (predecessor of A)
-  //   2. A (current task) and D (all tasks that depend on B)
+  // Rollback logic:
+  // 1. The failed task itself -> undone
+  // 2. All dependency tasks (predecessors) of the failed task -> undone
+  // 3. All downstream tasks (successors) of the dependency tasks -> undone (recursively)
   //
-  // This ensures that when B is re-executed, all tasks that depend on B
-  // will also be re-executed with the new results from B.
+  // Example: Task dependency chain: B -> C -> D
+  //          If C fails and triggers rollback:
+  //          - C (failed task) -> undone
+  //          - B (dependency of C) -> undone
+  //          - D (downstream of C, which depends on B) -> undone
+  //          - All other tasks that depend on B -> undone
   async rollbackTask(task) {
     const tasksToRollback = new Set();
     
-    // Step 1: Add all dependency tasks (predecessors) of the failed task
+    // Step 1: Add the failed task itself
+    tasksToRollback.add(task.task_id);
+    
+    // Step 2: Add all dependency tasks (predecessors) of the failed task
     // These are the tasks that must be re-executed
     if (task.dependencies && task.dependencies.length > 0) {
       task.dependencies.forEach(depId => {
@@ -513,20 +517,35 @@ class ExecutorRunner {
       });
     }
     
-    // Step 2: For each dependency task, find all tasks that depend on it (successors)
-    // These tasks also need to be rolled back because they depend on the predecessor
-    // that will be re-executed
-    task.dependencies.forEach(depId => {
-      const dependents = this.reverseDependencyIndex.get(depId) || [];
+    // Step 3: Recursively find all downstream tasks (successors) of dependency tasks
+    // This includes:
+    // - All tasks that directly depend on the dependency tasks
+    // - All tasks that depend on those tasks (recursively)
+    const visited = new Set();
+    const findDownstreamTasks = (taskId) => {
+      if (visited.has(taskId)) {
+        return;
+      }
+      visited.add(taskId);
+      
+      const dependents = this.reverseDependencyIndex.get(taskId) || [];
       dependents.forEach(dependentId => {
-        tasksToRollback.add(dependentId);
+        if (!tasksToRollback.has(dependentId)) {
+          tasksToRollback.add(dependentId);
+          // Recursively find downstream tasks of this dependent
+          findDownstreamTasks(dependentId);
+        }
       });
-    });
+    };
     
-    // Note: The current task (task.id) is already included in tasksToRollback
-    // from Step 2, since it's one of the dependents of its dependencies
+    // Find all downstream tasks for each dependency task
+    if (task.dependencies && task.dependencies.length > 0) {
+      task.dependencies.forEach(depId => {
+        findDownstreamTasks(depId);
+      });
+    }
     
-    // Step 3: Mark all tasks to rollback as undone
+    // Step 4: Mark all tasks to rollback as undone
     tasksToRollback.forEach(taskId => {
       const taskToRollback = this.taskMap.get(taskId);
       if (taskToRollback) {
@@ -550,29 +569,13 @@ class ExecutorRunner {
       }
     });
     
-    // Step 4: Also mark the current task as undone (in case it wasn't already included)
-    // This is a safety check, though it should already be in tasksToRollback
-    if (!tasksToRollback.has(task.id)) {
-      this.completedTasks.delete(task.id);
-      this.pendingTasks.add(task.id);
-      this.runningTasks.delete(task.id);
-      this.updateTaskStatus(task.id, 'undone');
-      this.taskFailureCount.delete(task.id);
-      if (this.taskPromises.has(task.id)) {
-        this.taskPromises.delete(task.id);
-      }
-    }
-    
-    // Also reset failure count for current task
-    this.taskFailureCount.delete(task.id);
-    
     this.broadcastExecutorStates();
     this.broadcastVerifierStates();
     
     // Step 5: Re-check tasks that can now run (e.g., tasks with no dependencies)
     const readyTasks = Array.from(tasksToRollback)
       .map(id => this.taskMap.get(id))
-      .filter(t => t && this.areDependenciesSatisfied(t) && this.pendingTasks.has(t.id));
+      .filter(t => t && this.areDependenciesSatisfied(t) && this.pendingTasks.has(t.task_id));
     
     if (readyTasks.length > 0) {
       this.checkSpecificTasks(readyTasks);
@@ -589,9 +592,9 @@ class ExecutorRunner {
 
     grid.forEach(row => {
       row.forEach(cell => {
-        if (cell && cell.id) {
+        if (cell && cell.task_id) {
           this.chainCache.push({
-            id: cell.id,
+            task_id: cell.task_id,
             dependencies: cell.dependencies || [],
             status: cell.status || 'undone'
           });
@@ -601,9 +604,9 @@ class ExecutorRunner {
 
     if (isolatedTasks) {
       isolatedTasks.forEach(task => {
-        if (task && task.id) {
+        if (task && task.task_id) {
           this.chainCache.push({
-            id: task.id,
+            task_id: task.task_id,
             dependencies: task.dependencies || [],
             status: task.status || 'undone'
           });

@@ -1,101 +1,111 @@
 /**
  * Database Module
- * Simple JSON file-based storage for plans
+ * File-based storage: each plan has its own folder with separate JSON files
+ * Structure: {planId}/idea.json, plan.json, execution.json, verification.json
  */
 
 const fs = require('fs').promises;
 const path = require('path');
 
-const DB_FILE = path.join(__dirname, 'plans.json');
+const DB_DIR = __dirname;
+const DEFAULT_PLAN_ID = 'test';
 
-// Initialize database file if it doesn't exist
-async function initDB() {
+// Get plan directory path
+function getPlanDir(planId = DEFAULT_PLAN_ID) {
+  return path.join(DB_DIR, planId);
+}
+
+// Get file path for a specific JSON file
+function getFilePath(planId, filename) {
+  return path.join(getPlanDir(planId), filename);
+}
+
+// Ensure plan directory exists
+async function ensurePlanDir(planId = DEFAULT_PLAN_ID) {
+  const planDir = getPlanDir(planId);
   try {
-    await fs.access(DB_FILE);
+    await fs.access(planDir);
   } catch (error) {
-    // File doesn't exist, create it with empty array
-    await fs.writeFile(DB_FILE, JSON.stringify([], null, 2));
+    // Directory doesn't exist, create it
+    await fs.mkdir(planDir, { recursive: true });
   }
 }
 
-// Load all plans from database
-async function getAllPlans() {
+// Read JSON file
+async function readJsonFile(planId, filename) {
   try {
-    await initDB();
-    const data = await fs.readFile(DB_FILE, 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    console.error('Error loading plans:', error);
-    return [];
-  }
-}
-
-// Save a plan to database
-async function savePlan(plan) {
-  try {
-    await initDB();
-    const plans = await getAllPlans();
-    
-    // Check if plan with same plan_id already exists
-    const existingIndex = plans.findIndex(p => p.plan_id === plan.plan_id);
-    
-    if (existingIndex >= 0) {
-      // Update existing plan
-      plans[existingIndex] = plan;
-    } else {
-      // Add new plan
-      plans.push(plan);
+    await ensurePlanDir(planId);
+    const filePath = getFilePath(planId, filename);
+    try {
+      const data = await fs.readFile(filePath, 'utf8');
+      return JSON.parse(data);
+    } catch (error) {
+      // File doesn't exist, return null
+      return null;
     }
-    
-    await fs.writeFile(DB_FILE, JSON.stringify(plans, null, 2));
-    return { success: true, plan };
   } catch (error) {
-    console.error('Error saving plan:', error);
-    throw new Error('Failed to save plan to database');
-  }
-}
-
-// Get a plan by plan_id
-async function getPlanById(planId) {
-  try {
-    const plans = await getAllPlans();
-    return plans.find(p => p.plan_id === planId) || null;
-  } catch (error) {
-    console.error('Error getting plan:', error);
+    console.error(`Error reading ${filename}:`, error);
     return null;
   }
 }
 
-// Delete a plan by plan_id
-async function deletePlan(planId) {
+// Write JSON file
+async function writeJsonFile(planId, filename, data) {
   try {
-    await initDB();
-    const plans = await getAllPlans();
-    const filtered = plans.filter(p => p.plan_id !== planId);
-    await fs.writeFile(DB_FILE, JSON.stringify(filtered, null, 2));
+    await ensurePlanDir(planId);
+    const filePath = getFilePath(planId, filename);
+    await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
     return { success: true };
   } catch (error) {
-    console.error('Error deleting plan:', error);
-    throw new Error('Failed to delete plan from database');
+    console.error(`Error writing ${filename}:`, error);
+    throw new Error(`Failed to save ${filename}`);
   }
 }
 
-// Clear all plans from database
-async function clearAllPlans() {
-  try {
-    await initDB();
-    await fs.writeFile(DB_FILE, JSON.stringify([], null, 2));
-    return { success: true };
-  } catch (error) {
-    console.error('Error clearing plans:', error);
-    throw new Error('Failed to clear database');
-  }
+// Get idea (example idea string for planner input)
+async function getIdea(planId = DEFAULT_PLAN_ID) {
+  return await readJsonFile(planId, 'idea.json');
+}
+
+// Get execution
+async function getExecution(planId = DEFAULT_PLAN_ID) {
+  return await readJsonFile(planId, 'execution.json');
+}
+
+// Save execution
+async function saveExecution(execution, planId = DEFAULT_PLAN_ID) {
+  await writeJsonFile(planId, 'execution.json', execution);
+  return { success: true, execution };
+}
+
+// Get verification
+async function getVerification(planId = DEFAULT_PLAN_ID) {
+  return await readJsonFile(planId, 'verification.json');
+}
+
+// Save verification
+async function saveVerification(verification, planId = DEFAULT_PLAN_ID) {
+  await writeJsonFile(planId, 'verification.json', verification);
+  return { success: true, verification };
+}
+
+// Get plan (AI-refined idea with tasks)
+async function getPlan(planId = DEFAULT_PLAN_ID) {
+  return await readJsonFile(planId, 'plan.json');
+}
+
+// Save plan
+async function savePlan(plan, planId = DEFAULT_PLAN_ID) {
+  await writeJsonFile(planId, 'plan.json', plan);
+  return { success: true, plan };
 }
 
 module.exports = {
-  getAllPlans,
-  savePlan,
-  getPlanById,
-  deletePlan,
-  clearAllPlans
+  getIdea,
+  getExecution,
+  saveExecution,
+  getVerification,
+  saveVerification,
+  getPlan,
+  savePlan
 };

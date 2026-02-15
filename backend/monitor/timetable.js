@@ -1,31 +1,133 @@
 /**
- * Timetable Layout Module
- * Calculates timetable layout for dependency tasks visualization
+ * Task Layout Module
+ * Builds grid layout from staged tasks (already cleaned by computeTaskStages).
  */
 
 /**
- * Build timetable layout: assign row positions to tasks for visual continuity
- * Logic: Column 0 = dependency tasks with no dependencies (but have dependents)
- *        Column 1+ = dependency tasks whose dependencies are all in previous columns
- *        Rightmost columns = isolated tasks (no dependencies AND no dependents)
- * Tasks that depend on the same parent are placed vertically (same column, different rows)
- * @param {Array} executionStages - Array of execution stages, each stage is an array of tasks
- * @returns {Object} Layout object with grid, maxRows, maxCols, and isolatedTasks
+ * Deep clone an object to avoid modifying original data
+ * @param {*} obj - Object to clone
+ * @returns {*} Cloned object
  */
-function buildTimetableLayout(executionStages) {
+function deepClone(obj) {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+  
+  if (obj instanceof Date) {
+    return new Date(obj.getTime());
+  }
+  
+  if (obj instanceof Array) {
+    return obj.map(item => deepClone(item));
+  }
+  
+  if (typeof obj === 'object') {
+    const cloned = {};
+    for (const key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        cloned[key] = deepClone(obj[key]);
+      }
+    }
+    return cloned;
+  }
+  
+  return obj;
+}
+
+/**
+ * Clean dependencies: only keep dependencies from the previous stage
+ * This function creates a deep copy of executionStages and cleans dependencies
+ * Stage 0: keeps all dependencies (initial tasks)
+ * Stage 1+: only keeps dependencies from the previous stage (stage - 1)
+ * @param {Array} executionStages - Array of execution stages
+ * @returns {Array} Cleaned execution stages (deep copy, original data not modified)
+ */
+function cleanDependencies(executionStages) {
   if (!executionStages || executionStages.length === 0) {
-    return { grid: [], maxRows: 0, maxCols: 0, isolatedTasks: [] };
+    return [];
   }
 
-  // Build complete task map and dependency graph from all stages
+  // Deep clone executionStages to avoid modifying original data
+  const cleanedStages = deepClone(executionStages);
+
+  // Build task-to-stage mapping cache
+  // Extract all task IDs and their stage indices into cache
+  const taskStageCache = new Map(); // taskId -> stageIndex
+  cleanedStages.forEach((stage, stageIndex) => {
+    if (stage && Array.isArray(stage)) {
+      stage.forEach(task => {
+        if (task && task.task_id) {
+          taskStageCache.set(task.task_id, stageIndex);
+        }
+      });
+    }
+  });
+
+  // Clean dependencies starting from stage 1 (stage 0 keeps all dependencies)
+  for (let stageIndex = 1; stageIndex < cleanedStages.length; stageIndex++) {
+    const currentStage = cleanedStages[stageIndex];
+    const previousStageIndex = stageIndex - 1;
+
+    if (!currentStage || !Array.isArray(currentStage)) {
+      continue;
+    }
+
+    // Get all task IDs from the previous stage
+    const previousStageTaskIds = new Set();
+    const previousStage = cleanedStages[previousStageIndex];
+    if (previousStage && Array.isArray(previousStage)) {
+      previousStage.forEach(task => {
+        if (task && task.task_id) {
+          previousStageTaskIds.add(task.task_id);
+        }
+      });
+    }
+
+    // Clean dependencies for each task in current stage
+    currentStage.forEach(task => {
+      if (!task || !task.dependencies || !Array.isArray(task.dependencies)) {
+        return;
+      }
+
+      // Filter dependencies: only keep those from the previous stage
+      task.dependencies = task.dependencies.filter(depId => {
+        // Skip invalid dependency IDs
+        if (!depId || typeof depId !== 'string' || depId.trim() === '' || depId === 'undefined' || depId === 'null') {
+          return false;
+        }
+
+        const trimmedDepId = depId.trim();
+        
+        // Check if dependency is in the previous stage
+        return previousStageTaskIds.has(trimmedDepId);
+      });
+    });
+  }
+
+  return cleanedStages;
+}
+
+/**
+ * Build task layout (grid) from staged tasks. Expects tasks already cleaned by computeTaskStages.
+ * @param {Array} taskStages - Staged format [[stage0], [stage1], ...], each task has stage
+ * @returns {Object} { grid, maxRows, maxCols, isolatedTasks, treeData }
+ */
+function buildTaskLayout(taskStages) {
+  if (!taskStages || taskStages.length === 0) {
+    return { grid: [], maxRows: 0, maxCols: 0, isolatedTasks: [], treeData: [] };
+  }
+
+  const cleanedStages = taskStages;
+
+  // Build complete task map and dependency graph from cleaned stages
   const allTasks = new Map();
   const taskDependents = new Map(); // Map: taskId -> array of tasks that depend on it
 
-  executionStages.forEach(stage => {
+  cleanedStages.forEach(stage => {
     stage.forEach(task => {
-      allTasks.set(task.id, task);
-      if (!taskDependents.has(task.id)) {
-        taskDependents.set(task.id, []);
+      allTasks.set(task.task_id, task);
+      if (!taskDependents.has(task.task_id)) {
+        taskDependents.set(task.task_id, []);
       }
 
       // Track which tasks depend on this task
@@ -34,7 +136,7 @@ function buildTimetableLayout(executionStages) {
           if (!taskDependents.has(depId)) {
             taskDependents.set(depId, []);
           }
-          taskDependents.get(depId).push(task.id);
+          taskDependents.get(depId).push(task.task_id);
         });
       }
     });
@@ -44,9 +146,9 @@ function buildTimetableLayout(executionStages) {
   const dependencyTasks = [];
   const isolatedTasks = [];
 
-  allTasks.forEach((task, taskId) => {
+  allTasks.forEach((task, task_id) => {
     const hasDependencies = task.dependencies && task.dependencies.length > 0;
-    const hasDependents = taskDependents.get(taskId) && taskDependents.get(taskId).length > 0;
+    const hasDependents = taskDependents.get(task_id) && taskDependents.get(task_id).length > 0;
 
     if (!hasDependencies && !hasDependents) {
       // Isolated task - no dependencies and no one depends on it
@@ -71,7 +173,7 @@ function buildTimetableLayout(executionStages) {
     const currentColumn = [];
 
     dependencyTasks.forEach(task => {
-      if (placedTasks.has(task.id)) {
+      if (placedTasks.has(task.task_id)) {
         return; // Already placed
       }
 
@@ -94,7 +196,7 @@ function buildTimetableLayout(executionStages) {
       // No more tasks can be placed (circular dependency or missing dependencies)
       // Add remaining tasks to current column anyway
       dependencyTasks.forEach(task => {
-        if (!placedTasks.has(task.id)) {
+        if (!placedTasks.has(task.task_id)) {
           currentColumn.push(task);
         }
       });
@@ -102,7 +204,7 @@ function buildTimetableLayout(executionStages) {
 
     if (currentColumn.length > 0) {
       dependencyColumns.push(currentColumn);
-      currentColumn.forEach(task => placedTasks.add(task.id));
+      currentColumn.forEach(task => placedTasks.add(task.task_id));
     } else {
       break; // No more tasks to place
     }
@@ -149,7 +251,7 @@ function buildTimetableLayout(executionStages) {
     let currentRow = 0;
 
     tasksWithNoDeps.forEach(task => {
-      taskPositions.set(task.id, {
+      taskPositions.set(task.task_id, {
         col: colIndex,
         row: currentRow,
         task: task
@@ -159,7 +261,7 @@ function buildTimetableLayout(executionStages) {
 
     tasksByRightmostDep.forEach(tasks => {
       tasks.forEach(task => {
-        taskPositions.set(task.id, {
+        taskPositions.set(task.task_id, {
           col: colIndex,
           row: currentRow,
           task: task
@@ -189,17 +291,25 @@ function buildTimetableLayout(executionStages) {
     }
   }
 
-  // Fill grid with dependency tasks
   taskPositions.forEach((pos, taskId) => {
     if (pos.col < regularCols) {
       grid[pos.row][pos.col] = pos.task;
     }
   });
 
-  // Return grid, dimensions, and isolated tasks separately
-  return { grid, maxRows, maxCols: regularCols, isolatedTasks };
+  const treeData = cleanedStages.flat().map(task => ({ ...task, stage: task.stage || 1 }));
+
+  return { 
+    grid, 
+    maxRows, 
+    maxCols: regularCols, 
+    isolatedTasks, 
+    treeData
+  };
 }
 
 module.exports = {
-  buildTimetableLayout
+  buildTaskLayout,
+  cleanDependencies,
+  deepClone
 };

@@ -1,22 +1,83 @@
 :root {
+    /* Layout */
     --area-height: 300px;
-    --border-color: #e0e0e0;
-    --bg-color: #fafafa;
-    --bg-white: white;
-    --text-color: #333;
-    --text-secondary: #666;
-    --text-muted: #999;
-    --border-radius: 4px;
-    --padding: 15px;
+    --border-radius: 6px;
+    --padding: 16px;
     --gap: 20px;
+
+    /* Task tree - unified node design */
+    --tree-task-width: 110px;
+    --tree-task-height: 52px;
+    --tree-task-font-number: 12px;
+    --tree-task-font-desc: 10px;
+    --tree-task-radius: 8px;
+    --tree-stage-gap: 24px;
+    --tree-line-stroke: #b0b8c4;
+    --tree-node-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    --tree-node-shadow-hover: 0 2px 8px rgba(0, 0, 0, 0.1);
+    /* Status borders for tree nodes */
+    --tree-status-doing-border: #e6b800;
+    --tree-status-verifying-border: #1976d2;
+    --tree-status-done-border: #2e7d32;
+    
+    /* Colors - Base */
+    --bg-color: #f5f7fa;
+    --bg-white: #ffffff;
+    --border-color: #e1e8ed;
+    --border-color-hover: #cbd5e0;
+    
+    /* Colors - Text */
+    --text-color: #2d3748;
+    --text-secondary: #4a5568;
+    --text-muted: #718096;
+    --text-light: #a0aec0;
+    
+    /* Colors - Section Backgrounds (Subtle differentiation) */
+    --bg-section-planner: #fefefe;
+    --bg-section-monitor: #fafbfc;
+    --bg-section-executor: #fefefe;
+    --bg-section-verifier: #fefefe;
+    
+    /* Colors - Area Backgrounds (Content containers) */
+    --bg-area-primary: #ffffff;
+    --bg-area-secondary: #f8f9fa;
+    --bg-area-tertiary: #f1f3f5;
+    
+    /* Colors - Status */
+    --status-undone: #ffffff;
+    --status-doing: #fff3cd;
+    --status-verifying: #b3d9ff;
+    --status-done: #d4edda;
+    --status-failed: #ffcccc;
+    
+    /* Colors - Interactive */
+    --interactive-hover: #f7fafc;
+    --interactive-active: #edf2f7;
+    --interactive-border-hover: #cbd5e0;
+    
     /* Unified placeholder */
     --placeholder-color: var(--text-muted);
     --placeholder-font-size: 14px;
+    
     /* Unified failure styles */
     --failure-bg: #ffcccc;
     --failure-bg-hover: #ffb3b3;
     --failure-border: #ff6666;
     --failure-text: #ff6666;
+    
+    /* Unified scrollbar styles */
+    --scrollbar-width: 10px;
+    --scrollbar-track: #f1f3f5;
+    --scrollbar-thumb: #cbd5e0;
+    --scrollbar-thumb-hover: #a0aec0;
+    
+    /* Unified button styles */
+    --button-padding-y: 10px;
+    --button-padding-x: 20px;
+    --button-font-size: 14px;
+    --button-font-weight: 500;
+    --button-border-radius: var(--border-radius);
+    --button-transition: all 0.2s ease;
 }
 
 * {
@@ -51,124 +112,291 @@ h1 {
     font-weight: 400;
     color: var(--text-secondary);
     text-align: center;
-    margin-bottom: 50px;
+    margin-bottom: 20px;
     letter-spacing: 0.5px;
 }
 
 h2 {
     font-size: 18px;
-    font-weight: 400;
+    font-weight: 500;
     margin-bottom: var(--gap);
-    color: var(--text-secondary);
+    color: var(--text-color);
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border-color);
 }
 
 section {
     margin-bottom: 50px;
 }
 
-/* Display Areas */
-.input-output-area {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--gap);
-    margin-bottom: var(--gap);
-}
-
-.display-area {
-    position: relative;
-    width: 100%;
-    height: var(--area-height);
+/* Unified section styling */
+.planner-section,
+.monitor-section,
+.executor-section,
+.verifier-section {
     padding: var(--padding);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
     background: var(--bg-white);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.planner-section {
+    background: var(--bg-section-planner);
+}
+
+.monitor-section {
+    background: var(--bg-section-monitor);
+}
+
+.executor-section {
+    background: var(--bg-section-executor);
+}
+
+.verifier-section {
+    background: var(--bg-section-verifier);
+}
+
+/* Idea input row */
+.idea-input-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: var(--gap);
+    align-items: center;
+}
+
+.idea-input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
     font-size: 14px;
-    overflow-y: auto;
+    font-family: inherit;
 }
 
-.display-content {
-    width: 100%;
-    height: 100%;
-    font-family: 'Monaco', 'Courier New', monospace;
-    font-size: 13px;
+.idea-input:focus {
+    outline: none;
+    border-color: var(--text-muted);
+}
+
+.idea-input::placeholder {
+    color: var(--text-muted);
+}
+
+/* Planner thinking area - AI reasoning display */
+.planner-thinking-area {
+    margin-top: var(--gap);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background: var(--bg-area-secondary);
+    overflow: hidden;
+    max-height: 180px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+.planner-thinking-label {
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: var(--bg-area-tertiary);
+    border-bottom: 1px solid var(--border-color);
+}
+.planner-thinking-content {
+    flex: 1;
+    margin: 0;
+    padding: 12px 14px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    overflow-y: auto;
+    word-break: break-word;
+    min-height: 40px;
+}
+/* Markdown styles for AI thinking */
+.planner-thinking-content.markdown-body h1,
+.planner-thinking-content.markdown-body h2,
+.planner-thinking-content.markdown-body h3 {
+    margin: 0.8em 0 0.4em;
+    font-size: 1.1em;
+    font-weight: 600;
+    color: var(--text-color);
+}
+.planner-thinking-content.markdown-body h1:first-child,
+.planner-thinking-content.markdown-body h2:first-child,
+.planner-thinking-content.markdown-body h3:first-child { margin-top: 0; }
+.planner-thinking-content.markdown-body p { margin: 0.4em 0; }
+.planner-thinking-content.markdown-body ul,
+.planner-thinking-content.markdown-body ol { margin: 0.4em 0; padding-left: 1.4em; }
+.planner-thinking-content.markdown-body li { margin: 0.2em 0; }
+.planner-thinking-content.markdown-body code {
+    padding: 0.15em 0.35em;
+    font-size: 0.9em;
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    background: var(--bg-area-tertiary);
+    border-radius: 4px;
+}
+.planner-thinking-content.markdown-body pre {
+    margin: 0.6em 0;
+    padding: 10px 12px;
+    overflow-x: auto;
+    font-size: 11px;
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    background: var(--bg-area-tertiary);
+    border-radius: 4px;
     white-space: pre-wrap;
-    word-wrap: break-word;
-    overflow-y: auto;
-    outline: none;
+    word-break: break-word;
 }
-
-.display-content[contenteditable="true"] {
-    cursor: text;
+.planner-thinking-content.markdown-body pre code { padding: 0; background: none; }
+.planner-thinking-content.markdown-body blockquote {
+    margin: 0.4em 0;
+    padding-left: 12px;
+    border-left: 3px solid var(--border-color);
+    color: var(--text-muted);
 }
-
-.display-content[contenteditable="true"]:focus {
-    outline: none;
-}
-
-.display-content[data-placeholder]:empty:before {
-    content: attr(data-placeholder);
-    color: var(--placeholder-color);
-    font-size: var(--placeholder-font-size);
+.planner-thinking-content.markdown-body strong { font-weight: 600; }
+.planner-thinking-content.markdown-body em { font-style: italic; }
+.planner-thinking-placeholder {
+    position: absolute;
+    top: 36px;
+    left: 14px;
+    right: 14px;
+    padding: 12px 0;
+    font-size: 12px;
+    color: var(--text-muted);
     font-style: italic;
     pointer-events: none;
 }
+.planner-thinking-area.has-content .planner-thinking-placeholder {
+    display: none;
+}
 
-#queryArea {
-    min-height: 100%;
+/* Monitor section layout */
+.monitor-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+}
+
+.monitor-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+    width: 100%;
+}
+
+/* Timetable area - fixed height with vertical scroll */
+.monitor-timetable-area {
+    width: 100%;
+    height: 400px; /* Fixed height */
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background: var(--bg-area-secondary);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .diagram-area {
     width: 100%;
-    /* Fixed height: 5 rows + header + padding */
-    /* Assuming cell size ~50px, 5 rows = 250px, header = 32px, padding = 30px, gap = 12px */
-    height: calc(5 * 50px + 32px + 30px + 12px); /* 5 rows + header + padding + gap */
-    min-height: calc(5 * 50px + 32px + 30px + 12px);
-    max-height: calc(5 * 50px + 32px + 30px + 12px);
+    height: 100%;
     padding: var(--padding);
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
-    background: var(--bg-white);
+    overflow-y: auto;
+    overflow-x: auto;
     font-size: 14px;
-    overflow: hidden;
-    margin-bottom: var(--gap);
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
+    background: var(--bg-area-primary);
+    /* Unified scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.diagram-area::-webkit-scrollbar {
+    width: var(--scrollbar-width);
+    height: var(--scrollbar-width);
+}
+
+.diagram-area::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: var(--border-radius);
+}
+
+.diagram-area::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border-radius: calc(var(--scrollbar-width) / 2);
+    border: 2px solid var(--scrollbar-track);
+}
+
+.diagram-area::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
 }
 
 .diagram-content {
-    flex: 1;
     width: 100%;
-    overflow: hidden;
+    overflow: visible;
     display: flex;
     flex-direction: column;
     min-height: 0;
 }
 
-/* Buttons */
+/* Unified Button Styles */
 .button-group {
     display: flex;
-    gap: 10px;
+    gap: 12px;
     flex-wrap: wrap;
+    margin-top: var(--gap);
 }
 
 button {
-    padding: 10px 20px;
+    padding: var(--button-padding-y) var(--button-padding-x);
     border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
+    border-radius: var(--button-border-radius);
     background: var(--bg-white);
-    font-size: 14px;
+    color: var(--text-color);
+    font-size: var(--button-font-size);
+    font-weight: var(--button-font-weight);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: var(--button-transition);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-button:hover {
-    background: #f5f5f5;
-    border-color: #ccc;
+button:hover:not(:disabled) {
+    background: var(--interactive-hover);
+    border-color: var(--interactive-border-hover);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+}
+
+button:active:not(:disabled) {
+    background: var(--interactive-active);
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+    background: var(--bg-white);
+    color: var(--text-muted);
+    box-shadow: none;
+    transform: none;
+}
+
+button:focus {
+    outline: 2px solid var(--border-color-hover);
+    outline-offset: 2px;
+}
+
+button.stop-btn {
+    background: var(--failure-bg);
+    border-color: var(--failure-border);
+    color: var(--failure-text);
+}
+
+button.stop-btn:hover:not(:disabled) {
+    background: var(--failure-bg-hover);
 }
 
 /* Modal */
@@ -217,6 +445,93 @@ button:disabled {
 
 .close:hover {
     color: var(--text-color);
+}
+
+/* Task detail popover - appears on right of task node */
+.task-detail-popover {
+    position: fixed;
+    z-index: 1100;
+    min-width: 220px;
+    max-width: 320px;
+    background: var(--bg-white);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    padding: 0;
+    font-size: 13px;
+}
+
+.task-detail-popover-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-area-secondary);
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+}
+
+.task-detail-popover-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-color);
+}
+
+.task-detail-popover-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 0 4px;
+    border-radius: 4px;
+}
+
+.task-detail-popover-close:hover {
+    color: var(--text-color);
+    background: var(--interactive-hover);
+}
+
+.task-detail-popover-body {
+    padding: 12px;
+}
+
+.task-detail-row {
+    margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.task-detail-row:last-child {
+    margin-bottom: 0;
+}
+
+.task-detail-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.task-detail-value {
+    font-size: 13px;
+    color: var(--text-color);
+    word-break: break-word;
+}
+
+.task-detail-value.task-status-done {
+    color: var(--status-done);
+}
+
+.task-detail-value.task-status-doing {
+    color: #b38600;
+}
+
+.task-detail-value.task-status-verifying {
+    color: #1976d2;
 }
 
 .form-group {
@@ -369,26 +684,337 @@ button:disabled {
 /* Timetable Layout - Clean and minimal */
 .timetable-container {
     width: 100%;
-    height: 100%;
     padding: 0;
     display: flex;
     flex-direction: column;
+    position: relative; /* Required for .tree-connection-lines SVG positioning */
 }
 
 .timetable-wrapper {
     display: flex;
-    gap: 20px;
+    gap: var(--gap);
     align-items: stretch;
     flex: 1;
     min-height: 0;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .timetable-left {
     flex: 1;
-    width: 50%;
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow: hidden;
+}
+
+/* Tasks tree area - fixed height with vertical scroll */
+.monitor-tasks-tree-area,
+.planner-tree-area {
+    width: 100%;
+    height: 400px; /* Fixed height */
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background: var(--bg-area-secondary);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.planner-tree-area {
+    margin-top: var(--gap);
+}
+
+/* Legacy tasks-tree-section for compatibility (if used elsewhere) */
+.timetable-tree-section {
+    width: 100%;
+    margin-top: var(--gap);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--padding);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background: var(--bg-white);
+    min-height: 200px;
+    overflow: visible;
+}
+
+.timetable-tree-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: auto; /* Enable vertical scrolling */
+    padding: var(--padding);
+    box-sizing: border-box;
+    background: var(--bg-area-primary);
+    /* Unified scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.timetable-tree-container::-webkit-scrollbar {
+    width: var(--scrollbar-width);
+    height: var(--scrollbar-width);
+}
+
+.timetable-tree-container::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: var(--border-radius);
+}
+
+.timetable-tree-container::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border-radius: calc(var(--scrollbar-width) / 2);
+    border: 2px solid var(--scrollbar-track);
+}
+
+.timetable-tree-container::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+}
+
+/* Tasks Tree - unified layout for planner & monitor */
+.tasks-tree {
+    display: flex;
+    flex-direction: column;
+    gap: var(--tree-stage-gap);
+    padding: var(--padding);
+    margin-top: 0;
+    min-height: 150px;
+    width: 100%;
+    max-width: 100%;
+    position: relative;
+    align-items: center;
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+.tree-stage {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+    align-self: center;
+    min-height: 60px;
+}
+
+.tree-stage-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 4px 8px;
+    background: var(--bg-white);
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+    width: fit-content;
+}
+
+.tree-stage-tasks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    padding: 10px 0;
+    min-width: fit-content;
+    box-sizing: border-box;
+    overflow: visible;
+}
+
+/* Connection lines - unified for planner & monitor trees */
+.tree-connection-lines {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: visible;
+}
+
+.tree-connection-lines path {
+    stroke: var(--tree-line-stroke);
+    transition: stroke 0.3s ease;
+}
+
+/* Connection line animations - task start (yellow) & rollback (red) */
+@keyframes yellowGlowTopToBottom {
+    0%, 100% {
+        stroke: var(--tree-line-stroke);
+        stroke-width: 1;
+        filter: drop-shadow(0 0 0 transparent);
+    }
+    50% {
+        stroke: #e6b800;
+        stroke-width: 2;
+        filter: drop-shadow(0 0 6px rgba(230, 184, 0, 0.7));
+    }
+}
+
+@keyframes redGlowBottomToTop {
+    0%, 100% {
+        stroke: var(--tree-line-stroke);
+        stroke-width: 1;
+        filter: drop-shadow(0 0 0 transparent);
+    }
+    50% {
+        stroke: var(--failure-border);
+        stroke-width: 2;
+        filter: drop-shadow(0 0 6px rgba(255, 102, 102, 0.7));
+    }
+}
+
+.tree-connection-lines path.animate-yellow-glow {
+    animation: yellowGlowTopToBottom 1s ease-out;
+}
+
+.tree-connection-lines path.animate-red-glow {
+    animation: redGlowBottomToTop 1s ease-out;
+}
+
+/* ========== Task Tree Node - unified design (planner & monitor) ========== */
+.tree-task {
+    --node-bg: var(--bg-area-secondary);
+    --node-border: var(--border-color);
+    padding: 8px 12px;
+    background: var(--node-bg);
+    border: 1.5px solid var(--node-border);
+    border-radius: var(--tree-task-radius);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    cursor: pointer;
+    font-weight: 400;
+    box-sizing: border-box;
+    transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+    width: var(--tree-task-width);
+    min-height: var(--tree-task-height);
+    flex-shrink: 0;
+    z-index: 1;
+    box-shadow: var(--tree-node-shadow);
+}
+
+.tree-task:hover {
+    background: var(--interactive-hover);
+    border-color: var(--interactive-border-hover);
+    box-shadow: var(--tree-node-shadow-hover);
+}
+
+.tree-task .task-number {
+    display: block;
+    font-weight: 600;
+    font-size: var(--tree-task-font-number);
+    line-height: 1.2;
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    text-align: center;
+}
+
+.tree-task .task-description {
+    display: block;
+    font-size: var(--tree-task-font-desc);
+    line-height: 1.25;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    text-align: center;
+}
+
+/* Idea node - root node in planner tree */
+.tree-task-idea {
+    --node-bg: #f1f5f9;
+    --node-border: var(--text-light);
+    background: var(--node-bg);
+    border-color: var(--node-border);
+    border-width: 2px;
+}
+
+.tree-task-idea .task-number {
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Task status - unified palette */
+.tree-task.task-status-undone {
+    --node-bg: var(--bg-area-secondary);
+    --node-border: var(--border-color);
+    background: var(--node-bg);
+    border-color: var(--node-border);
+}
+
+.tree-task.task-status-undone:hover {
+    background: var(--interactive-hover);
+    border-color: var(--interactive-border-hover);
+}
+
+.tree-task.task-status-doing {
+    --node-bg: var(--status-doing);
+    --node-border: var(--tree-status-doing-border);
+    background: var(--node-bg);
+    border-color: var(--node-border);
+}
+
+.tree-task.task-status-doing:hover {
+    background: #ffe69c;
+    border-color: var(--tree-status-doing-border);
+}
+
+.tree-task.task-status-verifying {
+    --node-bg: var(--status-verifying);
+    --node-border: var(--tree-status-verifying-border);
+    background: var(--node-bg);
+    border-color: var(--node-border);
+}
+
+.tree-task.task-status-verifying:hover {
+    background: #99ccff;
+    border-color: var(--tree-status-verifying-border);
+}
+
+.tree-task.task-status-done {
+    --node-bg: var(--status-done);
+    --node-border: var(--tree-status-done-border);
+    background: var(--node-bg);
+    border-color: var(--node-border);
+}
+
+.tree-task.task-status-done:hover {
+    background: #c3e6cb;
+    border-color: var(--tree-status-done-border);
+}
+
+.tree-task.task-status-verification-failed,
+.tree-task.task-status-execution-failed {
+    --node-bg: var(--failure-bg);
+    --node-border: var(--failure-border);
+    background: var(--node-bg);
+    border-color: var(--node-border);
+}
+
+.tree-task.task-status-verification-failed:hover,
+.tree-task.task-status-execution-failed:hover {
+    background: var(--failure-bg-hover);
+    border-color: var(--failure-border);
 }
 
 .timetable-left-scroll {
@@ -397,82 +1023,105 @@ button:disabled {
     flex: 1;
     min-height: 0;
     width: 100%;
-    /* Ensure scrollbars are visible */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    /* Unified scrollbar */
     scrollbar-width: thin;
-    scrollbar-color: #ccc var(--bg-white);
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 .timetable-left-scroll::-webkit-scrollbar {
-    width: 12px;
-    height: 12px;
+    width: var(--scrollbar-width);
+    height: var(--scrollbar-width);
 }
 
 .timetable-left-scroll::-webkit-scrollbar-track {
-    background: var(--bg-white);
+    background: var(--scrollbar-track);
+    border-radius: var(--border-radius);
 }
 
 .timetable-left-scroll::-webkit-scrollbar-thumb {
-    background-color: #ccc;
-    border-radius: 6px;
+    background-color: var(--scrollbar-thumb);
+    border-radius: calc(var(--scrollbar-width) / 2);
+    border: 2px solid var(--scrollbar-track);
 }
 
 .timetable-left-scroll::-webkit-scrollbar-thumb:hover {
-    background-color: #999;
+    background-color: var(--scrollbar-thumb-hover);
 }
 
 .timetable-left-header {
     position: sticky;
     top: 0;
     z-index: 10;
-    background: var(--bg-white);
+    background: var(--bg-area-primary);
     margin-bottom: 12px;
     width: fit-content;
-    min-width: 100%;
+    min-width: fit-content;
+    align-self: flex-start;
+    box-sizing: border-box;
 }
 
 .timetable-right {
-    flex: 1;
-    width: 50%;
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow: visible;
+    /* Width will be set dynamically via JavaScript: 3 * cellSize + gap */
 }
 
 .timetable-right-scroll {
-    overflow-x: hidden;
+    overflow-x: auto;
     overflow-y: auto;
     flex: 1;
     min-height: 0;
     width: 100%;
-    /* Ensure vertical scrollbar is visible */
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    box-sizing: border-box;
+    /* Unified scrollbar */
     scrollbar-width: thin;
-    scrollbar-color: #ccc var(--bg-white);
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 .timetable-right-scroll::-webkit-scrollbar {
-    width: 12px;
+    width: var(--scrollbar-width);
+    height: var(--scrollbar-width);
 }
 
 .timetable-right-scroll::-webkit-scrollbar-track {
-    background: var(--bg-white);
+    background: var(--scrollbar-track);
+    border-radius: var(--border-radius);
 }
 
 .timetable-right-scroll::-webkit-scrollbar-thumb {
-    background-color: #ccc;
-    border-radius: 6px;
+    background-color: var(--scrollbar-thumb);
+    border-radius: calc(var(--scrollbar-width) / 2);
+    border: 2px solid var(--scrollbar-track);
 }
 
 .timetable-right-scroll::-webkit-scrollbar-thumb:hover {
-    background-color: #999;
+    background-color: var(--scrollbar-thumb-hover);
 }
 
 .timetable-right-header {
     position: sticky;
     top: 0;
     z-index: 10;
-    background: var(--bg-white);
+    background: var(--bg-area-primary);
     margin-bottom: 12px;
-    width: 100%;
+    width: fit-content;
+    min-width: fit-content;
+    max-width: none;
+    align-self: flex-end;
+    box-sizing: border-box;
+    margin-left: auto;
+    margin-right: 0;
+    flex-shrink: 0;
 }
 
 .timetable-header-row {
@@ -486,7 +1135,7 @@ button:disabled {
 .timetable-header-cell {
     min-width: 0;
     height: 32px;
-    background: var(--bg-white);
+    background: var(--bg-area-secondary);
     color: var(--text-secondary);
     display: flex;
     align-items: center;
@@ -516,12 +1165,33 @@ button:disabled {
     border: none;
     border-radius: 0;
     flex-shrink: 0;
+    box-sizing: border-box;
+}
+
+/* Left grid: dynamic columns based on actual stage count, left-aligned */
+.timetable-left-scroll .timetable-grid {
+    width: fit-content;
+    min-width: fit-content;
+    align-self: flex-start;
+}
+
+/* Right grid: fixed 3 columns, right-aligned within container */
+.timetable-right-scroll .timetable-grid {
+    width: fit-content !important;
+    min-width: fit-content !important;
+    max-width: none !important;
+    align-self: flex-end;
+    box-sizing: border-box;
+    margin-left: auto;
+    margin-right: 0;
+    flex-shrink: 0;
 }
 
 .timetable-cell {
     padding: 0;
-    background: var(--bg-white);
+    background: var(--bg-area-primary);
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     cursor: pointer;
@@ -529,35 +1199,80 @@ button:disabled {
     font-size: 13px;
     border-radius: 0;
     box-sizing: border-box;
-    transition: background-color 0.2s ease;
+    transition: var(--button-transition);
     border: none;
+    position: relative;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.timetable-cell .task-number {
+    display: block;
+    font-weight: 500;
+    font-size: 12px;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    text-align: center;
+    padding: 2px 4px;
+    transition: opacity 0.2s ease;
+}
+
+.timetable-cell .task-description {
+    display: none;
+    font-size: 10px;
+    line-height: 1.2;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    text-align: center;
+    padding: 2px 4px;
+    transition: opacity 0.2s ease;
 }
 
 .timetable-cell:hover {
-    background: #f5f5f5;
+    background: var(--interactive-hover);
+}
+
+.timetable-cell:hover .task-number {
+    display: none;
+}
+
+.timetable-cell:hover .task-description {
+    display: block;
+    color: var(--text-color);
 }
 
 .timetable-cell-empty {
-    background: var(--bg-color);
+    background: var(--bg-area-tertiary);
     cursor: default;
 }
 
 .timetable-cell-empty:hover {
-    background: var(--bg-color);
+    background: var(--bg-area-tertiary);
 }
 
 /* Task status colors - minimal and clean */
 .timetable-cell.task-status-undone {
-    background: var(--bg-white) !important;
+    background: var(--status-undone) !important;
     color: var(--text-color) !important;
 }
 
 .timetable-cell.task-status-undone:hover {
-    background: #f5f5f5 !important;
+    background: var(--interactive-hover) !important;
+}
+
+.timetable-cell.task-status-undone:hover .task-description {
+    color: var(--text-color) !important;
 }
 
 .timetable-cell.task-status-doing {
-    background: #fff3cd !important;
+    background: var(--status-doing) !important;
     color: var(--text-color) !important;
 }
 
@@ -565,8 +1280,12 @@ button:disabled {
     background: #ffe69c !important;
 }
 
+.timetable-cell.task-status-doing:hover .task-description {
+    color: var(--text-color) !important;
+}
+
 .timetable-cell.task-status-verifying {
-    background: #b3d9ff !important;
+    background: var(--status-verifying) !important;
     color: var(--text-color) !important;
 }
 
@@ -574,13 +1293,21 @@ button:disabled {
     background: #99ccff !important;
 }
 
+.timetable-cell.task-status-verifying:hover .task-description {
+    color: var(--text-color) !important;
+}
+
 .timetable-cell.task-status-done {
-    background: #d4edda !important;
+    background: var(--status-done) !important;
     color: var(--text-color) !important;
 }
 
 .timetable-cell.task-status-done:hover {
     background: #c3e6cb !important;
+}
+
+.timetable-cell.task-status-done:hover .task-description {
+    color: var(--text-color) !important;
 }
 
 /* Unified failure styles for timetable cells */
@@ -595,6 +1322,11 @@ button:disabled {
     background: var(--failure-bg-hover) !important;
 }
 
+.timetable-cell.task-status-verification-failed:hover .task-description,
+.timetable-cell.task-status-execution-failed:hover .task-description {
+    color: var(--text-color) !important;
+}
+
 /* Executor Section */
 .executor-section {
     margin-bottom: 50px;
@@ -604,7 +1336,8 @@ button:disabled {
     padding: var(--padding);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
-    background: var(--bg-white);
+    background: var(--bg-area-primary);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .executor-stats {
@@ -649,21 +1382,23 @@ button:disabled {
 
 .executor-item {
     padding: 16px;
-    border: 2px solid var(--border-color);
+    border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
     background: var(--bg-white);
     text-align: center;
-    transition: all 0.2s ease;
+    transition: var(--button-transition);
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
     align-items: center;
     box-sizing: border-box;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .executor-item:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border-color: var(--interactive-border-hover);
 }
 
 .executor-item.executor-idle {
@@ -742,7 +1477,8 @@ button:disabled {
     padding: var(--padding);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
-    background: var(--bg-white);
+    background: var(--bg-area-primary);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .verifier-stats {
@@ -762,21 +1498,23 @@ button:disabled {
 
 .verifier-item {
     padding: 16px;
-    border: 2px solid var(--border-color);
+    border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
     background: var(--bg-white);
     text-align: center;
-    transition: all 0.2s ease;
+    transition: var(--button-transition);
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
     align-items: center;
     box-sizing: border-box;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .verifier-item:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border-color: var(--interactive-border-hover);
 }
 
 .verifier-item.verifier-idle {

@@ -10,40 +10,56 @@
     <div class="container">
         <h1>MAARS</h1>
         <p class="subtitle">Multi-Agent Automated Research System</p>
-
+        
         <section class="planner-section">
             <h2>Planner</h2>
             <div class="planner-content">
-                <div class="input-output-area">
-                    <div class="display-area">
-                        <div id="queryArea" class="display-content" contenteditable="true" data-placeholder="Enter your research task here..."></div>
-                    </div>
-                    <div class="display-area">
-                        <div id="outputArea" class="display-content" data-placeholder="Generated plan will appear here..."></div>
-                    </div>
+                <div class="idea-input-row">
+                    <input type="text" id="ideaInput" class="idea-input" placeholder="Enter your research idea..." />
+                    <button id="loadExampleIdeaBtn">Load Example Idea</button>
+                    <button id="generatePlanBtn">Generate Plan</button>
+                    <button id="decomposeBtn" disabled>Decompose</button>
+                    <button id="stopPlanBtn" class="stop-btn" style="display: none;">Stop</button>
                 </div>
-                <div class="button-group">
-                    <button id="settingsBtn">Settings</button>
-                    <button id="clearBtn">Clear</button>
-                    <button id="planBtn">Generate Plan</button>
-                    <button id="generateExecutionMapBtn">Generate Execution Map</button>
-                    <button id="abortPlanBtn" style="display: none;">Abort</button>
-                    <button id="loadExampleBtn">Load Example</button>
+                <div class="planner-thinking-area" id="plannerThinkingArea">
+                    <div class="planner-thinking-label">AI Thinking</div>
+                    <div class="planner-thinking-content markdown-body" id="plannerThinkingContent"></div>
+                    <div class="planner-thinking-placeholder" id="plannerThinkingPlaceholder">Thinking will appear here when generating plan...</div>
+                </div>
+                <div class="planner-tree-area" data-tree-area="planner">
+                    <div class="timetable-tree-container">
+                        <div class="tasks-tree planner-tasks-tree">
+                            <svg class="tree-connection-lines"></svg>
+                            <!-- Plan tree nodes rendered by stage -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
 
-        <section class="dispatcher-section">
-            <h2>Dispatcher</h2>
-            <div class="diagram-area">
-                <div id="diagramArea" class="diagram-content">
-                    <div class="execution-map">
-                        <div class="map-info">No execution map found. Generate or load a plan, then click "Generate Execution Map" to build the map.</div>
+        <section class="monitor-section">
+            <h2>Monitor</h2>
+            <div class="monitor-content">
+                <div class="monitor-timetable-area">
+                    <div class="diagram-area">
+                        <div id="diagramArea" class="diagram-content">
+                            <div class="execution-map">
+                                <div class="map-info">No execution map found. Click "Load example execution" to build the map.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="monitor-tasks-tree-area" data-tree-area="monitor">
+                    <div class="timetable-tree-container">
+                        <div class="tasks-tree monitor-tasks-tree">
+                            <svg class="tree-connection-lines"></svg>
+                            <!-- Tasks tree will be rendered here -->
+                        </div>
                     </div>
                 </div>
             </div>
             <div class="button-group">
-                <button id="loadDispatcherExampleBtn">Load Example</button>
+                <button id="generateTimetableBtn">Load Example Execution</button>
                 <button id="mockExecutionBtn">Mock Execution</button>
             </div>
         </section>
@@ -95,37 +111,9 @@
         </section>
     </div>
 
-    <!-- Settings Modal -->
-    <div id="settingsModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>API Configuration</h2>
-                <span class="close">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label for="apiUrl">API URL:</label>
-                    <input type="text" id="apiUrl" placeholder="https://api.siliconflow.cn/v1 or https://api.openai.com/v1">
-                    <small>Base URL (e.g., https://api.siliconflow.cn/v1) - /chat/completions will be added automatically</small>
-                </div>
-                <div class="form-group">
-                    <label for="apiKey">API Key:</label>
-                    <input type="password" id="apiKey" placeholder="Enter your API key">
-                </div>
-                <div class="form-group">
-                    <label for="model">Model:</label>
-                    <input type="text" id="model" placeholder="gpt-3.5-turbo">
-                </div>
-                <div class="form-group">
-                    <label for="temperature">Temperature:</label>
-                    <input type="number" id="temperature" step="0.1" min="0" max="2" value="0.7">
-                </div>
-                <button id="saveConfigBtn">Save Configuration</button>
-            </div>
-        </div>
-    </div>
-
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="task-tree.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
