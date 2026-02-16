@@ -8,20 +8,21 @@ Multi-Agent Automated Research System（多智能体自动研究系统）
 
 ```bash
 cd backend
-npm install
+python3 -m pip install -r requirements.txt
 ```
 
 ### 2. 启动服务
 
 ```bash
 cd backend
-npm start
+python3 -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001
 ```
 
-或开发模式（自动重启）：
+或使用脚本：
 
 ```bash
-npm run dev
+cd backend
+./run.sh
 ```
 
 ### 3. 访问应用
@@ -47,12 +48,14 @@ npm run dev
 
 ```
 maars/
-├── backend/          # 后端服务
-│   ├── server.js     # Express + Socket.io 主服务
+├── backend/          # Python 后端
+│   ├── main.py       # FastAPI + Socket.io 入口
 │   ├── planner/      # 规划模块（verify/decompose/format）
 │   ├── monitor/      # 监控模块
 │   ├── executor/     # 执行器
-│   └── db/           # 数据存储
+│   ├── tasks/        # 任务缓存与阶段计算
+│   ├── db/           # 数据存储
+│   └── test/         # Mock 流式与测试工具
 └── frontend/         # 前端页面
     ├── index.html
     ├── app.js

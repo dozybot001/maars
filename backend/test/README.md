@@ -14,6 +14,6 @@ Stored in `backend/db/test/mock-ai/`:
 
 Each entry has `content` (JSON) and `reasoning` (streamed to frontend via `plan-thinking`).
 
-### mock-stream.js
+### mock_stream.py
 
-Simulates AI streaming: splits `reasoning` into chunks and emits via `onThinking` with small delays, then returns `content`.
+Simulates AI streaming: splits `reasoning` into chunks and emits via `on_thinking` with small delays, then returns `content`.

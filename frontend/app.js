@@ -154,7 +154,7 @@ if (loadExampleIdeaBtn) {
 
 const WS_URL = 'http://localhost:3001';
 let socket = null;
-let plannerThinkingBuffer = '';
+let plannerThinkingBlocks = []; // [{ taskId, type, content }]
 let timetableLayout = null;
 let chainCache = [];
 let previousTaskStates = new Map();
@@ -196,6 +196,36 @@ const diagramArea = document.getElementById('diagramArea');
 const generateTimetableBtn = document.getElementById('generateTimetableBtn');
 const mockExecutionBtn = document.getElementById('mockExecutionBtn');
 
+/**
+ * Render planner thinking blocks with task ID and type headers.
+ * @param {Array<{taskId: string, type: string, content: string}>} blocks
+ * @returns {string} HTML string
+ */
+function renderPlannerThinkingBlocks(blocks) {
+    if (!blocks || blocks.length === 0) return '';
+    const parseMarkdown = (text) => {
+        if (typeof marked !== 'undefined') {
+            try {
+                return marked.parse(text || '');
+            } catch (_) {
+                return (text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            }
+        }
+        return (text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    };
+    const escape = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return blocks
+        .map((b) => {
+            const label = [b.taskId, b.type].filter(Boolean).map(escape).join(' · ') || 'Thinking';
+            const contentHtml = parseMarkdown(b.content);
+            return `<div class="planner-thinking-block">
+                <div class="planner-thinking-block-header">${label}</div>
+                <div class="planner-thinking-block-content markdown-body">${contentHtml}</div>
+            </div>`;
+        })
+        .join('');
+}
+
 // Initialize WebSocket connection (for monitor)
 function initializeWebSocket() {
     if (socket && socket.connected) {
@@ -213,7 +243,7 @@ function initializeWebSocket() {
     });
 
     socket.on('plan-start', () => {
-        plannerThinkingBuffer = '';
+        plannerThinkingBlocks = [];
         const el = document.getElementById('plannerThinkingContent');
         const area = document.getElementById('plannerThinkingArea');
         if (el) el.innerHTML = '';
@@ -224,16 +254,18 @@ function initializeWebSocket() {
     socket.on('plan-thinking', (data) => {
         const el = document.getElementById('plannerThinkingContent');
         const area = document.getElementById('plannerThinkingArea');
-        if (el && data.chunk) {
-            plannerThinkingBuffer += data.chunk;
-            try {
-                el.innerHTML = typeof marked !== 'undefined' ? marked.parse(plannerThinkingBuffer) : plannerThinkingBuffer;
-            } catch (_) {
-                el.textContent = plannerThinkingBuffer;
-            }
-            el.scrollTop = el.scrollHeight;
-            if (area) area.classList.add('has-content');
+        if (!el || !data.chunk) return;
+        const taskId = data.taskId ?? '';
+        const taskType = data.type ?? '';
+        let block = plannerThinkingBlocks[plannerThinkingBlocks.length - 1];
+        if (!block || block.taskId !== taskId || block.type !== taskType) {
+            block = { taskId, type: taskType, content: '' };
+            plannerThinkingBlocks.push(block);
         }
+        block.content += data.chunk;
+        el.innerHTML = renderPlannerThinkingBlocks(plannerThinkingBlocks);
+        el.scrollTop = el.scrollHeight;
+        if (area) area.classList.add('has-content');
     });
 
     socket.on('plan-task', (data) => {

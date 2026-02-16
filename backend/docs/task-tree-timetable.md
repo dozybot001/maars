@@ -8,15 +8,15 @@
 
 ```
 backend/
-├── server.js              # 主入口，API 路由
+├── main.py                # 主入口，FastAPI + Socket.io
 ├── tasks/                 # 任务处理模块
-│   ├── taskCache.js       # 缓存提取、stage 计算、treeData 构建
-│   └── taskStages.js      # 拓扑排序、依赖清洗、stage 注入
+│   ├── task_cache.py     # 缓存提取、stage 计算、treeData 构建
+│   └── task_stages.py    # 拓扑排序、依赖清洗、stage 注入（networkx）
 ├── monitor/               # Monitor 模块
-│   ├── index.js           # buildLayoutFromExecution
-│   └── timetable.js       # buildTaskLayout、cleanDependencies
+│   ├── __init__.py       # build_layout_from_execution
+│   └── timetable.py      # build_task_layout、clean_dependencies
 ├── planner/               # Planner 模块（AI 规划）
-├── executor/             # Executor 模块
+├── executor/              # Executor 模块
 ├── db/                    # 数据持久化
 └── docs/
     └── task-tree-timetable.md  # 本文档
@@ -100,9 +100,9 @@ treeData (flat，含 stage、description、status 等)
 
 **相关文件：**
 
-- `tasks/taskCache.js`：`buildTreeData`、`extractCacheFromTasks`、`enrichTreeData`
-- `tasks/taskStages.js`：`computeTaskStages`
-- `monitor/timetable.js`：`cleanDependencies`
+- `tasks/task_cache.py`：`build_tree_data`、`extract_cache_from_tasks`、`enrich_tree_data`
+- `tasks/task_stages.py`：`compute_task_stages`
+- `monitor/timetable.py`：`clean_dependencies`
 
 ### 3.3 前端渲染
 
@@ -192,18 +192,18 @@ monitor/timetable.buildTaskLayout(staged)
 ## 六、模块依赖
 
 ```
-server.js
-  ├── tasks/taskCache
+main.py
+  ├── tasks.task_cache
   ├── monitor
-  │     ├── tasks/taskCache
-  │     └── monitor/timetable
+  │     ├── tasks.task_cache
+  │     └── monitor.timetable
   └── ...
 
-tasks/taskCache
-  └── tasks/taskStages
+tasks.task_cache
+  └── tasks.task_stages
 
-tasks/taskStages
-  └── monitor/timetable (cleanDependencies)
+tasks.task_stages
+  └── monitor.timetable (clean_dependencies)
 ```
 
 ---
