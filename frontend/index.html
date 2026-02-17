@@ -8,8 +8,7 @@
         (function() {
             var s = localStorage.getItem('maars-theme');
             var valid = s && ['light','dark','black'].indexOf(s) >= 0;
-            var d = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            var t = valid ? s : (d ? 'dark' : 'light');
+            var t = valid ? s : 'black';
             if (t === 'light') return;
             document.documentElement.setAttribute('data-theme', t);
         })();
