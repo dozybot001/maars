@@ -1,0 +1,21 @@
+{
+  "0": {"content": {"atomic": false}},
+  "1": {"content": {"atomic": false}},
+  "2": {"content": {"atomic": false}},
+  "3": {"content": {"atomic": false}},
+  "4": {"content": {"atomic": false}},
+  "1_1": {"content": {"atomic": true}},
+  "1_2": {"content": {"atomic": true}},
+  "1_3": {"content": {"atomic": true}},
+  "1_4": {"content": {"atomic": true}},
+  "1_5": {"content": {"atomic": true}},
+  "2_1": {"content": {"atomic": true}},
+  "2_2": {"content": {"atomic": true}},
+  "2_3": {"content": {"atomic": true}},
+  "3_1": {"content": {"atomic": true}},
+  "3_2": {"content": {"atomic": true}},
+  "3_3": {"content": {"atomic": true}},
+  "4_1": {"content": {"atomic": true}},
+  "4_2": {"content": {"atomic": true}},
+  "_default": {"content": {"atomic": true}}
+}

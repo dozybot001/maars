@@ -1,5 +1,5 @@
 """
-Worker pool for executors and verifiers
+Worker pool for executors and verifiers.
 Manages state: idle | busy | failed
 """
 
@@ -96,3 +96,5 @@ verifier_manager = {
     "get_verifier_stats": _verifier_pool["get_stats"],
     "initialize_verifiers": _verifier_pool["initialize"],
 }
+
+from .runner import ExecutorRunner

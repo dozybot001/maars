@@ -18,6 +18,6 @@
 
 | 文件 | 用途 |
 |------|------|
-| decompose-prompt.txt | 分解：0 → 1,2,3,4；1 → 1_1,1_2；... |
-| verify-prompt.txt | 验证：是否 atomic |
-| format-prompt.txt | 格式化：atomic 任务的 input/output |
+| prompts/decompose-prompt.txt | 分解：0 → 1,2,3,4；1 → 1_1,1_2；... |
+| prompts/verify-prompt.txt | 验证：是否 atomic |
+| prompts/format-prompt.txt | 格式化：atomic 任务的 input/output |

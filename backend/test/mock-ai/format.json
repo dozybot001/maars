@@ -1,0 +1,92 @@
+{
+  "1_1": {
+    "content": {
+      "input": {
+        "description": "Parent task scope and research topic from task 1.",
+        "artifacts": ["1.description or research scope"],
+        "parameters": []
+      },
+      "output": {
+        "description": "Defined keywords and selected databases.",
+        "artifact": "search_config",
+        "format": "JSON: { keywords: string[], databases: string[] }"
+      }
+    },
+    "reasoning": "Formatting atomic task 1_1: input from parent scope, output is search configuration."
+  },
+  "1_2": {
+    "content": {
+      "input": {
+        "description": "Search config from 1_1, research scope from 1.",
+        "artifacts": ["search_config", "1.description"],
+        "parameters": []
+      },
+      "output": {
+        "description": "Filtered list of core papers.",
+        "artifact": "paper_list",
+        "format": "JSON: { papers: [{ title, year, venue, abstract }] }"
+      }
+    },
+    "reasoning": "Formatting 1_2: search and filter produces paper list."
+  },
+  "1_3": {
+    "content": {
+      "input": {
+        "description": "Paper list from 1_2.",
+        "artifacts": ["paper_list"],
+        "parameters": []
+      },
+      "output": {
+        "description": "Summaries of representative papers.",
+        "artifact": "paper_summaries",
+        "format": "JSON: { summaries: [{ paper_id, methods, conclusions }] }"
+      }
+    },
+    "reasoning": "Formatting 1_3: reading produces summaries."
+  },
+  "1_4": {
+    "content": {
+      "input": {
+        "description": "Search config and scope.",
+        "artifacts": ["search_config"],
+        "parameters": []
+      },
+      "output": {
+        "description": "Key points from industry reports.",
+        "artifact": "report_points",
+        "format": "JSON: { points: [{ source, key_findings }] }"
+      }
+    },
+    "reasoning": "Formatting 1_4: organizing report points."
+  },
+  "1_5": {
+    "content": {
+      "input": {
+        "description": "Paper summaries and report points.",
+        "artifacts": ["paper_summaries", "report_points"],
+        "parameters": []
+      },
+      "output": {
+        "description": "Literature review report.",
+        "artifact": "literature_review",
+        "format": "Markdown document"
+      }
+    },
+    "reasoning": "Formatting 1_5: final literature review document."
+  },
+  "2_1": { "content": { "input": { "description": "Tech scope from task 2", "artifacts": [], "parameters": [] }, "output": { "description": "Architecture evolution doc", "artifact": "arch_doc", "format": "Markdown" } }, "reasoning": "Format 2_1." },
+  "2_2": { "content": { "input": { "description": "Arch doc from 2_1", "artifacts": ["arch_doc"], "parameters": [] }, "output": { "description": "Comparison table", "artifact": "comparison", "format": "JSON" } }, "reasoning": "Format 2_2." },
+  "2_3": { "content": { "input": { "description": "Arch and comparison", "artifacts": ["arch_doc", "comparison"], "parameters": [] }, "output": { "description": "Tech analysis report", "artifact": "tech_report", "format": "Markdown" } }, "reasoning": "Format 2_3." },
+  "3_1": { "content": { "input": { "description": "App scope from 3", "artifacts": [], "parameters": [] }, "output": { "description": "Case list", "artifact": "cases", "format": "JSON" } }, "reasoning": "Format 3_1." },
+  "3_2": { "content": { "input": { "description": "Cases from 3_1", "artifacts": ["cases"], "parameters": [] }, "output": { "description": "Effect analysis", "artifact": "analysis", "format": "JSON" } }, "reasoning": "Format 3_2." },
+  "3_3": { "content": { "input": { "description": "Cases and analysis", "artifacts": ["cases", "analysis"], "parameters": [] }, "output": { "description": "App research report", "artifact": "app_report", "format": "Markdown" } }, "reasoning": "Format 3_3." },
+  "4_1": { "content": { "input": { "description": "All reports from 1,2,3", "artifacts": ["literature_review", "tech_report", "app_report"], "parameters": [] }, "output": { "description": "Trend synthesis", "artifact": "trends", "format": "JSON" } }, "reasoning": "Format 4_1." },
+  "4_2": { "content": { "input": { "description": "Trends from 4_1", "artifacts": ["trends"], "parameters": [] }, "output": { "description": "Final analysis report", "artifact": "final_report", "format": "Markdown" } }, "reasoning": "Format 4_2." },
+  "_default": {
+    "content": {
+      "input": { "description": "Upstream artifacts", "artifacts": [], "parameters": [] },
+      "output": { "description": "Task output", "artifact": "output", "format": "JSON" }
+    },
+    "reasoning": "Default format for atomic task."
+  }
+}

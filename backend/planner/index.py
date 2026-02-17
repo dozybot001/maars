@@ -1,6 +1,6 @@
 """
 Planner module - verify, decompose, format flow.
-Uses mock AI data from db/test/mock-ai.
+Uses mock AI data from test/mock-ai.
 """
 
 import asyncio
@@ -12,18 +12,9 @@ from typing import Any, Callable, Dict, List, Optional
 from test.mock_stream import mock_chat_completion
 
 PLANNER_DIR = Path(__file__).parent
-MOCK_AI_DIR = PLANNER_DIR.parent / "db" / "test" / "mock-ai"
+MOCK_AI_DIR = PLANNER_DIR.parent / "test" / "mock-ai"
 MAX_DECOMPOSE_DEPTH = 5
 MAX_CONCURRENT_CALLS = 10
-
-# Model config for real API: verify uses faster/cheaper model
-PLANNER_MODELS = {
-    "verify": "gpt-4o-mini",
-    "decompose": "gpt-4o",
-    "format": "gpt-4o",
-}
-# JSON mode for structured output (reduces parse failures when using real API)
-PLANNER_JSON_MODE = True
 
 # Caches
 _prompt_cache: Dict[str, str] = {}
@@ -40,7 +31,7 @@ def _get_call_semaphore() -> asyncio.Semaphore:
 
 def _get_prompt_cached(filename: str) -> str:
     if filename not in _prompt_cache:
-        path = PLANNER_DIR / filename
+        path = PLANNER_DIR / "prompts" / filename
         _prompt_cache[filename] = path.read_text(encoding="utf-8").strip()
     return _prompt_cache[filename]
 
@@ -68,6 +59,10 @@ def _load_mock_response(response_type: str, task_id: str) -> Optional[Dict]:
     return {"content": content_str, "reasoning": entry.get("reasoning", "")}
 
 
+# Operation labels for thinking display
+_OP_LABELS = {"verify": "Verify", "decompose": "Decompose", "format": "Format"}
+
+
 async def _call_chat_completion(
     on_thinking: Callable[..., None],
     mock_context: Dict,
@@ -79,19 +74,24 @@ async def _call_chat_completion(
     mock = _load_mock_response(response_type, task_id)
     if not mock:
         raise ValueError(f"No mock data for {response_type}/{task_id}")
-    wrapped_thinking = (
-        (lambda c: on_thinking(c, task_id=task_id, task_type=response_type))
-        if callable(on_thinking)
-        else None
-    )
+
+    def stream_chunk(chunk: str) -> None:
+        if on_thinking and chunk:
+            op_label = _OP_LABELS.get(response_type, response_type.capitalize())
+            on_thinking(chunk, task_id=task_id, operation=op_label)
+
+    effective_on_thinking = stream_chunk if (stream and on_thinking) else None
+
     async with _get_call_semaphore():
-        return await mock_chat_completion(
+        result = await mock_chat_completion(
             mock["content"],
             mock["reasoning"],
-            wrapped_thinking,
+            effective_on_thinking,
             abort_event=abort_event,
             stream=stream,
         )
+
+    return result
 
 
 def _parse_json_response(text: str) -> Any:
@@ -172,15 +172,6 @@ async def _format_task(
     return None
 
 
-def _has_children(tasks: List[Dict], task_id: str) -> bool:
-    if task_id == "0":
-        return any(t.get("task_id") and re.match(r"^[1-9]\d*$", t["task_id"]) for t in tasks)
-    return any(
-        t.get("task_id") and t["task_id"].startswith(task_id + "_")
-        for t in tasks
-    )
-
-
 async def _verify_and_decompose_recursive(
     task: Dict,
     all_tasks: List[Dict],
@@ -189,6 +180,7 @@ async def _verify_and_decompose_recursive(
     depth: int,
     check_aborted: Callable[[], bool],
     abort_event: Optional[Any],
+    on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]] = None,
 ) -> None:
     if check_aborted and check_aborted():
         raise asyncio.CancelledError("Aborted")
@@ -219,13 +211,15 @@ async def _verify_and_decompose_recursive(
         raise ValueError(f"Decompose returned no children for task {task['task_id']}")
 
     all_tasks.extend(children)
-    if on_task:
+    if on_tasks_batch:
+        on_tasks_batch(children, task, list(all_tasks))
+    elif on_task:
         for t in children:
             on_task(t)
 
     await asyncio.gather(*[
         _verify_and_decompose_recursive(
-            child, all_tasks, on_task, on_thinking, depth + 1, check_aborted, abort_event
+            child, all_tasks, on_task, on_thinking, depth + 1, check_aborted, abort_event, on_tasks_batch
         )
         for child in children
     ])
@@ -236,6 +230,7 @@ async def run_plan(
     on_task: Optional[Callable[[Dict], None]],
     on_thinking: Callable[[str], None],
     abort_event: Optional[Any] = None,
+    on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]] = None,
 ) -> Dict:
     """Run verify->decompose->format from root task, top-down to all atomic tasks."""
 
@@ -255,6 +250,6 @@ async def run_plan(
     all_tasks = list(tasks)
     on_thinking_fn = on_thinking or (lambda _: None)
     await _verify_and_decompose_recursive(
-        root_task, all_tasks, on_task, on_thinking_fn, 0, check_aborted, abort_event
+        root_task, all_tasks, on_task, on_thinking_fn, 0, check_aborted, abort_event, on_tasks_batch
     )
     return {"tasks": all_tasks}

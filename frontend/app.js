@@ -1,5 +1,42 @@
 const API_BASE_URL = 'http://localhost:3001/api';
 
+const THEME_STORAGE_KEY = 'maars-theme';
+
+const THEMES = ['light', 'dark', 'black'];
+
+function initTheme() {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const theme = saved && THEMES.includes(saved) ? saved : (prefersDark ? 'dark' : 'light');
+    applyTheme(theme);
+}
+
+function applyTheme(theme) {
+    if (theme === 'light') {
+        document.documentElement.removeAttribute('data-theme');
+    } else {
+        document.documentElement.setAttribute('data-theme', theme);
+    }
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'light';
+    const idx = THEMES.indexOf(current);
+    const next = THEMES[(idx + 1) % THEMES.length];
+    applyTheme(next);
+    localStorage.setItem(THEME_STORAGE_KEY, next);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
+    document.getElementById('themeToggleBtn')?.addEventListener('click', toggleTheme);
+});
+
+function escapeHtmlAttr(str) {
+    if (str == null) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 // DOM Elements
 const ideaInput = document.getElementById('ideaInput');
 
@@ -154,7 +191,8 @@ if (loadExampleIdeaBtn) {
 
 const WS_URL = 'http://localhost:3001';
 let socket = null;
-let plannerThinkingBlocks = []; // [{ taskId, type, content }]
+// Multi-block streaming: each task has its own block for concurrent streaming
+let plannerThinkingBlocks = []; // [{ key, taskId, operation, content }]
 let timetableLayout = null;
 let chainCache = [];
 let previousTaskStates = new Map();
@@ -196,36 +234,6 @@ const diagramArea = document.getElementById('diagramArea');
 const generateTimetableBtn = document.getElementById('generateTimetableBtn');
 const mockExecutionBtn = document.getElementById('mockExecutionBtn');
 
-/**
- * Render planner thinking blocks with task ID and type headers.
- * @param {Array<{taskId: string, type: string, content: string}>} blocks
- * @returns {string} HTML string
- */
-function renderPlannerThinkingBlocks(blocks) {
-    if (!blocks || blocks.length === 0) return '';
-    const parseMarkdown = (text) => {
-        if (typeof marked !== 'undefined') {
-            try {
-                return marked.parse(text || '');
-            } catch (_) {
-                return (text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            }
-        }
-        return (text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    };
-    const escape = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    return blocks
-        .map((b) => {
-            const label = [b.taskId, b.type].filter(Boolean).map(escape).join(' · ') || 'Thinking';
-            const contentHtml = parseMarkdown(b.content);
-            return `<div class="planner-thinking-block">
-                <div class="planner-thinking-block-header">${label}</div>
-                <div class="planner-thinking-block-content markdown-body">${contentHtml}</div>
-            </div>`;
-        })
-        .join('');
-}
-
 // Initialize WebSocket connection (for monitor)
 function initializeWebSocket() {
     if (socket && socket.connected) {
@@ -243,6 +251,7 @@ function initializeWebSocket() {
     });
 
     socket.on('plan-start', () => {
+        plannerThinkingBlocks.forEach(b => { if (b._typeTimer) clearTimeout(b._typeTimer); });
         plannerThinkingBlocks = [];
         const el = document.getElementById('plannerThinkingContent');
         const area = document.getElementById('plannerThinkingArea');
@@ -251,41 +260,75 @@ function initializeWebSocket() {
         TaskTree.clearPlannerTree();
     });
 
+    function renderPlannerThinking() {
+        const el = document.getElementById('plannerThinkingContent');
+        const area = document.getElementById('plannerThinkingArea');
+        if (!el) return;
+        const OP_ORDER = { Verify: 1, Decompose: 2, Format: 3 };
+        const treeData = (typeof TaskTree !== 'undefined' && TaskTree.plannerTreeData) ? TaskTree.plannerTreeData : [];
+        const sorted = [...plannerThinkingBlocks].sort((a, b) => {
+            const stageA = treeData.find(t => t.task_id === a.taskId)?.stage ?? 999;
+            const stageB = treeData.find(t => t.task_id === b.taskId)?.stage ?? 999;
+            if (stageA !== stageB) return stageA - stageB;
+            const opA = OP_ORDER[a.operation] ?? 99;
+            const opB = OP_ORDER[b.operation] ?? 99;
+            if (opA !== opB) return opA - opB;
+            return String(a.taskId || '').localeCompare(String(b.taskId || ''));
+        });
+        let html = '';
+        for (const block of sorted) {
+            const header = block.taskId != null
+                ? `---\n\n**Task ${block.taskId}** | ${block.operation || ''}\n\n`
+                : '';
+            const raw = header + (block.displayContent != null ? block.displayContent : block.content);
+            html += raw ? (typeof marked !== 'undefined' ? marked.parse(raw) : raw) + '\n\n' : '';
+        }
+        try {
+            el.innerHTML = html || '';
+        } catch (_) {
+            el.textContent = sorted.map(b => (b.displayContent != null ? b.displayContent : b.content)).join('\n\n');
+        }
+        el.scrollTop = el.scrollHeight;
+        if (area && plannerThinkingBlocks.length) area.classList.add('has-content');
+    }
+
+    function typeOutBlock(block, fullContent, speedMs = 12) {
+        if (block.displayContent === fullContent) return;
+        block.displayContent = block.displayContent != null ? block.displayContent : '';
+        let i = block.displayContent.length;
+        const step = () => {
+            if (i < fullContent.length) {
+                const chunk = fullContent.slice(i, Math.min(i + 2, fullContent.length));
+                block.displayContent += chunk;
+                i += chunk.length;
+                renderPlannerThinking();
+                block._typeTimer = setTimeout(step, speedMs);
+            }
+        };
+        if (block._typeTimer) clearTimeout(block._typeTimer);
+        step();
+    }
+
     socket.on('plan-thinking', (data) => {
         const el = document.getElementById('plannerThinkingContent');
         const area = document.getElementById('plannerThinkingArea');
         if (!el || !data.chunk) return;
-        const taskId = data.taskId ?? '';
-        const taskType = data.type ?? '';
-        let block = plannerThinkingBlocks[plannerThinkingBlocks.length - 1];
-        if (!block || block.taskId !== taskId || block.type !== taskType) {
-            block = { taskId, type: taskType, content: '' };
+        const { chunk, taskId, operation } = data;
+        const key = (taskId != null && operation != null) ? `${String(taskId)}::${String(operation)}` : '_default';
+        let block = plannerThinkingBlocks.find(b => b.key === key);
+        if (!block) {
+            block = { key, taskId, operation, content: '', displayContent: '' };
             plannerThinkingBlocks.push(block);
         }
-        block.content += data.chunk;
-        el.innerHTML = renderPlannerThinkingBlocks(plannerThinkingBlocks);
-        el.scrollTop = el.scrollHeight;
-        if (area) area.classList.add('has-content');
+        block.content += chunk;
+        typeOutBlock(block, block.content);
     });
 
-    socket.on('plan-task', (data) => {
-        if (data.task) TaskTree.appendPlannerTaskNode(data.task);
+    socket.on('plan-tree-update', (data) => {
+        if (data.treeData) TaskTree.renderPlannerTree(data.treeData);
     });
 
-
-    socket.on('plan-complete', (data) => {
-        if (data.treeData && TaskTree.renderPlannerTree) {
-            TaskTree.renderPlannerTree(data.treeData);
-        }
-        if (generatePlanBtn) {
-            generatePlanBtn.disabled = false;
-            generatePlanBtn.textContent = 'Generate Plan';
-        }
-        if (decomposeBtn) decomposeBtn.disabled = false;
-        if (stopPlanBtn) stopPlanBtn.style.display = 'none';
-    });
-
-    socket.on('plan-error', () => {
+    function resetPlanButtons() {
         if (generatePlanBtn) {
             generatePlanBtn.disabled = false;
             generatePlanBtn.textContent = 'Generate Plan';
@@ -295,6 +338,15 @@ function initializeWebSocket() {
             decomposeBtn.textContent = 'Decompose';
         }
         if (stopPlanBtn) stopPlanBtn.style.display = 'none';
+    }
+
+    socket.on('plan-complete', (data) => {
+        if (data.treeData) TaskTree.renderPlannerTree(data.treeData);
+        resetPlanButtons();
+    });
+
+    socket.on('plan-error', () => {
+        resetPlanButtons();
     });
 
     socket.on('timetable-layout', (data) => {
@@ -316,39 +368,36 @@ function initializeWebSocket() {
                     cacheNode.status = taskState.status;
                 }
                 
-                // Detect state changes and trigger connection line animations
+                // undone→doing: yellow on upstream; done→undone: red on downstream
                 if (previousStatus !== undefined && previousStatus !== taskState.status) {
-                    // Task started executing (from undone/verifying to doing)
                     if (taskState.status === 'doing' && (previousStatus === 'undone' || previousStatus === 'verifying')) {
-                        // Trigger yellow glow animation on upstream connection lines (top to bottom)
-                        setTimeout(() => {
-                            animateUpstreamConnections(taskState.task_id, 'yellow');
-                        }, 100); // Small delay for visual effect
-                    }
-                    
-                    // Task rolled back (from any status back to undone, especially after failures)
-                    if (taskState.status === 'undone' && previousStatus !== 'undone') {
-                        // Check if this is a rollback (not initial state)
-                        // Rollback typically happens after execution-failed or verification-failed
-                        if (previousStatus === 'execution-failed' || previousStatus === 'verification-failed' || previousStatus === 'doing' || previousStatus === 'verifying') {
-                            // Trigger red glow animation on upstream connection lines (bottom to top)
-                            setTimeout(() => {
-                                animateUpstreamConnections(taskState.task_id, 'red');
-                            }, 100); // Small delay for visual effect
-                        }
+                        setTimeout(() => animateConnectionLines(taskState.task_id, 'yellow', 'upstream'), 50);
+                    } else if (taskState.status === 'undone' && previousStatus === 'done') {
+                        setTimeout(() => animateConnectionLines(taskState.task_id, 'red', 'downstream'), 50);
                     }
                 }
                 
-                // Update previous state
                 previousTaskStates.set(taskState.task_id, taskState.status);
-                
-                // Update all elements with this task ID (both timetable cells and tree tasks)
-                // Search in the entire document, not just diagramContent, to include tasks tree
-                const cells = document.querySelectorAll(`[data-task-id="${taskState.task_id}"]`);
-                if (cells && cells.length > 0) {
+            });
+
+
+            // Update Monitor area cells (timetable + tree nodes)
+            data.tasks.forEach(taskState => {
+                const monitorSection = document.querySelector('.monitor-section');
+                if (monitorSection) {
+                    const cells = monitorSection.querySelectorAll(`[data-task-id="${taskState.task_id}"]`);
                     cells.forEach(cell => {
                         cell.classList.remove('task-status-undone', 'task-status-doing', 'task-status-verifying', 'task-status-done', 'task-status-verification-failed', 'task-status-execution-failed');
                         cell.classList.add(`task-status-${taskState.status}`);
+                        // Update data-task-data so popover shows current status
+                        const dataAttr = cell.getAttribute('data-task-data');
+                        if (dataAttr) {
+                            try {
+                                const data = JSON.parse(dataAttr);
+                                data.status = taskState.status;
+                                cell.setAttribute('data-task-data', JSON.stringify(data));
+                            } catch (_) {}
+                        }
                     });
                 }
             });
@@ -391,8 +440,8 @@ function renderTimetableDiagram() {
     
     let html = '<div class="execution-map">';
     
-    // Default display: 7 columns, 4 rows for Stage Tasks
-    const displayCols = 7;
+    // Default display: 10 columns for Stage Tasks
+    const displayCols = 10;
     const displayRows = 4;
     const rightCols = 3;  // Isolated Tasks: 3 columns
     const rightRows = 4;   // Isolated Tasks: 4 rows
@@ -450,8 +499,8 @@ function renderTimetableDiagram() {
     diagramContent.innerHTML = html;
     
     // Render tasks tree in separate area
-    TaskTree.renderMonitorTasksTree(timetableLayout?.treeData || []);
-    
+    const treeData = timetableLayout?.treeData || [];
+    TaskTree.renderMonitorTasksTree(treeData);
     setTimeout(() => {
             // Get the main container for calculating fixed cell size
             const timetableWrapper = diagramContent.querySelector('.timetable-wrapper');
@@ -550,7 +599,9 @@ function renderTimetableDiagram() {
                 const status = task.status || 'undone';
                 const desc = task.description || task.objective || task.task_id;
                 const safeTooltip = (desc || '').replace(/"/g, '&quot;');
-                html += `<div class="timetable-cell task-status-${status}" data-task-id="${task.task_id}" title="${safeTooltip}">
+                const popoverData = typeof TaskTree !== 'undefined' && TaskTree.buildTaskDataForPopover
+                    ? TaskTree.buildTaskDataForPopover(task) : { task_id: task.task_id, description: task.description, dependencies: task.dependencies, status: task.status, input: task.input, output: task.output };
+                html += `<div class="timetable-cell task-status-${status}" data-task-id="${task.task_id}" data-task-data="${escapeHtmlAttr(JSON.stringify(popoverData))}" title="${safeTooltip}">
                     <span class="task-number">${task.task_id}</span>
                     <span class="task-description">${desc}</span>
                 </div>`;
@@ -599,7 +650,9 @@ function renderTimetableDiagram() {
                 const status = task.status || 'undone';
                 const desc = task.description || task.objective || task.task_id;
                 const safeTooltip = (desc || '').replace(/"/g, '&quot;');
-                html += `<div class="timetable-cell task-status-${status}" data-task-id="${task.task_id}" title="${safeTooltip}">
+                const popoverData = typeof TaskTree !== 'undefined' && TaskTree.buildTaskDataForPopover
+                    ? TaskTree.buildTaskDataForPopover(task) : { task_id: task.task_id, description: task.description, dependencies: task.dependencies, status: task.status, input: task.input, output: task.output };
+                html += `<div class="timetable-cell task-status-${status}" data-task-id="${task.task_id}" data-task-data="${escapeHtmlAttr(JSON.stringify(popoverData))}" title="${safeTooltip}">
                     <span class="task-number">${task.task_id}</span>
                     <span class="task-description">${desc}</span>
                 </div>`;
@@ -622,8 +675,8 @@ function renderTimetableDiagram() {
     diagramContent.innerHTML = html;
     
     // Render tasks tree in separate area
-    TaskTree.renderMonitorTasksTree(treeData || []);
-    
+    const monitorTreeData = treeData || [];
+    TaskTree.renderMonitorTasksTree(monitorTreeData);
     setTimeout(() => {
         // Get the main container for calculating fixed cell size
         const timetableWrapper = diagramContent.querySelector('.timetable-wrapper');
@@ -699,38 +752,27 @@ function renderTimetableDiagram() {
 }
 
 /**
- * Calculate fixed cell size based on new logic:
- * Cell width = (container width - gap) / 10
- * Right area (isolated tasks) = 3 cells + gap, right-aligned, fixed first
- * Left area (stage tasks) = remaining space
+ * Calculate fixed cell size: total width divided into 13 columns.
+ * Cell width = (container width - gap) / 13
  * @param {HTMLElement} container - The main container element (timetable-wrapper)
  * @returns {Object} Object containing cellSize and rightAreaWidth
  */
 function calculateFixedCellSize(container) {
     if (!container) {
-        return { cellSize: 60, rightAreaWidth: 200 }; // Default fallback
+        return { cellSize: 48, rightAreaWidth: 160 }; // Default fallback
     }
     
-    // Get the full container width
     const containerWidth = container.clientWidth || container.offsetWidth || container.getBoundingClientRect().width;
-    
-    // Get computed styles to calculate borders and padding
     const computedStyle = window.getComputedStyle(container);
     const paddingLeft = parseFloat(computedStyle.paddingLeft) || 0;
     const paddingRight = parseFloat(computedStyle.paddingRight) || 0;
     const borderLeft = parseFloat(computedStyle.borderLeftWidth) || 0;
     const borderRight = parseFloat(computedStyle.borderRightWidth) || 0;
-    
-    // Calculate available width: container width minus padding and border
     const availableWidth = containerWidth - (paddingLeft + paddingRight + borderLeft + borderRight);
-    
-    // Get gap value from CSS variable (default 20px)
     const gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 20;
     
-    // Cell width = (container width - gap) / 10
-    const cellSize = Math.floor((availableWidth - gap) / 10);
-    
-    // Right area width = 3 cells + gap
+    // Total width divided into 13 columns
+    const cellSize = Math.floor((availableWidth - gap) / 13);
     const rightAreaWidth = 3 * cellSize + gap;
     
     return { cellSize, rightAreaWidth };
@@ -742,68 +784,31 @@ function renderNodeDiagramFromCache() {
 }
 
 /**
- * Animate upstream connection lines for a task
+ * Animate connection lines: undone→doing = yellow on upstream; done→undone = red on downstream
  * @param {string} taskId - The task ID
- * @param {string} animationType - 'yellow' for start animation, 'red' for rollback animation
+ * @param {string} color - 'yellow' | 'red'
+ * @param {string} direction - 'upstream' (lines ending at task) | 'downstream' (lines starting from task)
  */
-function animateUpstreamConnections(taskId, animationType) {
-    // Look for SVG in monitor tasks tree area first, then fallback to separate section
-    const tasksTreeArea = document.querySelector('.monitor-tasks-tree-area') 
-        || document.querySelector('.tasks-tree-section');
-    
-    if (!tasksTreeArea) {
-        return;
-    }
-    
-    const svg = tasksTreeArea.querySelector('.tree-connection-lines');
-    if (!svg) {
-        return;
-    }
-    
-    // Find all connection lines that end at this task (upstream connections)
-    const upstreamLines = svg.querySelectorAll(`path[data-to-task="${taskId}"]`);
-    
-    if (upstreamLines.length === 0) {
-        return;
-    }
-    
-    // Remove any existing animation classes
-    upstreamLines.forEach(line => {
-        line.classList.remove('animate-yellow-glow', 'animate-red-glow');
-    });
-    
-    // Trigger reflow to ensure class removal is processed
+function animateConnectionLines(taskId, color, direction) {
+    const area = document.querySelector('.monitor-tasks-tree-area') || document.querySelector('.tasks-tree-section');
+    const svg = area?.querySelector('.tree-connection-lines');
+    if (!svg) return;
+
+    const selector = direction === 'upstream' ? `path[data-to-task="${taskId}"]` : `path[data-from-task="${taskId}"]`;
+    const lines = Array.from(svg.querySelectorAll(selector));
+    if (lines.length === 0) return;
+
+    const animClass = color === 'yellow' ? 'animate-yellow-glow' : 'animate-red-glow';
+    lines.forEach(line => line.classList.remove('animate-yellow-glow', 'animate-red-glow'));
     void svg.offsetHeight;
-    
-    // Add animation class based on type
-    const animationClass = animationType === 'yellow' ? 'animate-yellow-glow' : 'animate-red-glow';
-    
-    // Animate lines sequentially (top to bottom for yellow, bottom to top for red)
-    const linesArray = Array.from(upstreamLines);
-    
-    if (animationType === 'yellow') {
-        // Yellow: animate from top to bottom (by dependency order)
-        linesArray.forEach((line, index) => {
-            setTimeout(() => {
-                line.classList.add(animationClass);
-                // Remove animation class after animation completes
-                setTimeout(() => {
-                    line.classList.remove(animationClass);
-                }, 1000);
-            }, index * 50); // Stagger animation by 50ms
-        });
-    } else {
-        // Red: animate from bottom to top (reverse order)
-        linesArray.reverse().forEach((line, index) => {
-            setTimeout(() => {
-                line.classList.add(animationClass);
-                // Remove animation class after animation completes
-                setTimeout(() => {
-                    line.classList.remove(animationClass);
-                }, 1000);
-            }, index * 50); // Stagger animation by 50ms
-        });
-    }
+
+    const order = color === 'yellow' ? lines : [...lines].reverse();
+    order.forEach((line, i) => {
+        setTimeout(() => {
+            line.classList.add(animClass);
+            setTimeout(() => line.classList.remove(animClass), 1000);
+        }, i * 50);
+    });
 }
 
 // Mock execution (requires backend)
@@ -850,18 +855,27 @@ async function mockExecution() {
     }
 }
 
-// Generate task timetable from execution.json
+// Generate execution map from plan (atomic tasks) and render timetable
 async function generateTimetable() {
     const btn = generateTimetableBtn;
     const originalText = btn.textContent;
     btn.disabled = true;
-    btn.textContent = 'Loading...';
+    btn.textContent = 'Generating...';
     
     try {
-        // Load execution.json from database
-        const execution = await loadExecution();
-        if (!execution) {
-            alert('No execution found. Ensure backend/db/test/ has execution.json.');
+        // Generate execution from plan (extract atomic tasks, clean deps, save to execution.json)
+        const genRes = await fetch(`${API_BASE_URL}/execution/generate-from-plan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ planId: 'test' })
+        });
+        const genData = await genRes.json();
+        if (!genRes.ok) {
+            throw new Error(genData.error || 'Failed to generate execution from plan');
+        }
+        const execution = genData.execution;
+        if (!execution || !execution.tasks?.length) {
+            alert('No atomic tasks in plan. Generate and decompose plan first.');
             btn.textContent = originalText;
             btn.disabled = false;
             return;
@@ -903,7 +917,7 @@ async function generateTimetable() {
 
         btn.textContent = 'Loaded!';
         setTimeout(() => {
-            btn.textContent = 'Load Example Execution';
+            btn.textContent = 'Generate execution map';
         }, 2000);
     } catch (error) {
         console.error('Error generating timetable:', error);
@@ -928,8 +942,8 @@ initializeWebSocket();
 // Plan tree is only loaded via WebSocket (plan-complete) when user generates a plan
 
 // Initialize task node click handlers (popover for task details)
-if (typeof TaskTree !== 'undefined' && TaskTree.initTaskNodeClickHandlers) {
-    TaskTree.initTaskNodeClickHandlers();
+if (typeof TaskTree !== 'undefined' && TaskTree.initClickHandlers) {
+    TaskTree.initClickHandlers();
 }
 
 // ========== Executor/Verifier ==========
@@ -1050,7 +1064,7 @@ window.addEventListener('resize', () => {
         
         // Apply fixed cell size to left grid
         if (leftScroll && leftHeader && leftGrid) {
-            const actualCols = parseInt(leftGrid.getAttribute('data-cols')) || 7;
+            const actualCols = parseInt(leftGrid.getAttribute('data-cols')) || 10;
             const actualRows = parseInt(leftGrid.getAttribute('data-rows')) || 4;
             const actualGridWidth = actualCols * fixedCellSize + gap * (actualCols - 1);
             const actualGridHeight = actualRows * fixedCellSize + gap * (actualRows - 1);

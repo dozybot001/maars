@@ -35,8 +35,7 @@ backend/
   "task_id": "1",
   "description": "文献调研：...",
   "dependencies": ["0"],
-  "stage": 2,
-  "status": "undone"
+  "stage": 2
 }
 ```
 
@@ -81,7 +80,7 @@ tasks (完整数据，来自 db)
     │
     ▼
 extractCacheFromTasks(tasks)
-    → cache: [{ task_id, dependencies, status }]
+    → cache: [{ task_id, dependencies }]
     │
     ▼
 computeStaged(cache)  →  tasks/taskStages.computeTaskStages
@@ -95,7 +94,7 @@ enrichTreeData(staged, tasks)
     → 按 task_id 用 tasks 的完整数据合并到 staged 结果
     │
     ▼
-treeData (flat，含 stage、description、status 等)
+treeData (flat，含 stage、description 等；Plan 不含 status，Execution 含 status)
 ```
 
 **相关文件：**

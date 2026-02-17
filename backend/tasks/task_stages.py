@@ -12,6 +12,14 @@ import networkx as nx
 from monitor.timetable import clean_dependencies
 
 
+def _is_in_subtree(task_id: str, parent_id: str) -> bool:
+    if not task_id or not parent_id:
+        return False
+    if parent_id == "0":
+        return bool(re.match(r"^[1-9]\d*$", task_id))
+    return task_id.startswith(parent_id + "_")
+
+
 def sink_dependencies(tasks: List[Dict]) -> List[Dict]:
     """
     Sink dependencies: when parent task is decomposed, dependencies pointing to it
@@ -22,14 +30,7 @@ def sink_dependencies(tasks: List[Dict]) -> List[Dict]:
 
     task_map = {t["task_id"]: {**t, "dependencies": list(t.get("dependencies") or [])} for t in tasks if t.get("task_id")}
 
-    def is_in_subtree(task_id: str, parent_id: str) -> bool:
-        if not task_id or not parent_id:
-            return False
-        if parent_id == "0":
-            return bool(re.match(r"^[1-9]\d*$", task_id))
-        return task_id.startswith(parent_id + "_")
-
-    def get_leaf_tasks_of_subtree(parent_id: str) -> List[str]:
+    def get_leaf_tasks_of_subtree_inner(parent_id: str) -> List[str]:
         if parent_id == "0":
             subtasks = [t for t in tasks if t.get("task_id") and re.match(r"^[1-9]\d*$", t["task_id"])]
         else:
@@ -54,10 +55,10 @@ def sink_dependencies(tasks: List[Dict]) -> List[Dict]:
         for dep_id in deps:
             if not dep_id or not isinstance(dep_id, str):
                 continue
-            if is_in_subtree(task["task_id"], dep_id):
+            if _is_in_subtree(task["task_id"], dep_id):
                 sunk.append(dep_id)
                 continue
-            leaves = get_leaf_tasks_of_subtree(dep_id)
+            leaves = get_leaf_tasks_of_subtree_inner(dep_id)
             if leaves:
                 sunk.extend(leaves)
             else:
@@ -69,8 +70,8 @@ def sink_dependencies(tasks: List[Dict]) -> List[Dict]:
 
 def compute_task_stages(tasks: List[Dict]) -> List[List[Dict]]:
     """
-    Compute staged format from flat tasks: sink deps, topological sort, clean deps, add stage.
-    Uses networkx for cycle detection and topological generations.
+    Compute staged format from flat tasks. No old stage data used.
+    Order: 1) 依赖下沉 2) 重新计算 stage (topological sort) 3) 依赖清洗 (跨 stage，保险)
     Returns [[stage0_tasks], [stage1_tasks], ...], each task has stage (1-based)
     """
     if not tasks or not isinstance(tasks, list) or len(tasks) == 0:

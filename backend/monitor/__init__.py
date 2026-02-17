@@ -1,6 +1,6 @@
 """
 Monitor Module
-Builds layout from execution using task_cache (extract -> stage -> enrich).
+Builds layout from execution, generates execution from plan.
 """
 
 import json
@@ -8,6 +8,8 @@ from typing import Any, Dict, List
 
 from monitor.timetable import build_task_layout
 from tasks.task_cache import build_tree_data
+
+from .from_plan import build_execution_from_plan
 
 
 def _group_by_stage(tree_data: List[Dict]) -> List[List[Dict]]:

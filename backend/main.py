@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Optional
 
 import socketio
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
@@ -23,15 +25,22 @@ from db import (
     save_plan,
     save_verification,
 )
-from executor.runner import ExecutorRunner
-from monitor import build_layout_from_execution
+from monitor import build_execution_from_plan, build_layout_from_execution
 from planner.index import run_plan
 from tasks import task_cache
-from workers import executor_manager, verifier_manager
+from workers import ExecutorRunner, executor_manager, verifier_manager
 
 # Socket.io
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 app = FastAPI(title="MAARS Backend")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Plan run abort: per-run isolation (new run aborts previous)
 _plan_run_abort_event: Optional[asyncio.Event] = None
@@ -41,6 +50,27 @@ _plan_run_lock = asyncio.Lock()
 executor_runner = ExecutorRunner(sio)
 
 logger = logging.getLogger(__name__)
+
+
+# Disable cache for static files (dev: always fetch latest)
+NO_CACHE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
+
+class NoCacheMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if path == "/" or path.endswith((".html", ".css", ".js")):
+            for k, v in NO_CACHE_HEADERS.items():
+                response.headers[k] = v
+        return response
+
+
+app.add_middleware(NoCacheMiddleware)
 
 
 # Pydantic request models
@@ -99,50 +129,42 @@ async def api_plan_run(body: PlanRunRequest):
         idea = body.idea
         plan_id = body.plan_id
 
-        plan = await get_plan(plan_id)
+        plan = await get_plan(plan_id) or {}
         if idea is not None and isinstance(idea, str):
             task0 = {"task_id": "0", "description": idea.strip(), "dependencies": []}
-            await save_plan({"tasks": [task0]}, plan_id)
-            plan = await get_plan(plan_id)
+            plan["tasks"] = [task0]
+            plan["idea"] = idea.strip()
+            await save_plan(plan, plan_id)
 
-        if not plan or not plan.get("tasks") or len(plan["tasks"]) == 0:
+        if not plan.get("tasks") or len(plan["tasks"]) == 0:
             return JSONResponse(
                 status_code=400,
                 content={"error": "No plan found. Provide idea or generate plan first."},
             )
 
         await sio.emit("plan-start")
-        task_cache.clear_plan_cache(plan_id)
-        for t in plan.get("tasks", []):
-            task_cache.append_plan_cache(plan_id, t)
 
-        # Emit task 0 (idea) first
-        task0 = next((t for t in plan["tasks"] if t.get("task_id") == "0"), None)
-        if task0:
-            staged = task_cache.compute_staged(task_cache.get_plan_cache(plan_id))
-            task0_with_stage = next(
-                (t for t in task_cache.enrich_tree_data(staged, plan["tasks"]) if t.get("task_id") == "0"),
-                None,
-            )
-            if task0_with_stage:
-                await sio.emit("plan-task", {"task": task0_with_stage})
+        plan["tasks"] = task_cache.build_tree_data(plan["tasks"])
+        if plan["tasks"]:
+            await sio.emit("plan-tree-update", {"treeData": plan["tasks"]})
 
-        def on_task(task):
-            task_cache.append_plan_cache(plan_id, task)
-            staged = task_cache.compute_staged(task_cache.get_plan_cache(plan_id))
-            enriched = task_cache.enrich_tree_data(staged, [task])
-            task_with_stage = next((t for t in enriched if t.get("task_id") == task["task_id"]), {**task, "stage": 1})
-            asyncio.create_task(sio.emit("plan-task", {"task": task_with_stage}))
+        def on_tasks_batch(children, parent_task, all_tasks):
+            plan["tasks"] = task_cache.build_tree_data(all_tasks)
+            if plan["tasks"]:
+                asyncio.create_task(sio.emit("plan-tree-update", {"treeData": plan["tasks"]}))
 
-        def on_thinking(chunk, task_id=None, task_type=None):
-            asyncio.create_task(sio.emit("plan-thinking", {"chunk": chunk, "taskId": task_id, "type": task_type}))
+        def on_thinking(chunk, task_id=None, operation=None):
+            payload = {"chunk": chunk}
+            if task_id is not None:
+                payload["taskId"] = task_id
+            if operation is not None:
+                payload["operation"] = operation
+            asyncio.create_task(sio.emit("plan-thinking", payload))
 
-        result = await run_plan(plan, on_task, on_thinking, abort_event)
-        merged_tasks = result["tasks"]
-
-        await save_plan({"tasks": merged_tasks}, plan_id)
-        tree_data = task_cache.build_tree_data(merged_tasks)
-        await sio.emit("plan-complete", {"treeData": tree_data})
+        result = await run_plan(plan, None, on_thinking, abort_event, on_tasks_batch)
+        plan["tasks"] = task_cache.build_tree_data(result["tasks"])
+        await save_plan(plan, plan_id)
+        await sio.emit("plan-complete", {"treeData": plan["tasks"]})
 
         return {"success": True}
 
@@ -191,8 +213,8 @@ async def api_get_plan_tree(plan_id: str = Query("test", alias="planId")):
         plan = await get_plan(plan_id)
         if not plan or not plan.get("tasks") or len(plan["tasks"]) == 0:
             return {"treeData": []}
-        tree_data = task_cache.build_tree_data(plan["tasks"])
-        return {"treeData": tree_data}
+        tasks = task_cache.build_tree_data(plan["tasks"])
+        return {"treeData": tasks}
     except Exception as e:
         logger.exception("Error loading plan tree")
         return JSONResponse(status_code=500, content={"error": str(e) or "Failed to load plan tree"})
@@ -206,6 +228,22 @@ async def api_get_idea(plan_id: str = Query("test", alias="planId")):
     except Exception as e:
         logger.exception("Error loading idea")
         return JSONResponse(status_code=500, content={"error": "Failed to load idea"})
+
+
+@app.post("/api/execution/generate-from-plan")
+async def api_generate_execution_from_plan(body: ExecutionRequest):
+    """Extract atomic tasks from plan, clean deps, recompute stages, save to execution.json."""
+    try:
+        plan_id = body.plan_id
+        plan = await get_plan(plan_id)
+        if not plan or not plan.get("tasks"):
+            return JSONResponse(status_code=400, content={"error": "No plan found. Generate plan first."})
+        execution = build_execution_from_plan(plan)
+        await save_execution(execution, plan_id)
+        return {"execution": execution}
+    except Exception as e:
+        logger.exception("Error generating execution from plan")
+        return JSONResponse(status_code=500, content={"error": str(e) or "Failed to generate execution"})
 
 
 @app.get("/api/execution")

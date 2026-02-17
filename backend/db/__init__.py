@@ -1,7 +1,7 @@
 """
 Database Module
-File-based storage: each plan has its own folder with separate JSON files
-Structure: {planId}/idea.json, plan.json, execution.json, verification.json
+File-based storage: each plan has its own folder.
+plan.json contains all plan data: {tasks, idea?}. Other files: execution.json, verification.json
 Uses aiofiles for non-blocking I/O.
 """
 
@@ -62,8 +62,14 @@ async def _write_json_file(plan_id: str, filename: str, data: dict) -> dict:
 
 
 async def get_idea(plan_id: str = DEFAULT_PLAN_ID):
-    """Get idea (example idea string for planner input)."""
-    return await _read_json_file(plan_id, "idea.json")
+    """Get idea from plan (plan.idea or task0.description)."""
+    plan = await get_plan(plan_id)
+    if not plan:
+        return None
+    if plan.get("idea"):
+        return plan["idea"]
+    task0 = next((t for t in (plan.get("tasks") or []) if t.get("task_id") == "0"), None)
+    return task0.get("description") if task0 else None
 
 
 async def get_execution(plan_id: str = DEFAULT_PLAN_ID):

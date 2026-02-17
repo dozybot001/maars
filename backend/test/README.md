@@ -1,19 +1,17 @@
-# Test Utilities
+# Test
 
-## Mock AI for Planner
+测试相关：mock AI、mock data、测试工具。
 
-Planner uses mock data from `db/test/mock-ai/` (no real API calls).
+## mock-ai/
 
-### Mock Data
+Planner 使用的 mock AI 响应（无真实 API 调用）：
 
-Stored in `backend/db/test/mock-ai/`:
+- `verify.json` - 原子性验证（按 task_id）
+- `decompose.json` - 任务分解（按 parent task_id）
+- `format.json` - atomic 任务的 input/output 格式化（按 task_id）
 
-- `verify.json` - Atomicity verification responses (keyed by task_id)
-- `decompose.json` - Task decomposition responses (keyed by parent task_id)
-- `format.json` - Input/output format for atomic tasks (keyed by task_id)
+每条含 `content`（JSON）和 `reasoning`（流式输出到前端 plan-thinking）。
 
-Each entry has `content` (JSON) and `reasoning` (streamed to frontend via `plan-thinking`).
+## mock_stream.py
 
-### mock_stream.py
-
-Simulates AI streaming: splits `reasoning` into chunks and emits via `on_thinking` with small delays, then returns `content`.
+模拟 AI 流式输出：将 reasoning 分块，通过 on_thinking 回调发送。

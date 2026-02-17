@@ -1,6 +1,6 @@
 """
-Executor Runner Module
-Handles task execution and real-time state updates via WebSocket
+Executor Runner - handles task execution and verification via worker pools.
+Executor and verifier are both workers.
 """
 
 import asyncio
@@ -8,7 +8,7 @@ import logging
 import random
 from typing import Any, Dict, List, Set
 
-from workers import executor_manager, verifier_manager
+from . import executor_manager, verifier_manager
 
 logger = logging.getLogger(__name__)
 
@@ -327,6 +327,8 @@ class ExecutorRunner:
         self._emit("verifier-states-update", {"verifiers": verifiers, "stats": stats})
 
     async def _rollback_task(self, task: Dict) -> None:
+        """Rollback task and all affected: upstream deps + downstream dependents.
+        Once a task is undone, its downstream results are unreliable and must be undone too."""
         tasks_to_rollback: Set[str] = set()
         tasks_to_rollback.add(task["task_id"])
         for dep_id in (task.get("dependencies") or []):
@@ -345,6 +347,8 @@ class ExecutorRunner:
 
         for dep_id in (task.get("dependencies") or []):
             find_downstream(dep_id)
+        # Downstream of the rolled-back task: all dependents become unreliable
+        find_downstream(task["task_id"])
 
         async with self._worker_lock:
             for task_id in tasks_to_rollback:

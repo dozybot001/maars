@@ -4,12 +4,31 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MAARS</title>
+    <script>
+        (function() {
+            var s = localStorage.getItem('maars-theme');
+            var valid = s && ['light','dark','black'].indexOf(s) >= 0;
+            var d = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            var t = valid ? s : (d ? 'dark' : 'light');
+            if (t === 'light') return;
+            document.documentElement.setAttribute('data-theme', t);
+        })();
+    </script>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
-        <h1>MAARS</h1>
-        <p class="subtitle">Multi-Agent Automated Research System</p>
+        <header class="page-header">
+            <div class="header-title">
+                <h1>MAARS</h1>
+                <p class="subtitle">Multi-Agent Automated Research System</p>
+            </div>
+            <button type="button" id="themeToggleBtn" class="theme-toggle-btn" title="Cycle theme: Light / Dark / Black" aria-label="Cycle theme">
+                <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
+                <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
+                <span class="theme-icon theme-icon-black" aria-hidden="true">◻</span>
+            </button>
+        </header>
         
         <section class="planner-section">
             <h2>Planner</h2>
@@ -21,17 +40,19 @@
                     <button id="decomposeBtn" disabled>Decompose</button>
                     <button id="stopPlanBtn" class="stop-btn" style="display: none;">Stop</button>
                 </div>
-                <div class="planner-thinking-area" id="plannerThinkingArea">
-                    <div class="planner-thinking-label">AI Thinking</div>
-                    <div class="planner-thinking-content markdown-body" id="plannerThinkingContent"></div>
-                    <div class="planner-thinking-placeholder" id="plannerThinkingPlaceholder">Thinking will appear here when generating plan...</div>
-                </div>
-                <div class="planner-tree-area" data-tree-area="planner">
+                <div class="planner-thinking-tree-row">
+                    <div class="planner-thinking-area" id="plannerThinkingArea">
+                        <div class="planner-thinking-label">AI Thinking</div>
+                        <div class="planner-thinking-content markdown-body" id="plannerThinkingContent"></div>
+                        <div class="planner-thinking-placeholder" id="plannerThinkingPlaceholder">Thinking will appear here when generating plan...</div>
+                    </div>
+                    <div class="planner-tree-area" data-tree-area="planner">
                     <div class="timetable-tree-container">
                         <div class="tasks-tree planner-tasks-tree">
                             <svg class="tree-connection-lines"></svg>
                             <!-- Plan tree nodes rendered by stage -->
                         </div>
+                    </div>
                     </div>
                 </div>
             </div>
@@ -44,7 +65,7 @@
                     <div class="diagram-area">
                         <div id="diagramArea" class="diagram-content">
                             <div class="execution-map">
-                                <div class="map-info">No execution map found. Click "Load example execution" to build the map.</div>
+                                <div class="map-info">No execution map found. Click "Generate execution map" to build the map.</div>
                             </div>
                         </div>
                     </div>
@@ -59,7 +80,7 @@
                 </div>
             </div>
             <div class="button-group">
-                <button id="generateTimetableBtn">Load Example Execution</button>
+                <button id="generateTimetableBtn">Generate execution map</button>
                 <button id="mockExecutionBtn">Mock Execution</button>
             </div>
         </section>

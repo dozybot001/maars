@@ -15,7 +15,7 @@ python3 -m pip install -r requirements.txt
 
 ```bash
 cd backend
-python3 -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001
+python3 -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001 --loop asyncio --http h11
 ```
 
 或使用脚本：
@@ -39,7 +39,7 @@ cd backend
 | **Load Example Idea** | 加载示例想法 |
 | **Generate Plan** | 执行 AI 规划流程：Verify → Decompose → Format |
 | **Stop** | 停止当前规划执行 |
-| **Load example execution** | 加载示例执行地图（Monitor 区域） |
+| **Generate execution map** | 从 plan 提取 atomic tasks 生成 execution，渲染 Monitor 地图 |
 | **Start Mock Execution** | 启动模拟执行 |
 
 ---
