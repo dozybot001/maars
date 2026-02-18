@@ -22,12 +22,58 @@
                 <h1>MAARS</h1>
                 <p class="subtitle">Multi-Agent Automated Research System</p>
             </div>
-            <button type="button" id="themeToggleBtn" class="theme-toggle-btn" title="Cycle theme: Light / Dark / Black" aria-label="Cycle theme">
-                <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
-                <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
-                <span class="theme-icon theme-icon-black" aria-hidden="true">◻</span>
-            </button>
+            <div class="header-actions">
+                <button type="button" id="themeToggleBtn" class="theme-toggle-btn" title="Cycle theme: Light / Dark / Black" aria-label="Cycle theme">
+                    <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
+                    <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
+                    <span class="theme-icon theme-icon-black" aria-hidden="true">◻</span>
+                </button>
+                <button type="button" id="apiConfigBtn" class="icon-btn" title="API 配置" aria-label="API config">⚙</button>
+            </div>
         </header>
+
+        <div id="apiConfigModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>API 配置</h2>
+                    <span class="close" id="apiConfigModalClose">&times;</span>
+                </div>
+                <form id="apiConfigForm">
+                    <div class="form-group">
+                        <label for="apiBaseUrl">API Base URL</label>
+                        <input type="url" id="apiBaseUrl" placeholder="https://api.openai.com/v1" />
+                    </div>
+                    <div class="form-group">
+                        <label for="apiKey">API Key</label>
+                        <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off" />
+                    </div>
+                    <div class="form-group">
+                        <label for="apiModel">Model</label>
+                        <input type="text" id="apiModel" placeholder="gpt-4o" />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">AI 模式</label>
+                        <div class="api-mode-toggle" role="group" aria-label="AI mode">
+                            <button type="button" class="api-mode-option" data-mode="mock" id="apiModeMock">
+                                <span class="api-mode-icon">▢</span>
+                                <span class="api-mode-label">Mock AI</span>
+                                <span class="api-mode-desc">本地模拟，无需配置</span>
+                            </button>
+                            <button type="button" class="api-mode-option" data-mode="llm" id="apiModeLlm">
+                                <span class="api-mode-icon">◈</span>
+                                <span class="api-mode-label">LLM API</span>
+                                <span class="api-mode-desc">调用上方配置的接口</span>
+                            </button>
+                        </div>
+                        <input type="hidden" id="apiUseMock" name="apiUseMock" />
+                    </div>
+                    <div class="button-group" style="margin-top: 20px;">
+                        <button type="submit">保存</button>
+                        <button type="button" id="apiConfigReset">重置</button>
+                    </div>
+                </form>
+            </div>
+        </div>
         
         <section class="planner-section">
             <h2>Planner</h2>
@@ -47,10 +93,7 @@
                     </div>
                     <div class="planner-tree-area" data-tree-area="planner">
                     <div class="timetable-tree-container">
-                        <div class="tasks-tree planner-tasks-tree">
-                            <svg class="tree-connection-lines"></svg>
-                            <!-- Plan tree nodes rendered by stage -->
-                        </div>
+                        <div class="tasks-tree planner-tasks-tree"></div>
                     </div>
                     </div>
                 </div>
@@ -71,10 +114,7 @@
                 </div>
                 <div class="monitor-tasks-tree-area" data-tree-area="monitor">
                     <div class="timetable-tree-container">
-                        <div class="tasks-tree monitor-tasks-tree">
-                            <svg class="tree-connection-lines"></svg>
-                            <!-- Tasks tree will be rendered here -->
-                        </div>
+                        <div class="tasks-tree monitor-tasks-tree"></div>
                     </div>
                 </div>
             </div>
@@ -133,6 +173,7 @@
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
     <script src="task-tree.js"></script>
     <script src="app.js"></script>
 </body>

@@ -1,8 +1,7 @@
 """
 Database Module
-File-based storage: each plan has its own folder.
-plan.json contains all plan data: {tasks, idea?}. Other files: execution.json, verification.json
-Uses aiofiles for non-blocking I/O.
+File-based storage: db/{plan_id}/ contains plan.json, execution.json, verification.json.
+Planner generates a new plan_id folder on each new plan; all reads/writes use plan_id.
 """
 
 import json

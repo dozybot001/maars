@@ -74,10 +74,19 @@ app.add_middleware(NoCacheMiddleware)
 
 
 # Pydantic request models
+class ApiConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    base_url: Optional[str] = Field(None, alias="baseUrl")
+    api_key: Optional[str] = Field(None, alias="apiKey")
+    model: Optional[str] = None
+
+
 class PlanRunRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     idea: Optional[str] = None
     plan_id: str = Field(default="test", alias="planId")
+    use_mock: bool = Field(default=False, alias="useMock")
+    api_config: Optional[ApiConfig] = Field(None, alias="apiConfig")
 
 
 class MonitorTimetableRequest(BaseModel):
@@ -127,10 +136,18 @@ async def api_plan_run(body: PlanRunRequest):
 
     try:
         idea = body.idea
-        plan_id = body.plan_id
+        use_mock = body.use_mock
+        api_config = body.api_config.model_dump(by_alias=True, exclude_none=True) if body.api_config else {}
+
+        # New idea => create new plan_id folder; decompose => use existing
+        if idea is not None and isinstance(idea, str) and idea.strip():
+            import time as _time
+            plan_id = f"plan_{int(_time.time() * 1000)}"
+        else:
+            plan_id = body.plan_id
 
         plan = await get_plan(plan_id) or {}
-        if idea is not None and isinstance(idea, str):
+        if idea is not None and isinstance(idea, str) and idea.strip():
             task0 = {"task_id": "0", "description": idea.strip(), "dependencies": []}
             plan["tasks"] = [task0]
             plan["idea"] = idea.strip()
@@ -161,12 +178,12 @@ async def api_plan_run(body: PlanRunRequest):
                 payload["operation"] = operation
             asyncio.create_task(sio.emit("plan-thinking", payload))
 
-        result = await run_plan(plan, None, on_thinking, abort_event, on_tasks_batch)
+        result = await run_plan(plan, None, on_thinking, abort_event, on_tasks_batch, use_mock=use_mock, api_config=api_config)
         plan["tasks"] = task_cache.build_tree_data(result["tasks"])
         await save_plan(plan, plan_id)
-        await sio.emit("plan-complete", {"treeData": plan["tasks"]})
+        await sio.emit("plan-complete", {"treeData": plan["tasks"], "planId": plan_id})
 
-        return {"success": True}
+        return {"success": True, "planId": plan_id}
 
     except asyncio.CancelledError:
         await sio.emit("plan-error", {"error": "Plan generation stopped by user"})
@@ -220,11 +237,14 @@ async def api_get_plan_tree(plan_id: str = Query("test", alias="planId")):
         return JSONResponse(status_code=500, content={"error": str(e) or "Failed to load plan tree"})
 
 
+DEFAULT_EXAMPLE_IDEA = "Research and analyze the latest trends in AI technology"
+
+
 @app.get("/api/idea")
 async def api_get_idea(plan_id: str = Query("test", alias="planId")):
     try:
         idea = await get_idea(plan_id)
-        return {"idea": idea}
+        return {"idea": idea or DEFAULT_EXAMPLE_IDEA}
     except Exception as e:
         logger.exception("Error loading idea")
         return JSONResponse(status_code=500, content={"error": "Failed to load idea"})

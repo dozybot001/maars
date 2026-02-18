@@ -32,7 +32,7 @@ maars/
 │   ├── monitor/         # 布局、execution 生成
 │   ├── workers/         # executor、verifier、runner
 │   ├── tasks/           # 任务缓存与阶段
-│   ├── db/              # plan.json, execution.json, idea.json
+│   ├── db/              # db/{plan_id}/plan.json, execution.json, verification.json
 │   └── test/            # Mock AI、mock_stream
 └── frontend/
     ├── index.html

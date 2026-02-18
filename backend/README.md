@@ -9,7 +9,7 @@ backend/
 ├── monitor/             # 布局、execution 生成
 ├── workers/             # executor、verifier、runner
 ├── tasks/               # 任务缓存与阶段计算
-├── db/                  # plan.json, execution.json, idea.json
+├── db/                  # db/{plan_id}/plan.json, execution.json, verification.json
 ├── test/                # mock-ai、mock_stream
 └── docs/
 ```

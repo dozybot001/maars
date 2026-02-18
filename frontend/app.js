@@ -26,9 +26,73 @@ function toggleTheme() {
     localStorage.setItem(THEME_STORAGE_KEY, next);
 }
 
+const API_CONFIG_KEY = 'maars-api-config';
+const PLAN_ID_KEY = 'maars-plan-id';
+
+function getApiConfig() {
+    try {
+        const s = localStorage.getItem(API_CONFIG_KEY);
+        return s ? JSON.parse(s) : {};
+    } catch (_) { return {}; }
+}
+
+function saveApiConfig(cfg) {
+    localStorage.setItem(API_CONFIG_KEY, JSON.stringify(cfg || {}));
+}
+
+function initApiConfigModal() {
+    const modal = document.getElementById('apiConfigModal');
+    const btn = document.getElementById('apiConfigBtn');
+    const close = document.getElementById('apiConfigModalClose');
+    const form = document.getElementById('apiConfigForm');
+    const resetBtn = document.getElementById('apiConfigReset');
+    const cfg = getApiConfig();
+    document.getElementById('apiBaseUrl').value = cfg.baseUrl || '';
+    document.getElementById('apiKey').value = cfg.apiKey || '';
+    document.getElementById('apiModel').value = cfg.model || '';
+    const useMock = !!cfg.useMock;
+    document.getElementById('apiUseMock').value = useMock ? '1' : '0';
+    document.querySelectorAll('.api-mode-option').forEach(el => {
+        el.classList.toggle('selected', (el.dataset.mode === 'mock') === useMock);
+    });
+
+    document.getElementById('apiModeMock')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.getElementById('apiUseMock').value = '1';
+        document.querySelectorAll('.api-mode-option').forEach(el => el.classList.toggle('selected', el.dataset.mode === 'mock'));
+    });
+    document.getElementById('apiModeLlm')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.getElementById('apiUseMock').value = '0';
+        document.querySelectorAll('.api-mode-option').forEach(el => el.classList.toggle('selected', el.dataset.mode === 'llm'));
+    });
+
+    btn?.addEventListener('click', () => { modal.style.display = 'block'; });
+    close?.addEventListener('click', () => { modal.style.display = 'none'; });
+    window.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+    form?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const baseUrl = document.getElementById('apiBaseUrl').value.trim();
+        const apiKey = document.getElementById('apiKey').value.trim();
+        const model = document.getElementById('apiModel').value.trim();
+        const useMock = document.getElementById('apiUseMock').value === '1';
+        saveApiConfig({ baseUrl, apiKey, model, useMock });
+        modal.style.display = 'none';
+    });
+    resetBtn?.addEventListener('click', () => {
+        saveApiConfig({});
+        document.getElementById('apiBaseUrl').value = '';
+        document.getElementById('apiKey').value = '';
+        document.getElementById('apiModel').value = '';
+        document.getElementById('apiUseMock').value = '0';
+        document.querySelectorAll('.api-mode-option').forEach(el => el.classList.toggle('selected', el.dataset.mode === 'llm'));
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     document.getElementById('themeToggleBtn')?.addEventListener('click', toggleTheme);
+    initApiConfigModal();
 });
 
 function escapeHtmlAttr(str) {
@@ -45,11 +109,16 @@ const stopPlanBtn = document.getElementById('stopPlanBtn');
 const loadExampleIdeaBtn = document.getElementById('loadExampleIdeaBtn');
 
 let planRunAbortController = null;
+let currentPlanId = (() => {
+    try {
+        return localStorage.getItem(PLAN_ID_KEY) || 'test';
+    } catch (_) { return 'test'; }
+})();
 
 // Load example idea from backend
 async function loadExampleIdea() {
     try {
-        const response = await fetch(`${API_BASE_URL}/idea`);
+        const response = await fetch(`${API_BASE_URL}/idea?planId=${encodeURIComponent(currentPlanId)}`);
         const data = await response.json();
         if (data.idea) {
             ideaInput.value = typeof data.idea === 'string' ? data.idea : JSON.stringify(data.idea);
@@ -65,7 +134,7 @@ async function loadExampleIdea() {
 // Load execution from database
 async function loadExecution() {
     try {
-        const response = await fetch(`${API_BASE_URL}/execution`);
+        const response = await fetch(`${API_BASE_URL}/execution?planId=${encodeURIComponent(currentPlanId)}`);
         const data = await response.json();
         return data.execution || null;
     } catch (error) {
@@ -82,7 +151,7 @@ async function saveExecution(execution) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(execution)
+            body: JSON.stringify({ ...execution, planId: currentPlanId })
         });
         
         if (!response.ok) {
@@ -119,15 +188,22 @@ async function generatePlan() {
         planRunAbortController = new AbortController();
 
         TaskTree.clearPlannerTree();
+        const apiConfig = getApiConfig();
+        const body = { idea, useMock: !!apiConfig.useMock, planId: currentPlanId };
+        if (apiConfig.baseUrl || apiConfig.apiKey || apiConfig.model) body.api_config = apiConfig;
         const response = await fetch(`${API_BASE_URL}/plan/run`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ idea }),
+            body: JSON.stringify(body),
             signal: planRunAbortController.signal
         });
 
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Failed to generate plan');
+        if (data.planId) {
+            currentPlanId = data.planId;
+            try { localStorage.setItem(PLAN_ID_KEY, currentPlanId); } catch (_) {}
+        }
     } catch (error) {
         if (error.name === 'AbortError') return;
         console.error('Error generating plan:', error);
@@ -150,10 +226,13 @@ async function decomposeTask() {
         if (stopPlanBtn) stopPlanBtn.style.display = '';
         planRunAbortController = new AbortController();
 
+        const apiConfig = getApiConfig();
+        const body = { useMock: !!apiConfig.useMock, planId: currentPlanId };
+        if (apiConfig.baseUrl || apiConfig.apiKey || apiConfig.model) body.api_config = apiConfig;
         const response = await fetch(`${API_BASE_URL}/plan/run`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
+            body: JSON.stringify(body),
             signal: planRunAbortController.signal
         });
         const res = await response.json();
@@ -341,6 +420,10 @@ function initializeWebSocket() {
 
     socket.on('plan-complete', (data) => {
         if (data.treeData) TaskTree.renderPlannerTree(data.treeData);
+        if (data.planId) {
+            currentPlanId = data.planId;
+            try { localStorage.setItem(PLAN_ID_KEY, currentPlanId); } catch (_) {}
+        }
         resetPlanButtons();
     });
 
@@ -866,7 +949,7 @@ async function generateTimetable() {
         const genRes = await fetch(`${API_BASE_URL}/execution/generate-from-plan`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ planId: 'test' })
+            body: JSON.stringify({ planId: currentPlanId })
         });
         const genData = await genRes.json();
         if (!genRes.ok) {
@@ -1099,10 +1182,8 @@ window.addEventListener('resize', () => {
             rightHeader.style.minWidth = `${actualGridWidth}px`;
         }
         
-        // Redraw connection lines for monitor task tree after resize
         if (timetableLayout?.treeData?.length) {
             TaskTree.renderMonitorTasksTree(timetableLayout.treeData);
         }
-        TaskTree.redrawPlannerConnectionLines?.();
     }, 150);
 });

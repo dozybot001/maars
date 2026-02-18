@@ -1,6 +1,6 @@
 """
 Planner module - verify, decompose, format flow.
-Uses mock AI data from test/mock-ai.
+Uses real LLM by default; Mock AI when use_mock=True.
 """
 
 import asyncio
@@ -9,6 +9,7 @@ import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from .llm_client import chat_completion as real_chat_completion
 from test.mock_stream import mock_chat_completion
 
 PLANNER_DIR = Path(__file__).parent
@@ -63,35 +64,67 @@ def _load_mock_response(response_type: str, task_id: str) -> Optional[Dict]:
 _OP_LABELS = {"verify": "Verify", "decompose": "Decompose", "format": "Format"}
 
 
+def _build_user_message(response_type: str, task: Dict) -> str:
+    tid = task.get("task_id", "")
+    desc = task.get("description", "")
+    if response_type == "verify":
+        return f'Input: task_id "{tid}", description "{desc}"\nOutput:'
+    if response_type == "decompose":
+        return f'**Input:** task_id "{tid}", description "{desc}"\n\n**Output:**'
+    if response_type == "format":
+        return f'**Input task:** task_id "{tid}", description "{desc}"\n\n**Output:**'
+    return f"Task: {tid} - {desc}"
+
+
 async def _call_chat_completion(
     on_thinking: Callable[..., None],
-    mock_context: Dict,
+    context: Dict,
     abort_event: Optional[Any],
     stream: bool = True,
+    use_mock: bool = False,
+    api_config: Optional[Dict] = None,
 ) -> str:
-    response_type = mock_context["type"]
-    task_id = mock_context["taskId"]
-    mock = _load_mock_response(response_type, task_id)
-    if not mock:
-        raise ValueError(f"No mock data for {response_type}/{task_id}")
+    response_type = context["type"]
+    task_id = context["taskId"]
+    task = context.get("task", {})
 
     def stream_chunk(chunk: str) -> None:
         if on_thinking and chunk:
             op_label = _OP_LABELS.get(response_type, response_type.capitalize())
             on_thinking(chunk, task_id=task_id, operation=op_label)
 
-    effective_on_thinking = stream_chunk if (stream and on_thinking) else None
+    if use_mock:
+        mock = _load_mock_response(response_type, task_id)
+        if not mock:
+            raise ValueError(f"No mock data for {response_type}/{task_id}")
+        effective_on_thinking = stream_chunk if (stream and on_thinking) else None
+        async with _get_call_semaphore():
+            return await mock_chat_completion(
+                mock["content"],
+                mock["reasoning"],
+                effective_on_thinking,
+                abort_event=abort_event,
+                stream=stream,
+            )
 
+    # Real LLM
+    prompt_file = {"verify": "verify-prompt.txt", "decompose": "decompose-prompt.txt", "format": "format-prompt.txt"}[response_type]
+    system_prompt = _get_prompt_cached(prompt_file)
+    user_message = _build_user_message(response_type, task)
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_message},
+    ]
+    cfg = api_config or {}
+    effective_on_chunk = stream_chunk if (stream and on_thinking) else None
     async with _get_call_semaphore():
-        result = await mock_chat_completion(
-            mock["content"],
-            mock["reasoning"],
-            effective_on_thinking,
+        return await real_chat_completion(
+            messages,
+            cfg,
+            on_chunk=effective_on_chunk,
             abort_event=abort_event,
             stream=stream,
         )
-
-    return result
 
 
 def _parse_json_response(text: str) -> Any:
@@ -121,13 +154,16 @@ async def _decompose_task(
     parent_task: Dict,
     on_thinking: Callable[[str], None],
     abort_event: Optional[Any],
+    use_mock: bool = False,
+    api_config: Optional[Dict] = None,
 ) -> List[Dict]:
-    _get_prompt_cached("decompose-prompt.txt")
     content = await _call_chat_completion(
         on_thinking,
-        {"type": "decompose", "taskId": parent_task["task_id"]},
+        {"type": "decompose", "taskId": parent_task["task_id"], "task": parent_task},
         abort_event,
         stream=True,
+        use_mock=use_mock,
+        api_config=api_config,
     )
     result = _parse_json_response(content)
     tasks = result.get("tasks") or []
@@ -142,13 +178,16 @@ async def _verify_task(
     task: Dict,
     on_thinking: Callable[[str], None],
     abort_event: Optional[Any],
+    use_mock: bool = False,
+    api_config: Optional[Dict] = None,
 ) -> Dict:
-    _get_prompt_cached("verify-prompt.txt")
     content = await _call_chat_completion(
         on_thinking,
-        {"type": "verify", "taskId": task["task_id"]},
+        {"type": "verify", "taskId": task["task_id"], "task": task},
         abort_event,
         stream=False,
+        use_mock=use_mock,
+        api_config=api_config,
     )
     result = _parse_json_response(content)
     return {"atomic": bool(result.get("atomic"))}
@@ -158,13 +197,16 @@ async def _format_task(
     task: Dict,
     on_thinking: Callable[[str], None],
     abort_event: Optional[Any],
+    use_mock: bool = False,
+    api_config: Optional[Dict] = None,
 ) -> Optional[Dict]:
-    _get_prompt_cached("format-prompt.txt")
     content = await _call_chat_completion(
         on_thinking,
-        {"type": "format", "taskId": task["task_id"]},
+        {"type": "format", "taskId": task["task_id"], "task": task},
         abort_event,
         stream=True,
+        use_mock=use_mock,
+        api_config=api_config,
     )
     result = _parse_json_response(content)
     if result.get("input") and result.get("output"):
@@ -181,12 +223,14 @@ async def _verify_and_decompose_recursive(
     check_aborted: Callable[[], bool],
     abort_event: Optional[Any],
     on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]] = None,
+    use_mock: bool = False,
+    api_config: Optional[Dict] = None,
 ) -> None:
     if check_aborted and check_aborted():
         raise asyncio.CancelledError("Aborted")
 
     if depth >= MAX_DECOMPOSE_DEPTH:
-        io_result = await _format_task(task, on_thinking, abort_event)
+        io_result = await _format_task(task, on_thinking, abort_event, use_mock, api_config)
         if not io_result:
             raise ValueError(f"Format failed for task {task['task_id']} at max depth: missing input/output")
         idx = next((i for i, t in enumerate(all_tasks) if t.get("task_id") == task["task_id"]), -1)
@@ -194,11 +238,11 @@ async def _verify_and_decompose_recursive(
             all_tasks[idx] = {**all_tasks[idx], **io_result}
         return
 
-    v = await _verify_task(task, on_thinking, abort_event)
+    v = await _verify_task(task, on_thinking, abort_event, use_mock, api_config)
     atomic = v["atomic"]
 
     if atomic:
-        io_result = await _format_task(task, on_thinking, abort_event)
+        io_result = await _format_task(task, on_thinking, abort_event, use_mock, api_config)
         if not io_result:
             raise ValueError(f"Format failed for atomic task {task['task_id']}: missing input/output")
         idx = next((i for i, t in enumerate(all_tasks) if t.get("task_id") == task["task_id"]), -1)
@@ -206,7 +250,7 @@ async def _verify_and_decompose_recursive(
             all_tasks[idx] = {**all_tasks[idx], **io_result}
         return
 
-    children = await _decompose_task(task, on_thinking, abort_event)
+    children = await _decompose_task(task, on_thinking, abort_event, use_mock, api_config)
     if not children:
         raise ValueError(f"Decompose returned no children for task {task['task_id']}")
 
@@ -219,7 +263,8 @@ async def _verify_and_decompose_recursive(
 
     await asyncio.gather(*[
         _verify_and_decompose_recursive(
-            child, all_tasks, on_task, on_thinking, depth + 1, check_aborted, abort_event, on_tasks_batch
+            child, all_tasks, on_task, on_thinking, depth + 1, check_aborted, abort_event, on_tasks_batch,
+            use_mock, api_config,
         )
         for child in children
     ])
@@ -231,6 +276,8 @@ async def run_plan(
     on_thinking: Callable[[str], None],
     abort_event: Optional[Any] = None,
     on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]] = None,
+    use_mock: bool = False,
+    api_config: Optional[Dict] = None,
 ) -> Dict:
     """Run verify->decompose->format from root task, top-down to all atomic tasks."""
 
@@ -250,6 +297,7 @@ async def run_plan(
     all_tasks = list(tasks)
     on_thinking_fn = on_thinking or (lambda _: None)
     await _verify_and_decompose_recursive(
-        root_task, all_tasks, on_task, on_thinking_fn, 0, check_aborted, abort_event, on_tasks_batch
+        root_task, all_tasks, on_task, on_thinking_fn, 0, check_aborted, abort_event, on_tasks_batch,
+        use_mock=use_mock, api_config=api_config,
     )
     return {"tasks": all_tasks}

@@ -2,10 +2,10 @@
   "0": {
     "content": {
       "tasks": [
-        { "task_id": "1", "description": "文献调研：调研2023-2024年AI领域最新进展与代表性工作", "dependencies": ["0"] },
-        { "task_id": "2", "description": "技术分析：梳理关键技术路线与架构演进", "dependencies": ["0"] },
-        { "task_id": "3", "description": "应用调研：分析AI在各行业的落地案例与效果", "dependencies": ["0"] },
-        { "task_id": "4", "description": "趋势总结：归纳发展方向并撰写分析报告", "dependencies": ["0", "1", "2", "3"] }
+        {"task_id": "1", "description": "文献调研：调研2023-2024年AI领域最新进展与代表性工作", "dependencies": ["0"]},
+        {"task_id": "2", "description": "技术分析：梳理关键技术路线与架构演进", "dependencies": ["0"]},
+        {"task_id": "3", "description": "应用调研：分析AI在各行业的落地案例与效果", "dependencies": ["0"]},
+        {"task_id": "4", "description": "趋势总结：归纳发展方向并撰写综合分析报告", "dependencies": ["0", "1", "2", "3"]}
       ]
     },
     "reasoning": "Decomposing idea into 4 phases: (1) Literature survey for AI trends, (2) Technical analysis of architectures, (3) Application research across industries, (4) Trend summary and report. Task 4 depends on 1,2,3 for comprehensive input."
@@ -13,46 +13,93 @@
   "1": {
     "content": {
       "tasks": [
-        { "task_id": "1_1", "description": "确定文献检索关键词与数据库范围", "dependencies": ["1"] },
-        { "task_id": "1_2", "description": "检索并筛选2023-2024年AI领域核心论文", "dependencies": ["1", "1_1"] },
-        { "task_id": "1_3", "description": "阅读并总结代表性论文的方法与结论", "dependencies": ["1", "1_2"] },
-        { "task_id": "1_4", "description": "整理行业报告与权威资料要点", "dependencies": ["1", "1_1"] },
-        { "task_id": "1_5", "description": "撰写文献综述报告", "dependencies": ["1", "1_3", "1_4"] }
+        {"task_id": "1_1", "description": "确定文献检索关键词与数据库范围", "dependencies": ["1"]},
+        {"task_id": "1_2", "description": "检索并筛选2023-2024年AI领域核心论文", "dependencies": ["1", "1_1"]},
+        {"task_id": "1_3", "description": "阅读并总结代表性论文的方法与结论", "dependencies": ["1", "1_2"]},
+        {"task_id": "1_4", "description": "整理行业报告与权威资料要点", "dependencies": ["1", "1_1"]},
+        {"task_id": "1_5", "description": "撰写文献综述报告", "dependencies": ["1", "1_3", "1_4"]}
       ]
     },
     "reasoning": "Decomposing literature survey: 1_1 define scope, 1_2 search, 1_3 read & summarize, 1_4 organize reports, 1_5 write final review."
   },
+  "1_1": {
+    "content": {
+      "tasks": [
+        {"task_id": "1_1_1", "description": "分析研究主题并提取核心概念", "dependencies": ["1_1"]},
+        {"task_id": "1_1_2", "description": "选定学术数据库与检索平台", "dependencies": ["1_1"]},
+        {"task_id": "1_1_3", "description": "构建检索式与筛选标准", "dependencies": ["1_1", "1_1_1", "1_1_2"]}
+      ]
+    },
+    "reasoning": "Further decomposing 1_1: extract concepts, select databases, build search strategy. 1_1_3 depends on both 1_1_1 and 1_1_2 for combined input."
+  },
+  "1_2": {
+    "content": {
+      "tasks": [
+        {"task_id": "1_2_1", "description": "执行多库检索并去重合并", "dependencies": ["1_2"]},
+        {"task_id": "1_2_2", "description": "按影响力与相关性筛选核心论文", "dependencies": ["1_2", "1_2_1"]}
+      ]
+    },
+    "reasoning": "Decomposing 1_2: execute search, then filter by impact and relevance."
+  },
   "2": {
     "content": {
       "tasks": [
-        { "task_id": "2_1", "description": "梳理主流模型架构与演进路线", "dependencies": ["2"] },
-        { "task_id": "2_2", "description": "对比关键技术指标与性能", "dependencies": ["2", "2_1"] },
-        { "task_id": "2_3", "description": "撰写技术分析报告", "dependencies": ["2", "2_1", "2_2"] }
+        {"task_id": "2_1", "description": "梳理主流模型架构与演进路线", "dependencies": ["2"]},
+        {"task_id": "2_2", "description": "对比关键技术指标与性能", "dependencies": ["2", "2_1"]},
+        {"task_id": "2_3", "description": "分析技术瓶颈与突破点", "dependencies": ["2", "2_1", "2_2"]},
+        {"task_id": "2_4", "description": "撰写技术分析报告", "dependencies": ["2", "2_1", "2_2", "2_3"]}
       ]
     },
-    "reasoning": "Decomposing technical analysis into architecture review, comparison, and report."
+    "reasoning": "Decomposing technical analysis: architecture review, metrics comparison, bottleneck analysis, final report. Added 2_3 for deeper analysis."
+  },
+  "2_1": {
+    "content": {
+      "tasks": [
+        {"task_id": "2_1_1", "description": "收集主流模型架构文档与论文", "dependencies": ["2_1"]},
+        {"task_id": "2_1_2", "description": "绘制架构演进时间线与对比表", "dependencies": ["2_1", "2_1_1"]}
+      ]
+    },
+    "reasoning": "Decomposing 2_1: collect architecture docs, then create timeline and comparison."
   },
   "3": {
     "content": {
       "tasks": [
-        { "task_id": "3_1", "description": "收集各行业AI应用案例", "dependencies": ["3"] },
-        { "task_id": "3_2", "description": "分析落地效果与挑战", "dependencies": ["3", "3_1"] },
-        { "task_id": "3_3", "description": "撰写应用调研报告", "dependencies": ["3", "3_1", "3_2"] }
+        {"task_id": "3_1", "description": "收集各行业AI应用案例", "dependencies": ["3"]},
+        {"task_id": "3_2", "description": "分析落地效果与挑战", "dependencies": ["3", "3_1"]},
+        {"task_id": "3_3", "description": "撰写应用调研报告", "dependencies": ["3", "3_1", "3_2"]}
       ]
     },
     "reasoning": "Decomposing application research: collect cases, analyze, write report."
   },
+  "3_1": {
+    "content": {
+      "tasks": [
+        {"task_id": "3_1_1", "description": "按行业分类收集典型案例", "dependencies": ["3_1"]},
+        {"task_id": "3_1_2", "description": "整理案例库与元数据", "dependencies": ["3_1", "3_1_1"]}
+      ]
+    },
+    "reasoning": "Decomposing 3_1: collect by industry, then organize case database."
+  },
   "4": {
     "content": {
       "tasks": [
-        { "task_id": "4_1", "description": "归纳发展趋势与方向", "dependencies": ["4"] },
-        { "task_id": "4_2", "description": "撰写综合分析报告", "dependencies": ["4", "4_1"] }
+        {"task_id": "4_1", "description": "归纳发展趋势与方向", "dependencies": ["4"]},
+        {"task_id": "4_2", "description": "撰写综合分析报告", "dependencies": ["4", "4_1"]}
       ]
     },
     "reasoning": "Decomposing trend summary: synthesize trends, write final report."
   },
+  "4_1": {
+    "content": {
+      "tasks": [
+        {"task_id": "4_1_1", "description": "提取各报告中的关键趋势", "dependencies": ["4_1"]},
+        {"task_id": "4_1_2", "description": "整合并排序发展趋势清单", "dependencies": ["4_1", "4_1_1"]}
+      ]
+    },
+    "reasoning": "Decomposing 4_1: extract trends from reports, then consolidate and rank."
+  },
   "_default": {
-    "content": { "tasks": [] },
+    "content": {"tasks": []},
     "reasoning": "No mock decompose for this parent."
   }
 }

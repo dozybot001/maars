@@ -1,20 +1,22 @@
 /**
  * Task tree rendering module.
- * Renders tasks by stage; backend provides treeData (tasks with stage).
+ * Uses dagre for layout to minimize edge crossings.
  */
 (function () {
     'use strict';
 
     const TRUNCATE_LEN = 60;
-    const TASK_NODE_SELECTOR = '.tree-task, [data-task-id]';
+    const NODE_WIDTH = 110;
+    const NODE_HEIGHT = 52;
+    const DAGRE_PADDING = 20;
 
-    // Area selectors
     const AREA = {
         planner: '.planner-tree-area',
         monitor: '.monitor-tasks-tree-area',
     };
 
     let plannerTreeData = [];
+    const layoutCacheByArea = new Map();
 
     function getTreeContainer(areaSelector) {
         const area = document.querySelector(areaSelector);
@@ -86,51 +88,142 @@
         return el;
     }
 
-    const scrollHandlerStateByArea = new Map();
-
-    function attachScrollRedraw(areaSelector, container, lines) {
-        const tree = container?.querySelector('.tasks-tree');
-        const scrollEl = tree?.parentElement;
-        if (!scrollEl || !lines?.length) return;
-        const prev = scrollHandlerStateByArea.get(areaSelector);
-        if (prev) {
-            prev.el.removeEventListener('scroll', prev.handler);
-            scrollHandlerStateByArea.delete(areaSelector);
+    function computeDagreLayout(tasks) {
+        if (typeof dagre === 'undefined') {
+            console.warn('dagre not loaded, using fallback layout');
+            return computeFallbackLayout(tasks);
         }
-        const handler = () => requestAnimationFrame(() => drawConnectionLines(container, lines));
-        scrollEl.addEventListener('scroll', handler);
-        scrollHandlerStateByArea.set(areaSelector, { el: scrollEl, handler });
-    }
+        const valid = (tasks || [])
+            .filter(t => t?.task_id)
+            .sort((a, b) => String(a.task_id || '').localeCompare(String(b.task_id || '')));
+        if (valid.length === 0) return null;
 
-    function drawConnectionLines(container, lines) {
-        if (!lines?.length) return;
-        const svg = container?.querySelector('.tree-connection-lines');
-        const tree = container?.querySelector('.tasks-tree') || container;
-        if (!svg || !tree) return;
+        const ids = new Set(valid.map(t => t.task_id));
+        const lines = buildConnectionLines(tasks);
 
-        svg.setAttribute('width', tree.scrollWidth);
-        svg.setAttribute('height', tree.scrollHeight);
-        svg.setAttribute('viewBox', `0 0 ${tree.scrollWidth} ${tree.scrollHeight}`);
-        svg.innerHTML = '';
+        const g = new dagre.graphlib.Graph();
+        g.setGraph({
+            rankdir: 'TB',
+            nodesep: 40,
+            ranksep: 60,
+            marginx: DAGRE_PADDING,
+            marginy: DAGRE_PADDING,
+        });
+        g.setDefaultEdgeLabel(() => ({}));
 
-        const elMap = new Map();
-        container.querySelectorAll(TASK_NODE_SELECTOR).forEach(el => {
-            const id = el.getAttribute('data-task-id');
-            if (id) elMap.set(id, el);
+        valid.forEach(t => {
+            g.setNode(t.task_id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+        });
+        lines.forEach(({ fromTaskId, toTaskId }) => {
+            if (ids.has(fromTaskId) && ids.has(toTaskId)) {
+                g.setEdge(fromTaskId, toTaskId);
+            }
         });
 
-        const treeRect = tree.getBoundingClientRect();
-        lines.forEach(line => {
-            const fromEl = elMap.get(line.fromTaskId);
-            const toEl = elMap.get(line.toTaskId);
-            if (!fromEl || !toEl) return;
+        dagre.layout(g);
 
-            const fromR = fromEl.getBoundingClientRect();
-            const toR = toEl.getBoundingClientRect();
-            const fromX = fromR.left + fromR.width / 2 - treeRect.left + tree.scrollLeft;
-            const fromY = fromR.top + fromR.height - treeRect.top + tree.scrollTop;
-            const toX = toR.left + toR.width / 2 - treeRect.left + tree.scrollLeft;
-            const toY = toR.top - treeRect.top + tree.scrollTop;
+        const nodePositions = new Map();
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+        g.nodes().forEach(id => {
+            const n = g.node(id);
+            if (!n) return;
+            const x = n.x - n.width / 2;
+            const y = n.y - n.height / 2;
+            nodePositions.set(id, { x, y, width: n.width, height: n.height, centerX: n.x, centerY: n.y });
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x + n.width);
+            maxY = Math.max(maxY, y + n.height);
+        });
+
+        const graphWidth = Math.max(maxX - minX + DAGRE_PADDING * 2, 200);
+        const graphHeight = Math.max(maxY - minY + DAGRE_PADDING * 2, 150);
+
+        return {
+            nodePositions,
+            lines,
+            graphWidth,
+            graphHeight,
+            offsetX: minX - DAGRE_PADDING,
+            offsetY: minY - DAGRE_PADDING,
+        };
+    }
+
+    function computeFallbackLayout(tasks) {
+        const valid = (tasks || [])
+            .filter(t => t?.task_id)
+            .sort((a, b) => String(a.task_id || '').localeCompare(String(b.task_id || '')));
+        if (valid.length === 0) return null;
+
+        const lines = buildConnectionLines(tasks);
+        const ids = new Set(valid.map(t => t.task_id));
+
+        const stages = [];
+        const placed = new Set();
+        let current = valid.filter(t => !(t.dependencies || []).some(d => ids.has(d)));
+        while (current.length > 0) {
+            stages.push(current);
+            current.forEach(t => placed.add(t.task_id));
+            const next = valid.filter(t => !placed.has(t.task_id) && (t.dependencies || []).every(d => placed.has(d)));
+            current = next;
+        }
+        const orphan = valid.filter(t => !placed.has(t.task_id));
+        if (orphan.length > 0) stages.push(orphan);
+
+        const nodePositions = new Map();
+        let y = DAGRE_PADDING;
+        const ranksep = 60;
+        const nodesep = 40;
+
+        stages.forEach((rankTasks) => {
+            let x = DAGRE_PADDING;
+            rankTasks.forEach((t, i) => {
+                const cx = x + NODE_WIDTH / 2;
+                const cy = y + NODE_HEIGHT / 2;
+                nodePositions.set(t.task_id, {
+                    x: cx - NODE_WIDTH / 2,
+                    y: cy - NODE_HEIGHT / 2,
+                    width: NODE_WIDTH,
+                    height: NODE_HEIGHT,
+                    centerX: cx,
+                    centerY: cy,
+                });
+                x += NODE_WIDTH + nodesep;
+            });
+            y += NODE_HEIGHT + ranksep;
+        });
+
+        const graphWidth = Math.max(200, stages.reduce((w, r) => Math.max(w, r.length * (NODE_WIDTH + nodesep) - nodesep), 0) + DAGRE_PADDING * 2);
+        const graphHeight = y - ranksep + DAGRE_PADDING;
+
+        return {
+            nodePositions,
+            lines,
+            graphWidth,
+            graphHeight,
+            offsetX: 0,
+            offsetY: 0,
+        };
+    }
+
+    function drawConnectionLines(container, layout) {
+        if (!layout?.lines?.length) return;
+        const svg = container?.querySelector('.tree-connection-lines');
+        if (!svg) return;
+
+        const { nodePositions, lines, offsetX, offsetY } = layout;
+
+        svg.innerHTML = '';
+        lines.forEach(line => {
+            const fromPos = nodePositions.get(line.fromTaskId);
+            const toPos = nodePositions.get(line.toTaskId);
+            if (!fromPos || !toPos) return;
+
+            const fromX = fromPos.centerX - offsetX;
+            const fromY = fromPos.y + fromPos.height - offsetY;
+            const toX = toPos.centerX - offsetX;
+            const toY = toPos.y - offsetY;
             const midY = (fromY + toY) / 2;
 
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -144,43 +237,6 @@
         });
     }
 
-    function refreshConnections(areaSelector, tasks) {
-        const ctx = getTreeContainer(areaSelector);
-        if (!ctx) return;
-        const lines = buildConnectionLines(tasks);
-        requestAnimationFrame(() => {
-            drawConnectionLines(ctx.area, lines);
-            attachScrollRedraw(areaSelector, ctx.area, lines);
-        });
-    }
-
-    function getOrCreateStageDiv(tree, stageNum) {
-        let stageDiv = tree.querySelector(`.tree-stage[data-stage="${stageNum}"]`);
-        if (!stageDiv) {
-            stageDiv = document.createElement('div');
-            stageDiv.className = 'tree-stage';
-            stageDiv.setAttribute('data-stage', String(stageNum));
-            const tasksDiv = document.createElement('div');
-            tasksDiv.className = 'tree-stage-tasks';
-            stageDiv.appendChild(tasksDiv);
-            const existing = tree.querySelectorAll('.tree-stage');
-            const insertBefore = Array.from(existing).find(s => parseInt(s.dataset.stage, 10) > stageNum);
-            tree.insertBefore(stageDiv, insertBefore || null);
-        }
-        return stageDiv.querySelector('.tree-stage-tasks');
-    }
-
-    function groupTasksByStage(tasks) {
-        const valid = (tasks || []).filter(t => t?.task_id && t.stage != null);
-        const map = new Map();
-        valid.forEach(t => {
-            const idx = t.stage - 1;
-            if (!map.has(idx)) map.set(idx, []);
-            map.get(idx).push(t);
-        });
-        return map;
-    }
-
     function renderFull(treeData, areaSelector, options = {}) {
         const ctx = getTreeContainer(areaSelector);
         if (!ctx) return;
@@ -188,62 +244,77 @@
         const withStatusFn = typeof options.withStatus === 'function'
             ? options.withStatus
             : () => (options.withStatus !== false);
-        const tasks = (treeData || []).filter(t => t?.task_id && t.stage != null);
+        const tasks = (treeData || []).filter(t => t?.task_id);
 
         if (areaSelector === AREA.planner) plannerTreeData = treeData || [];
 
-        ctx.tree.querySelectorAll('.tree-stage').forEach(el => el.remove());
-        const svg = ctx.tree.querySelector('.tree-connection-lines');
-        if (svg) svg.innerHTML = '';
+        ctx.tree.innerHTML = '';
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'tree-connection-lines');
 
         if (tasks.length === 0) {
-            const prev = scrollHandlerStateByArea.get(areaSelector);
-            if (prev) {
-                prev.el.removeEventListener('scroll', prev.handler);
-                scrollHandlerStateByArea.delete(areaSelector);
-            }
+            layoutCacheByArea.delete(areaSelector);
             return;
         }
 
-        const stages = groupTasksByStage(tasks);
-        [...stages.keys()].sort((a, b) => a - b).forEach(stageIdx => {
-            const tasksDiv = getOrCreateStageDiv(ctx.tree, stageIdx + 1);
-            stages.get(stageIdx).forEach(task => {
-                const withStatus = withStatusFn(task);
-                tasksDiv.appendChild(createTaskNodeEl(task, { withStatus, isIdea: task.task_id === '0' }));
+        const layout = computeDagreLayout(tasks);
+        if (!layout) {
+            return;
+        }
+
+        layoutCacheByArea.set(areaSelector, layout);
+
+        ctx.tree.style.width = layout.graphWidth + 'px';
+        ctx.tree.style.height = layout.graphHeight + 'px';
+        ctx.tree.style.minHeight = layout.graphHeight + 'px';
+        ctx.tree.appendChild(svg);
+
+        svg.setAttribute('width', layout.graphWidth);
+        svg.setAttribute('height', layout.graphHeight);
+        svg.setAttribute('viewBox', `0 0 ${layout.graphWidth} ${layout.graphHeight}`);
+
+        const nodesContainer = document.createElement('div');
+        nodesContainer.className = 'tree-nodes-container';
+        nodesContainer.style.cssText = `position:absolute;top:0;left:0;width:${layout.graphWidth}px;height:${layout.graphHeight}px;`;
+        ctx.tree.appendChild(nodesContainer);
+
+        const { nodePositions, offsetX, offsetY } = layout;
+        const taskById = new Map(tasks.map(t => [t.task_id, t]));
+
+        nodePositions.forEach((pos, taskId) => {
+            const task = taskById.get(taskId);
+            if (!task) return;
+
+            const el = createTaskNodeEl(task, {
+                withStatus: withStatusFn(task),
+                isIdea: taskId === '0',
             });
+            el.style.position = 'absolute';
+            el.style.left = (pos.x - offsetX) + 'px';
+            el.style.top = (pos.y - offsetY) + 'px';
+            el.style.width = pos.width + 'px';
+            el.style.minHeight = pos.height + 'px';
+            nodesContainer.appendChild(el);
         });
 
-        refreshConnections(areaSelector, tasks);
+        drawConnectionLines(ctx.area, layout);
     }
 
     function clear(areaSelector) {
         if (areaSelector === AREA.planner) plannerTreeData = [];
-        const prev = scrollHandlerStateByArea.get(areaSelector);
-        if (prev) {
-            prev.el.removeEventListener('scroll', prev.handler);
-            scrollHandlerStateByArea.delete(areaSelector);
-        }
+        layoutCacheByArea.delete(areaSelector);
         const ctx = getTreeContainer(areaSelector);
         if (!ctx) return;
-        ctx.tree.querySelectorAll('.tree-stage').forEach(el => el.remove());
-        const svg = ctx.tree.querySelector('.tree-connection-lines');
-        if (svg) svg.innerHTML = '';
+        ctx.tree.innerHTML = '';
+        ctx.tree.style.width = '';
+        ctx.tree.style.height = '';
+        ctx.tree.style.minHeight = '';
     }
 
     function renderPlannerTree(treeData) {
         if (!Array.isArray(treeData)) return;
         plannerTreeData = treeData;
         renderFull(plannerTreeData, AREA.planner, { withStatus: (task) => task.status != null });
-    }
-
-    function redrawConnections(areaSelector) {
-        const tasks = areaSelector === AREA.planner ? plannerTreeData : null;
-        if (!tasks || tasks.length < 2) return;
-        const lines = buildConnectionLines(tasks);
-        if (lines.length === 0) return;
-        const ctx = getTreeContainer(areaSelector);
-        if (ctx) requestAnimationFrame(() => drawConnectionLines(ctx.area, lines));
     }
 
     // Popover
@@ -273,7 +344,7 @@
         const hasInputOutput = task.input && task.output;
         const inputRow = hasInputOutput ? `<div class="task-detail-row"><span class="task-detail-label">Input:</span><span class="task-detail-value">${escapeHtml(task.input.description || '-')}</span></div>` : '';
         const out = task.output || {};
-        const outputDesc = hasInputOutput ? [out.artifact || out.description, out.format].filter(Boolean).join(' · ') || '-' : '';
+        const outputDesc = hasInputOutput ? [out.artifact || out.description, out.format].filter(Boolean).join(' · ') || '-' : '-';
         const outputRow = hasInputOutput ? `<div class="task-detail-row"><span class="task-detail-label">Output:</span><span class="task-detail-value">${escapeHtml(outputDesc)}</span></div>` : '';
 
         popoverEl = document.createElement('div');
@@ -347,13 +418,11 @@
         });
     }
 
-    // Public API
     window.TaskTree = {
         AREA,
         renderPlannerTree,
         renderMonitorTasksTree: (data) => renderFull(data, AREA.monitor, { withStatus: (task) => task.status != null }),
         clearPlannerTree: () => clear(AREA.planner),
-        redrawPlannerConnectionLines: () => redrawConnections(AREA.planner),
         initClickHandlers,
         showTaskPopover,
         hideTaskPopover,

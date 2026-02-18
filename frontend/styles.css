@@ -13,7 +13,6 @@
     --tree-task-font-number: 12px;
     --tree-task-font-desc: 10px;
     --tree-task-radius: 8px;
-    --tree-stage-gap: 24px;
     --tree-node-shadow: var(--shadow-md);
     --tree-node-shadow-hover: var(--shadow-lg);
 
@@ -91,6 +90,24 @@ body {
 
 .header-title .subtitle {
     margin-bottom: 0;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.icon-btn {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 18px;
 }
 
 .theme-toggle-btn {
@@ -611,6 +628,68 @@ button.stop-btn:hover:not(:disabled) {
     color: var(--text-muted);
 }
 
+.form-label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+/* API mode toggle - card-style options */
+.api-mode-toggle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.api-mode-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 14px 12px;
+    border: 1.5px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background: var(--bg-area-secondary);
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+}
+
+.api-mode-option:hover {
+    background: var(--interactive-hover);
+    border-color: var(--border-color-hover);
+}
+
+.api-mode-option.selected {
+    background: var(--status-verifying);
+    border-color: var(--status-verifying-accent);
+    color: var(--status-verifying-accent);
+    box-shadow: var(--shadow-sm);
+}
+
+.api-mode-option .api-mode-icon {
+    font-size: 18px;
+    opacity: 0.9;
+}
+
+.api-mode-option .api-mode-label {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.api-mode-option .api-mode-desc {
+    font-size: 11px;
+    opacity: 0.85;
+}
+
+.api-mode-option.selected .api-mode-desc {
+    opacity: 0.9;
+}
+
 /* Execution Map */
 .execution-map {
     font-family: 'Monaco', 'Courier New', monospace;
@@ -794,56 +873,23 @@ button.stop-btn:hover:not(:disabled) {
     scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
-/* Tasks Tree - unified layout for planner & monitor */
+/* Tasks Tree - dagre layout (absolute positioning) */
 .tasks-tree {
-    display: flex;
-    flex-direction: column;
-    gap: var(--tree-stage-gap);
-    padding: var(--padding);
-    margin-top: 0;
+    position: relative;
     min-height: 150px;
-    width: 100%;
-    max-width: 100%;
-    position: relative;
-    align-items: center;
     box-sizing: border-box;
     overflow: visible;
 }
 
-.tree-stage {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    align-items: center;
-    width: 100%;
-    align-self: center;
-    min-height: 60px;
+.tree-nodes-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
 }
 
-.tree-stage-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding: 4px 8px;
-    background: var(--bg-white);
-    border-radius: var(--border-radius);
-    border: 1px solid var(--border-color);
-    width: fit-content;
-}
-
-.tree-stage-tasks {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 14px;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    padding: 10px 0;
-    min-width: fit-content;
-    box-sizing: border-box;
-    overflow: visible;
+.tree-nodes-container .tree-task {
+    pointer-events: auto;
 }
 
 /* Connection lines - unified for planner & monitor trees */
