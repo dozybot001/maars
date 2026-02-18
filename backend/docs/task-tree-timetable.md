@@ -16,10 +16,9 @@ backend/
 │   ├── __init__.py       # build_layout_from_execution
 │   └── timetable.py      # build_task_layout、clean_dependencies
 ├── planner/               # Planner 模块（AI 规划）
-├── executor/              # Executor 模块
+├── workers/               # Executor、Verifier 模块
 ├── db/                    # 数据持久化
-└── docs/
-    └── task-tree-timetable.md  # 本文档
+└── test/                 # Mock AI、mock_stream
 ```
 
 ---
@@ -106,7 +105,7 @@ treeData (flat，含 stage、description 等；Plan 不含 status，Execution �
 ### 3.3 前端渲染
 
 - **入口**：`TaskTree.renderPlannerTree(treeData)` / `TaskTree.renderMonitorTasksTree(treeData)`
-- **逻辑**：按 `stage` 分组 → 生成 `.tree-stage` 和 `.tree-stage-tasks` → 绘制节点与连线
+- **逻辑**：使用 dagre 布局 → 绘制节点与连线
 - **差异**：Planner 不显示 status，Monitor 显示 status 样式
 
 ---

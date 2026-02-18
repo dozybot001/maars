@@ -51,3 +51,10 @@ maars/
 ## 说明
 
 Planner 使用 Mock AI（`backend/test/mock-ai/`），无需配置真实 API 即可运行。
+
+## 文档
+
+- [后端结构](backend/README.md)
+- [Planner 流程](backend/planner/README.md)
+- [任务树与 Timetable](backend/docs/task-tree-timetable.md)
+- [第三方依赖](backend/docs/DEPENDENCIES.md)

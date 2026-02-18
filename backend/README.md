@@ -11,12 +11,15 @@ backend/
 ├── tasks/               # 任务缓存与阶段计算
 ├── db/                  # db/{plan_id}/plan.json, execution.json, verification.json
 ├── test/                # mock-ai、mock_stream
-└── docs/
+└── requirements.txt
 ```
 
 ## 运行
 
 ```bash
+cd backend
 pip install -r requirements.txt
 python3 -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001 --loop asyncio --http h11
 ```
+
+访问 http://localhost:3001
