@@ -359,10 +359,17 @@ function initializeWebSocket() {
                 ? `---\n\n**Task ${block.taskId}** | ${block.operation || ''}\n\n`
                 : '';
             const raw = header + (block.displayContent != null ? block.displayContent : block.content);
-            html += raw ? (typeof marked !== 'undefined' ? marked.parse(raw) : raw) + '\n\n' : '';
+            let blockHtml = raw ? (typeof marked !== 'undefined' ? marked.parse(raw) : raw) : '';
+            if (blockHtml && typeof DOMPurify !== 'undefined') {
+                blockHtml = DOMPurify.sanitize(blockHtml);
+            }
+            html += blockHtml + '\n\n';
         }
         try {
             el.innerHTML = html || '';
+            if (typeof hljs !== 'undefined') {
+                el.querySelectorAll('pre code').forEach((block) => hljs.highlightElement(block));
+            }
         } catch (_) {
             el.textContent = sorted.map(b => (b.displayContent != null ? b.displayContent : b.content)).join('\n\n');
         }
@@ -1110,14 +1117,9 @@ function renderVerifiers(verifiers, stats) {
     verifierGrid.innerHTML = html;
 }
 
-// Handle window resize
-let resizeTimeout = null;
-window.addEventListener('resize', () => {
-    if (resizeTimeout) {
-        clearTimeout(resizeTimeout);
-    }
-    resizeTimeout = setTimeout(() => {
-        const diagramContent = document.getElementById('diagramArea');
+// Handle window resize (debounced)
+const handleResize = _.debounce(() => {
+    const diagramContent = document.getElementById('diagramArea');
         if (!diagramContent) return;
         
         // Get the main container for calculating fixed cell size
@@ -1185,5 +1187,5 @@ window.addEventListener('resize', () => {
         if (timetableLayout?.treeData?.length) {
             TaskTree.renderMonitorTasksTree(timetableLayout.treeData);
         }
-    }, 150);
-});
+}, 150);
+window.addEventListener('resize', handleResize);

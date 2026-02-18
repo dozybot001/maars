@@ -4,13 +4,13 @@ Python implementation of the planner backend.
 """
 
 import asyncio
-import logging
 from pathlib import Path
 from typing import Optional
 
 import socketio
+from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -49,8 +49,6 @@ _plan_run_lock = asyncio.Lock()
 # Executor runner instance
 executor_runner = ExecutorRunner(sio)
 
-logger = logging.getLogger(__name__)
-
 
 # Disable cache for static files (dev: always fetch latest)
 NO_CACHE_HEADERS = {
@@ -71,6 +69,16 @@ class NoCacheMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(NoCacheMiddleware)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Centralized exception handler for unhandled errors."""
+    logger.exception("Unhandled exception: {}", exc)
+    return JSONResponse(
+        status_code=500,
+        content={"error": str(exc) or "Internal server error"},
+    )
 
 
 # Pydantic request models
@@ -204,37 +212,25 @@ async def api_plan_run(body: PlanRunRequest):
 
 @app.post("/api/monitor/timetable")
 async def api_monitor_timetable(body: MonitorTimetableRequest):
-    try:
-        execution = body.execution
-        layout = build_layout_from_execution(execution)
-        executor_runner.set_timetable_layout_cache(layout)
-        return {"layout": layout}
-    except Exception as e:
-        logger.exception("Monitor timetable error")
-        return JSONResponse(status_code=500, content={"error": str(e) or "Failed to generate timetable layout"})
+    execution = body.execution
+    layout = build_layout_from_execution(execution)
+    executor_runner.set_timetable_layout_cache(layout)
+    return {"layout": layout}
 
 
 @app.get("/api/plan")
 async def api_get_plan(plan_id: str = Query("test", alias="planId")):
-    try:
-        plan = await get_plan(plan_id)
-        return {"plan": plan}
-    except Exception as e:
-        logger.exception("Error loading plan")
-        return JSONResponse(status_code=500, content={"error": str(e) or "Failed to load plan"})
+    plan = await get_plan(plan_id)
+    return {"plan": plan}
 
 
 @app.get("/api/plan/tree")
 async def api_get_plan_tree(plan_id: str = Query("test", alias="planId")):
-    try:
-        plan = await get_plan(plan_id)
-        if not plan or not plan.get("tasks") or len(plan["tasks"]) == 0:
-            return {"treeData": []}
-        tasks = task_cache.build_tree_data(plan["tasks"])
-        return {"treeData": tasks}
-    except Exception as e:
-        logger.exception("Error loading plan tree")
-        return JSONResponse(status_code=500, content={"error": str(e) or "Failed to load plan tree"})
+    plan = await get_plan(plan_id)
+    if not plan or not plan.get("tasks") or len(plan["tasks"]) == 0:
+        return {"treeData": []}
+    tasks = task_cache.build_tree_data(plan["tasks"])
+    return {"treeData": tasks}
 
 
 DEFAULT_EXAMPLE_IDEA = "Research and analyze the latest trends in AI technology"
@@ -242,203 +238,139 @@ DEFAULT_EXAMPLE_IDEA = "Research and analyze the latest trends in AI technology"
 
 @app.get("/api/idea")
 async def api_get_idea(plan_id: str = Query("test", alias="planId")):
-    try:
-        idea = await get_idea(plan_id)
-        return {"idea": idea or DEFAULT_EXAMPLE_IDEA}
-    except Exception as e:
-        logger.exception("Error loading idea")
-        return JSONResponse(status_code=500, content={"error": "Failed to load idea"})
+    idea = await get_idea(plan_id)
+    return {"idea": idea or DEFAULT_EXAMPLE_IDEA}
 
 
 @app.post("/api/execution/generate-from-plan")
 async def api_generate_execution_from_plan(body: ExecutionRequest):
     """Extract atomic tasks from plan, clean deps, recompute stages, save to execution.json."""
-    try:
-        plan_id = body.plan_id
-        plan = await get_plan(plan_id)
-        if not plan or not plan.get("tasks"):
-            return JSONResponse(status_code=400, content={"error": "No plan found. Generate plan first."})
-        execution = build_execution_from_plan(plan)
-        await save_execution(execution, plan_id)
-        return {"execution": execution}
-    except Exception as e:
-        logger.exception("Error generating execution from plan")
-        return JSONResponse(status_code=500, content={"error": str(e) or "Failed to generate execution"})
+    plan_id = body.plan_id
+    plan = await get_plan(plan_id)
+    if not plan or not plan.get("tasks"):
+        return JSONResponse(status_code=400, content={"error": "No plan found. Generate plan first."})
+    execution = build_execution_from_plan(plan)
+    await save_execution(execution, plan_id)
+    return {"execution": execution}
 
 
 @app.get("/api/execution")
 async def api_get_execution(plan_id: str = Query("test", alias="planId")):
-    try:
-        execution = await get_execution(plan_id)
-        return {"execution": execution}
-    except Exception as e:
-        logger.exception("Error loading execution")
-        return JSONResponse(status_code=500, content={"error": "Failed to load execution"})
+    execution = await get_execution(plan_id)
+    return {"execution": execution}
 
 
 @app.post("/api/execution")
 async def api_post_execution(body: ExecutionRequest):
-    try:
-        plan_id = body.plan_id
-        payload = body.model_dump(exclude={"plan_id"})
-        result = await save_execution(payload, plan_id)
-        return result
-    except Exception as e:
-        logger.exception("Error saving execution")
-        return JSONResponse(status_code=500, content={"error": str(e) or "Failed to save execution"})
+    plan_id = body.plan_id
+    payload = body.model_dump(exclude={"plan_id"})
+    result = await save_execution(payload, plan_id)
+    return result
 
 
 @app.get("/api/verification")
 async def api_get_verification(plan_id: str = Query("test", alias="planId")):
-    try:
-        verification = await get_verification(plan_id)
-        return {"verification": verification}
-    except Exception as e:
-        logger.exception("Error loading verification")
-        return JSONResponse(status_code=500, content={"error": "Failed to load verification"})
+    verification = await get_verification(plan_id)
+    return {"verification": verification}
 
 
 @app.post("/api/verification")
 async def api_post_verification(body: VerificationRequest):
-    try:
-        plan_id = body.plan_id
-        payload = body.model_dump(exclude={"plan_id"})
-        result = await save_verification(payload, plan_id)
-        return result
-    except Exception as e:
-        logger.exception("Error saving verification")
-        return JSONResponse(status_code=500, content={"error": str(e) or "Failed to save verification"})
+    plan_id = body.plan_id
+    payload = body.model_dump(exclude={"plan_id"})
+    result = await save_verification(payload, plan_id)
+    return result
 
 
 @app.get("/api/executors")
 async def api_get_executors():
-    try:
-        stats = executor_manager["get_executor_stats"]()
-        executors = executor_manager["get_all_executors"]()
-        return {"executors": executors, "stats": stats}
-    except Exception as e:
-        logger.exception("Error getting executors")
-        return JSONResponse(status_code=500, content={"error": "Failed to get executor states"})
+    stats = executor_manager["get_executor_stats"]()
+    executors = executor_manager["get_all_executors"]()
+    return {"executors": executors, "stats": stats}
 
 
 @app.post("/api/executors/assign")
 async def api_executors_assign(body: TaskIdRequest):
-    try:
-        task_id = body.task_id
-        executor_id = executor_manager["assign_task"](task_id)
-        if executor_id is None:
-            return JSONResponse(status_code=503, content={"error": "No idle executor available"})
-        return {"executorId": executor_id, "taskId": task_id}
-    except Exception as e:
-        logger.exception("Error assigning executor")
-        return JSONResponse(status_code=500, content={"error": "Failed to assign executor"})
+    task_id = body.task_id
+    executor_id = executor_manager["assign_task"](task_id)
+    if executor_id is None:
+        return JSONResponse(status_code=503, content={"error": "No idle executor available"})
+    return {"executorId": executor_id, "taskId": task_id}
 
 
 @app.post("/api/executors/release")
 async def api_executors_release(body: TaskIdRequest):
-    try:
-        task_id = body.task_id
-        executor_id = executor_manager["release_executor_by_task_id"](task_id)
-        return {
-            "success": True,
-            "executorId": executor_id if executor_id is not None else None,
-            "taskId": task_id,
-            "message": "Executor released successfully" if executor_id else "No executor was assigned to this task",
-        }
-    except Exception as e:
-        logger.exception("Error releasing executor")
-        return JSONResponse(status_code=500, content={"error": "Failed to release executor: " + str(e)})
+    task_id = body.task_id
+    executor_id = executor_manager["release_executor_by_task_id"](task_id)
+    return {
+        "success": True,
+        "executorId": executor_id if executor_id is not None else None,
+        "taskId": task_id,
+        "message": "Executor released successfully" if executor_id else "No executor was assigned to this task",
+    }
 
 
 @app.post("/api/executors/reset")
 async def api_executors_reset():
-    try:
-        executor_manager["initialize_executors"]()
-        executors = executor_manager["get_all_executors"]()
-        stats = executor_manager["get_executor_stats"]()
-        return {"success": True, "executors": executors, "stats": stats}
-    except Exception as e:
-        logger.exception("Error resetting executors")
-        return JSONResponse(status_code=500, content={"error": "Failed to reset executors"})
+    executor_manager["initialize_executors"]()
+    executors = executor_manager["get_all_executors"]()
+    stats = executor_manager["get_executor_stats"]()
+    return {"success": True, "executors": executors, "stats": stats}
 
 
 @app.get("/api/verifiers")
 async def api_get_verifiers():
-    try:
-        stats = verifier_manager["get_verifier_stats"]()
-        verifiers = verifier_manager["get_all_verifiers"]()
-        return {"verifiers": verifiers, "stats": stats}
-    except Exception as e:
-        logger.exception("Error getting verifiers")
-        return JSONResponse(status_code=500, content={"error": "Failed to get verifier states"})
+    stats = verifier_manager["get_verifier_stats"]()
+    verifiers = verifier_manager["get_all_verifiers"]()
+    return {"verifiers": verifiers, "stats": stats}
 
 
 @app.post("/api/verifiers/assign")
 async def api_verifiers_assign(body: TaskIdRequest):
-    try:
-        task_id = body.task_id
-        verifier_id = verifier_manager["assign_task"](task_id)
-        if verifier_id is None:
-            return JSONResponse(status_code=503, content={"error": "No idle verifier available"})
-        return {"verifierId": verifier_id, "taskId": task_id}
-    except Exception as e:
-        logger.exception("Error assigning verifier")
-        return JSONResponse(status_code=500, content={"error": "Failed to assign verifier"})
+    task_id = body.task_id
+    verifier_id = verifier_manager["assign_task"](task_id)
+    if verifier_id is None:
+        return JSONResponse(status_code=503, content={"error": "No idle verifier available"})
+    return {"verifierId": verifier_id, "taskId": task_id}
 
 
 @app.post("/api/verifiers/release")
 async def api_verifiers_release(body: TaskIdRequest):
-    try:
-        task_id = body.task_id
-        verifier_id = verifier_manager["release_verifier_by_task_id"](task_id)
-        return {
-            "success": True,
-            "verifierId": verifier_id if verifier_id is not None else None,
-            "taskId": task_id,
-            "message": "Verifier released successfully" if verifier_id else "No verifier was assigned to this task",
-        }
-    except Exception as e:
-        logger.exception("Error releasing verifier")
-        return JSONResponse(status_code=500, content={"error": "Failed to release verifier: " + str(e)})
+    task_id = body.task_id
+    verifier_id = verifier_manager["release_verifier_by_task_id"](task_id)
+    return {
+        "success": True,
+        "verifierId": verifier_id if verifier_id is not None else None,
+        "taskId": task_id,
+        "message": "Verifier released successfully" if verifier_id else "No verifier was assigned to this task",
+    }
 
 
 @app.post("/api/verifiers/reset")
 async def api_verifiers_reset():
-    try:
-        verifier_manager["initialize_verifiers"]()
-        verifiers = verifier_manager["get_all_verifiers"]()
-        stats = verifier_manager["get_verifier_stats"]()
-        return {"success": True, "verifiers": verifiers, "stats": stats}
-    except Exception as e:
-        logger.exception("Error resetting verifiers")
-        return JSONResponse(status_code=500, content={"error": "Failed to reset verifiers"})
+    verifier_manager["initialize_verifiers"]()
+    verifiers = verifier_manager["get_all_verifiers"]()
+    stats = verifier_manager["get_verifier_stats"]()
+    return {"success": True, "verifiers": verifiers, "stats": stats}
 
 
 @app.post("/api/mock-execution")
 async def api_mock_execution():
-    try:
-        async def run():
-            try:
-                await executor_runner.start_mock_execution()
-            except Exception as e:
-                logger.exception("Error in background execution")
-                await sio.emit("execution-error", {"error": str(e)})
+    async def run():
+        try:
+            await executor_runner.start_mock_execution()
+        except Exception as e:
+            logger.exception("Error in background execution: {}", e)
+            await sio.emit("execution-error", {"error": str(e)})
 
-        asyncio.create_task(run())
-        return {"success": True, "message": "Mock execution started"}
-    except Exception as e:
-        logger.exception("Error starting mock execution")
-        return JSONResponse(status_code=500, content={"error": str(e) or "Failed to start mock execution"})
+    asyncio.create_task(run())
+    return {"success": True, "message": "Mock execution started"}
 
 
 @app.post("/api/mock-execution/stop")
 async def api_mock_execution_stop():
-    try:
-        await executor_runner.stop_async()
-        return {"success": True, "message": "Mock execution stopped"}
-    except Exception as e:
-        logger.exception("Error stopping mock execution")
-        return JSONResponse(status_code=500, content={"error": str(e) or "Failed to stop mock execution"})
+    await executor_runner.stop_async()
+    return {"success": True, "message": "Mock execution stopped"}
 
 
 # Static file serving - MUST come after all API routes

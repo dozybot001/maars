@@ -2,17 +2,17 @@
 Database Module
 File-based storage: db/{plan_id}/ contains plan.json, execution.json, verification.json.
 Planner generates a new plan_id folder on each new plan; all reads/writes use plan_id.
+Uses orjson for faster JSON parsing.
 """
 
-import json
-import logging
 from pathlib import Path
 
 import aiofiles
+import orjson
+from loguru import logger
 
 DB_DIR = Path(__file__).parent
 DEFAULT_PLAN_ID = "test"
-logger = logging.getLogger(__name__)
 
 
 def _validate_plan_id(plan_id: str) -> None:
@@ -41,12 +41,12 @@ async def _read_json_file(plan_id: str, filename: str):
     await _ensure_plan_dir(plan_id)
     file_path = _get_file_path(plan_id, filename)
     try:
-        async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+        async with aiofiles.open(file_path, "rb") as f:
             data = await f.read()
-            return json.loads(data)
+            return orjson.loads(data)
     except FileNotFoundError:
         return None
-    except json.JSONDecodeError as e:
+    except orjson.JSONDecodeError as e:
         logger.warning("Invalid JSON in %s: %s", file_path, e)
         return None
 
@@ -54,7 +54,7 @@ async def _read_json_file(plan_id: str, filename: str):
 async def _write_json_file(plan_id: str, filename: str, data: dict) -> dict:
     await _ensure_plan_dir(plan_id)
     file_path = _get_file_path(plan_id, filename)
-    content = json.dumps(data, indent=2, ensure_ascii=False)
+    content = orjson.dumps(data, option=orjson.OPT_INDENT_2).decode("utf-8")
     async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
         await f.write(content)
     return {"success": True}

@@ -4,13 +4,12 @@ Executor and verifier are both workers.
 """
 
 import asyncio
-import logging
 import random
 from typing import Any, Dict, List, Set
 
-from . import executor_manager, verifier_manager
+from loguru import logger
 
-logger = logging.getLogger(__name__)
+from . import executor_manager, verifier_manager
 
 
 class ExecutorRunner:

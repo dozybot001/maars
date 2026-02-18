@@ -4,10 +4,12 @@ Uses real LLM by default; Mock AI when use_mock=True.
 """
 
 import asyncio
-import json
 import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+
+import orjson
+import json_repair
 
 from .llm_client import chat_completion as real_chat_completion
 from test.mock_stream import mock_chat_completion
@@ -41,8 +43,8 @@ def _get_mock_cached(response_type: str) -> Dict:
     if response_type not in _mock_cache:
         path = MOCK_AI_DIR / f"{response_type}.json"
         try:
-            _mock_cache[response_type] = json.loads(path.read_text(encoding="utf-8"))
-        except (FileNotFoundError, json.JSONDecodeError):
+            _mock_cache[response_type] = orjson.loads(path.read_bytes())
+        except (FileNotFoundError, orjson.JSONDecodeError):
             _mock_cache[response_type] = {}
     return _mock_cache[response_type]
 
@@ -56,7 +58,7 @@ def _load_mock_response(response_type: str, task_id: str) -> Optional[Dict]:
     if isinstance(content, str):
         content_str = content
     else:
-        content_str = json.dumps(content, ensure_ascii=False)
+        content_str = orjson.dumps(content).decode("utf-8")
     return {"content": content_str, "reasoning": entry.get("reasoning", "")}
 
 
@@ -128,26 +130,15 @@ async def _call_chat_completion(
 
 
 def _parse_json_response(text: str) -> Any:
-    """Parse JSON from AI response with fallback for common malformations."""
+    """Parse JSON from AI response using json_repair for malformed output."""
     cleaned = (text or "").strip()
     m = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned)
     if m:
         cleaned = m.group(1).strip()
-
-    def _try_parse(s: str) -> Any:
-        try:
-            return json.loads(s)
-        except json.JSONDecodeError:
-            pass
-        # Fix trailing commas (common AI output malformation)
-        s = re.sub(r",\s*}", "}", s)
-        s = re.sub(r",\s*]", "]", s)
-        try:
-            return json.loads(s)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Failed to parse JSON from AI response: {e}") from e
-
-    return _try_parse(cleaned)
+    try:
+        return json_repair.loads(cleaned)
+    except Exception as e:
+        raise ValueError(f"Failed to parse JSON from AI response: {e}") from e
 
 
 async def _decompose_task(
