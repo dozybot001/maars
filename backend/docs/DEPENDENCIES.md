@@ -26,7 +26,7 @@
 
 | 依赖 | 版本 | 介绍 |
 |------|------|------|
-| **openai** | ≥1.0.0 | OpenAI 官方 SDK，兼容 OpenAI 格式 API，用于调用 LLM（verify/decompose/format） |
+| **openai** | ≥1.0.0 | OpenAI 官方 SDK，兼容 OpenAI 格式 API，用于调用 LLM（atomicity/decompose/format） |
 | **tenacity** | ≥8.0.0 | 重试库，对 LLM 调用的连接错误、超时、限流进行指数退避重试 |
 | **json-repair** | ≥0.7.0 | 修复畸形 JSON，用于解析 LLM 输出中的尾部逗号、未加引号 key 等常见错误 |
 

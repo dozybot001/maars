@@ -5,11 +5,11 @@
 ```
 backend/
 ├── main.py              # FastAPI + Socket.io 入口
-├── planner/             # AI 规划（verify/decompose/format）
+├── planner/             # AI 规划（atomicity/decompose/format）
 ├── monitor/             # 布局、execution 生成
-├── workers/             # executor、verifier、runner
+├── workers/             # executor、validator (output validation)、runner
 ├── tasks/               # 任务缓存与阶段计算
-├── db/                  # db/{plan_id}/plan.json, execution.json, verification.json
+├── db/                  # db/{plan_id}/plan.json, execution.json, validation.json
 ├── test/                # mock-ai、mock_stream
 └── requirements.txt
 ```

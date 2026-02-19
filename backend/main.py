@@ -10,25 +10,28 @@ from typing import Optional
 import socketio
 from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware
-from fastapi import FastAPI, Request, Query
+from fastapi import Body, FastAPI, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from db import (
+    get_api_config,
     get_execution,
     get_idea,
     get_plan,
-    get_verification,
+    get_validation,
+    list_plan_ids,
+    save_api_config,
     save_execution,
     save_plan,
-    save_verification,
+    save_validation,
 )
 from monitor import build_execution_from_plan, build_layout_from_execution
 from planner.index import run_plan
 from tasks import task_cache
-from workers import ExecutorRunner, executor_manager, verifier_manager
+from workers import ExecutorRunner, executor_manager, validator_manager
 
 # Socket.io
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
@@ -83,22 +86,25 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Pydantic request models
 class ApiConfig(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
     base_url: Optional[str] = Field(None, alias="baseUrl")
     api_key: Optional[str] = Field(None, alias="apiKey")
     model: Optional[str] = None
+    use_mock: Optional[bool] = Field(None, alias="useMock")
+    phases: Optional[dict] = None  # { atomicity, decompose, format, execute, validate } -> { baseUrl?, apiKey?, model? }
 
 
 class PlanRunRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     idea: Optional[str] = None
     plan_id: str = Field(default="test", alias="planId")
-    use_mock: bool = Field(default=False, alias="useMock")
-    api_config: Optional[ApiConfig] = Field(None, alias="apiConfig")
+    skip_quality_assessment: bool = Field(default=False, alias="skipQualityAssessment")
 
 
 class MonitorTimetableRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     execution: dict = Field(..., description="Execution data with tasks")
+    plan_id: str = Field(default="test", alias="planId")
 
 
 class TaskIdRequest(BaseModel):
@@ -111,10 +117,9 @@ class ExecutionRequest(BaseModel):
     plan_id: str = Field(default="test", alias="planId")
 
 
-class VerificationRequest(BaseModel):
+class ValidationRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
     plan_id: str = Field(default="test", alias="planId")
-
 
 
 # Frontend static files
@@ -144,8 +149,8 @@ async def api_plan_run(body: PlanRunRequest):
 
     try:
         idea = body.idea
-        use_mock = body.use_mock
-        api_config = body.api_config.model_dump(by_alias=True, exclude_none=True) if body.api_config else {}
+        api_config = await get_api_config()
+        use_mock = api_config.get("useMock", api_config.get("use_mock", True))
 
         # New idea => create new plan_id folder; decompose => use existing
         if idea is not None and isinstance(idea, str) and idea.strip():
@@ -186,10 +191,19 @@ async def api_plan_run(body: PlanRunRequest):
                 payload["operation"] = operation
             asyncio.create_task(sio.emit("plan-thinking", payload))
 
-        result = await run_plan(plan, None, on_thinking, abort_event, on_tasks_batch, use_mock=use_mock, api_config=api_config)
+        result = await run_plan(
+            plan, None, on_thinking, abort_event, on_tasks_batch,
+            use_mock=use_mock, api_config=api_config,
+            skip_quality_assessment=body.skip_quality_assessment,
+        )
         plan["tasks"] = task_cache.build_tree_data(result["tasks"])
         await save_plan(plan, plan_id)
-        await sio.emit("plan-complete", {"treeData": plan["tasks"], "planId": plan_id})
+        await sio.emit("plan-complete", {
+            "treeData": plan["tasks"],
+            "planId": plan_id,
+            "qualityScore": plan.get("qualityScore"),
+            "qualityComment": plan.get("qualityComment"),
+        })
 
         return {"success": True, "planId": plan_id}
 
@@ -213,9 +227,17 @@ async def api_plan_run(body: PlanRunRequest):
 @app.post("/api/monitor/timetable")
 async def api_monitor_timetable(body: MonitorTimetableRequest):
     execution = body.execution
+    plan_id = body.plan_id
     layout = build_layout_from_execution(execution)
-    executor_runner.set_timetable_layout_cache(layout)
+    executor_runner.set_timetable_layout_cache(layout, plan_id=plan_id, execution=execution)
     return {"layout": layout}
+
+
+@app.get("/api/plans")
+async def api_list_plans():
+    """List plan IDs (newest first). Used when localStorage has no plan to restore latest."""
+    ids = await list_plan_ids()
+    return {"planIds": ids}
 
 
 @app.get("/api/plan")
@@ -268,17 +290,17 @@ async def api_post_execution(body: ExecutionRequest):
     return result
 
 
-@app.get("/api/verification")
-async def api_get_verification(plan_id: str = Query("test", alias="planId")):
-    verification = await get_verification(plan_id)
-    return {"verification": verification}
+@app.get("/api/validation")
+async def api_get_validation(plan_id: str = Query("test", alias="planId")):
+    validation = await get_validation(plan_id)
+    return {"validation": validation}
 
 
-@app.post("/api/verification")
-async def api_post_verification(body: VerificationRequest):
+@app.post("/api/validation")
+async def api_post_validation(body: ValidationRequest):
     plan_id = body.plan_id
     payload = body.model_dump(exclude={"plan_id"})
-    result = await save_verification(payload, plan_id)
+    result = await save_validation(payload, plan_id)
     return result
 
 
@@ -318,59 +340,76 @@ async def api_executors_reset():
     return {"success": True, "executors": executors, "stats": stats}
 
 
-@app.get("/api/verifiers")
-async def api_get_verifiers():
-    stats = verifier_manager["get_verifier_stats"]()
-    verifiers = verifier_manager["get_all_verifiers"]()
-    return {"verifiers": verifiers, "stats": stats}
+@app.get("/api/validators")
+async def api_get_validators():
+    stats = validator_manager["get_validator_stats"]()
+    validators = validator_manager["get_all_validators"]()
+    return {"validators": validators, "stats": stats}
 
 
-@app.post("/api/verifiers/assign")
-async def api_verifiers_assign(body: TaskIdRequest):
+@app.post("/api/validators/assign")
+async def api_validators_assign(body: TaskIdRequest):
     task_id = body.task_id
-    verifier_id = verifier_manager["assign_task"](task_id)
-    if verifier_id is None:
-        return JSONResponse(status_code=503, content={"error": "No idle verifier available"})
-    return {"verifierId": verifier_id, "taskId": task_id}
+    validator_id = validator_manager["assign_task"](task_id)
+    if validator_id is None:
+        return JSONResponse(status_code=503, content={"error": "No idle validator available"})
+    return {"validatorId": validator_id, "taskId": task_id}
 
 
-@app.post("/api/verifiers/release")
-async def api_verifiers_release(body: TaskIdRequest):
+@app.post("/api/validators/release")
+async def api_validators_release(body: TaskIdRequest):
     task_id = body.task_id
-    verifier_id = verifier_manager["release_verifier_by_task_id"](task_id)
+    validator_id = validator_manager["release_validator_by_task_id"](task_id)
     return {
         "success": True,
-        "verifierId": verifier_id if verifier_id is not None else None,
+        "validatorId": validator_id if validator_id is not None else None,
         "taskId": task_id,
-        "message": "Verifier released successfully" if verifier_id else "No verifier was assigned to this task",
+        "message": "Validator released successfully" if validator_id else "No validator was assigned to this task",
     }
 
 
-@app.post("/api/verifiers/reset")
-async def api_verifiers_reset():
-    verifier_manager["initialize_verifiers"]()
-    verifiers = verifier_manager["get_all_verifiers"]()
-    stats = verifier_manager["get_verifier_stats"]()
-    return {"success": True, "verifiers": verifiers, "stats": stats}
+@app.post("/api/validators/reset")
+async def api_validators_reset():
+    validator_manager["initialize_validators"]()
+    validators = validator_manager["get_all_validators"]()
+    stats = validator_manager["get_validator_stats"]()
+    return {"success": True, "validators": validators, "stats": stats}
 
 
-@app.post("/api/mock-execution")
-async def api_mock_execution():
+@app.get("/api/config")
+async def api_get_config():
+    """Get API config from db."""
+    config = await get_api_config()
+    return {"config": config}
+
+
+@app.post("/api/config")
+async def api_save_config(body: ApiConfig = Body(...)):
+    """Save API config to db."""
+    config = body.model_dump(by_alias=True, exclude_none=True)
+    await save_api_config(config)
+    return {"success": True}
+
+
+@app.post("/api/execution/run")
+async def api_execution_run():
+    api_config = await get_api_config()
+
     async def run():
         try:
-            await executor_runner.start_mock_execution()
+            await executor_runner.start_execution(api_config=api_config)
         except Exception as e:
-            logger.exception("Error in background execution: {}", e)
+            logger.exception("Error in execution: {}", e)
             await sio.emit("execution-error", {"error": str(e)})
 
     asyncio.create_task(run())
-    return {"success": True, "message": "Mock execution started"}
+    return {"success": True, "message": "Execution started"}
 
 
-@app.post("/api/mock-execution/stop")
-async def api_mock_execution_stop():
+@app.post("/api/execution/stop")
+async def api_execution_stop():
     await executor_runner.stop_async()
-    return {"success": True, "message": "Mock execution stopped"}
+    return {"success": True, "message": "Execution stopped"}
 
 
 # Static file serving - MUST come after all API routes
@@ -385,9 +424,9 @@ async def connect(sid, environ, auth):
     executors = executor_manager["get_all_executors"]()
     executor_stats = executor_manager["get_executor_stats"]()
     await sio.emit("executor-states-update", {"executors": executors, "stats": executor_stats}, to=sid)
-    verifiers = verifier_manager["get_all_verifiers"]()
-    verifier_stats = verifier_manager["get_verifier_stats"]()
-    await sio.emit("verifier-states-update", {"verifiers": verifiers, "stats": verifier_stats}, to=sid)
+    validators = validator_manager["get_all_validators"]()
+    validator_stats = validator_manager["get_validator_stats"]()
+    await sio.emit("validator-states-update", {"validators": validators, "stats": validator_stats}, to=sid)
 
 
 @sio.event

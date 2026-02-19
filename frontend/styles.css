@@ -189,7 +189,7 @@ section {
 .planner-section,
 .monitor-section,
 .executor-section,
-.verifier-section {
+.validator-section {
     padding: var(--padding);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
@@ -209,8 +209,8 @@ section {
     background: var(--bg-section-executor);
 }
 
-.verifier-section {
-    background: var(--bg-section-verifier);
+.validator-section {
+    background: var(--bg-section-validator);
 }
 
 /* Idea input row */
@@ -468,12 +468,14 @@ button.stop-btn:hover:not(:disabled) {
     top: 0;
     width: 100%;
     height: 100%;
+    overflow-y: auto;
+    padding: 24px 0 48px;
     background-color: var(--shadow-overlay);
 }
 
 .modal-content {
     background-color: var(--bg-white);
-    margin: 80px auto;
+    margin: 0 auto;
     padding: 30px;
     width: 500px;
     max-width: 90%;
@@ -590,8 +592,30 @@ button.stop-btn:hover:not(:disabled) {
     color: var(--status-doing-accent);
 }
 
-.task-detail-value.task-status-verifying {
-    color: var(--status-verifying-accent);
+.task-detail-value.task-status-validating {
+    color: var(--status-validating-accent);
+}
+
+.task-detail-validation .task-detail-value {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.task-detail-validation .validation-desc {
+    font-size: 12px;
+}
+
+.task-detail-validation .validation-criteria,
+.task-detail-validation .validation-optional {
+    margin: 0;
+    padding-left: 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.task-detail-validation .validation-optional {
+    font-style: italic;
 }
 
 .form-group {
@@ -665,9 +689,9 @@ button.stop-btn:hover:not(:disabled) {
 }
 
 .api-mode-option.selected {
-    background: var(--status-verifying);
-    border-color: var(--status-verifying-accent);
-    color: var(--status-verifying-accent);
+    background: var(--status-validating);
+    border-color: var(--status-validating-accent);
+    color: var(--status-validating-accent);
     box-shadow: var(--shadow-sm);
 }
 
@@ -688,6 +712,90 @@ button.stop-btn:hover:not(:disabled) {
 
 .api-mode-option.selected .api-mode-desc {
     opacity: 0.9;
+}
+
+/* API config modal - wide layout */
+.modal-content-wide {
+    width: min(920px, 94vw);
+    max-width: none;
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+    padding: 28px 36px 36px;
+}
+
+.modal-content-wide .modal-header {
+    margin-bottom: 24px;
+}
+
+.api-config-global,
+.api-config-phases {
+    margin-top: 24px;
+}
+
+.api-config-section-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 6px 0;
+}
+
+.api-config-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0 0 14px 0;
+}
+
+.modal-content-wide .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+}
+
+.api-phase-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+}
+
+@media (max-width: 1000px) {
+    .api-phase-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 640px) {
+    .api-phase-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .modal-content-wide .form-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+.api-phase-card {
+    padding: 14px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background: var(--bg-area-secondary);
+}
+
+.api-phase-card h4 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 12px 0;
+    color: var(--text-secondary);
+}
+
+.api-phase-card .form-group {
+    margin-bottom: 10px;
+}
+
+.api-phase-card .form-group:last-child {
+    margin-bottom: 0;
+}
+
+.api-phase-card .form-group label {
+    font-size: 12px;
 }
 
 /* Execution Map */
@@ -797,8 +905,8 @@ button.stop-btn:hover:not(:disabled) {
     color: var(--text-on-dark) !important;
 }
 
-.task-container.task-status-verifying {
-    background: var(--status-verifying) !important;
+.task-container.task-status-validating {
+    background: var(--status-validating) !important;
     color: var(--text-on-dark) !important;
 }
 
@@ -850,6 +958,33 @@ button.stop-btn:hover:not(:disabled) {
     flex: 1;
     min-width: 0;
     height: 400px;
+    position: relative;
+}
+
+.planner-quality-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 10;
+    padding: 4px 10px;
+    border-radius: var(--border-radius);
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--bg-area-secondary);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+}
+
+.planner-quality-badge.quality-high {
+    color: var(--success-color, #22c55e);
+}
+
+.planner-quality-badge.quality-mid {
+    color: var(--warning-color, #eab308);
+}
+
+.planner-quality-badge.quality-low {
+    color: var(--error-color, #ef4444);
 }
 
 .monitor-tasks-tree-area {
@@ -1042,16 +1177,16 @@ button.stop-btn:hover:not(:disabled) {
     border-color: var(--tree-status-doing-border);
 }
 
-.tree-task.task-status-verifying {
-    --node-bg: var(--status-verifying);
-    --node-border: var(--tree-status-verifying-border);
+.tree-task.task-status-validating {
+    --node-bg: var(--status-validating);
+    --node-border: var(--tree-status-validating-border);
     background: var(--node-bg);
     border-color: var(--node-border);
 }
 
-.tree-task.task-status-verifying:hover {
-    background: var(--status-verifying-hover);
-    border-color: var(--tree-status-verifying-border);
+.tree-task.task-status-validating:hover {
+    background: var(--status-validating-hover);
+    border-color: var(--tree-status-validating-border);
 }
 
 .tree-task.task-status-done {
@@ -1066,7 +1201,7 @@ button.stop-btn:hover:not(:disabled) {
     border-color: var(--tree-status-done-border);
 }
 
-.tree-task.task-status-verification-failed,
+.tree-task.task-status-validation-failed,
 .tree-task.task-status-execution-failed {
     --node-bg: var(--failure-bg);
     --node-border: var(--failure-border);
@@ -1074,7 +1209,7 @@ button.stop-btn:hover:not(:disabled) {
     border-color: var(--node-border);
 }
 
-.tree-task.task-status-verification-failed:hover,
+.tree-task.task-status-validation-failed:hover,
 .tree-task.task-status-execution-failed:hover {
     background: var(--failure-bg-hover);
     border-color: var(--failure-border);
@@ -1305,16 +1440,16 @@ button.stop-btn:hover:not(:disabled) {
     color: var(--text-color) !important;
 }
 
-.timetable-cell.task-status-verifying {
-    background: var(--status-verifying) !important;
+.timetable-cell.task-status-validating {
+    background: var(--status-validating) !important;
     color: var(--text-color) !important;
 }
 
-.timetable-cell.task-status-verifying:hover {
-    background: var(--status-verifying-hover) !important;
+.timetable-cell.task-status-validating:hover {
+    background: var(--status-validating-hover) !important;
 }
 
-.timetable-cell.task-status-verifying:hover .task-description {
+.timetable-cell.task-status-validating:hover .task-description {
     color: var(--text-color) !important;
 }
 
@@ -1332,18 +1467,18 @@ button.stop-btn:hover:not(:disabled) {
 }
 
 /* Unified failure styles for timetable cells */
-.timetable-cell.task-status-verification-failed,
+.timetable-cell.task-status-validation-failed,
 .timetable-cell.task-status-execution-failed {
     background: var(--failure-bg) !important;
     color: var(--text-color) !important;
 }
 
-.timetable-cell.task-status-verification-failed:hover,
+.timetable-cell.task-status-validation-failed:hover,
 .timetable-cell.task-status-execution-failed:hover {
     background: var(--failure-bg-hover) !important;
 }
 
-.timetable-cell.task-status-verification-failed:hover .task-description,
+.timetable-cell.task-status-validation-failed:hover .task-description,
 .timetable-cell.task-status-execution-failed:hover .task-description {
     color: var(--text-color) !important;
 }
@@ -1489,12 +1624,12 @@ button.stop-btn:hover:not(:disabled) {
     text-overflow: ellipsis;
 }
 
-/* Verifier Section - Same styles as Executor Section */
-.verifier-section {
+/* Validator Section - Same styles as Executor Section */
+.validator-section {
     margin-bottom: 50px;
 }
 
-.verifier-content {
+.validator-content {
     padding: var(--padding);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
@@ -1502,7 +1637,7 @@ button.stop-btn:hover:not(:disabled) {
     box-shadow: var(--shadow-inset);
 }
 
-.verifier-stats {
+.validator-stats {
     display: flex;
     gap: 20px;
     margin-bottom: var(--gap);
@@ -1510,14 +1645,14 @@ button.stop-btn:hover:not(:disabled) {
     border-bottom: 1px solid var(--border-color);
 }
 
-.verifier-grid {
+.validator-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
     gap: 16px;
     align-content: start;
 }
 
-.verifier-item {
+.validator-item {
     padding: 16px;
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
@@ -1532,29 +1667,29 @@ button.stop-btn:hover:not(:disabled) {
     box-shadow: var(--shadow-sm);
 }
 
-.verifier-item:hover {
+.validator-item:hover {
     transform: translateY(-1px);
     box-shadow: var(--shadow-lg);
     border-color: var(--interactive-border-hover);
 }
 
-.verifier-item.verifier-idle {
-    background: var(--verifier-idle-bg);
-    border-color: var(--verifier-idle-border);
+.validator-item.validator-idle {
+    background: var(--validator-idle-bg);
+    border-color: var(--validator-idle-border);
 }
 
-.verifier-item.verifier-busy {
+.validator-item.validator-busy {
     background: var(--executor-busy-bg);
     border-color: var(--executor-busy-border);
 }
 
-/* Unified failure style for verifier */
-.verifier-item.verifier-failed {
+/* Unified failure style for validator */
+.validator-item.validator-failed {
     background: var(--failure-bg);
     border-color: var(--failure-border);
 }
 
-.verifier-id {
+.validator-id {
     font-size: 15px;
     font-weight: 500;
     margin-bottom: 10px;
@@ -1568,7 +1703,7 @@ button.stop-btn:hover:not(:disabled) {
     width: 100%;
 }
 
-.verifier-status {
+.validator-status {
     font-size: 13px;
     font-weight: 500;
     text-transform: uppercase;
@@ -1579,20 +1714,20 @@ button.stop-btn:hover:not(:disabled) {
     margin-bottom: 8px;
 }
 
-.verifier-status.status-idle {
-    color: var(--verifier-idle-text);
+.validator-status.status-idle {
+    color: var(--validator-idle-text);
 }
 
-.verifier-status.status-busy {
+.validator-status.status-busy {
     color: var(--executor-busy-text);
 }
 
-/* Unified failure style for verifier status */
-.verifier-status.status-failed {
+/* Unified failure style for validator status */
+.validator-status.status-failed {
     color: var(--failure-text);
 }
 
-.verifier-task {
+.validator-task {
     font-size: 11px;
     color: var(--text-muted);
     word-break: break-word;

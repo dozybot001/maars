@@ -34,24 +34,12 @@
         </header>
 
         <div id="apiConfigModal" class="modal">
-            <div class="modal-content">
+            <div class="modal-content modal-content-wide">
                 <div class="modal-header">
                     <h2>API 配置</h2>
                     <span class="close" id="apiConfigModalClose">&times;</span>
                 </div>
                 <form id="apiConfigForm">
-                    <div class="form-group">
-                        <label for="apiBaseUrl">API Base URL</label>
-                        <input type="url" id="apiBaseUrl" placeholder="https://api.openai.com/v1" />
-                    </div>
-                    <div class="form-group">
-                        <label for="apiKey">API Key</label>
-                        <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off" />
-                    </div>
-                    <div class="form-group">
-                        <label for="apiModel">Model</label>
-                        <input type="text" id="apiModel" placeholder="gpt-4o" />
-                    </div>
                     <div class="form-group">
                         <label class="form-label">AI 模式</label>
                         <div class="api-mode-toggle" role="group" aria-label="AI mode">
@@ -63,10 +51,109 @@
                             <button type="button" class="api-mode-option" data-mode="llm" id="apiModeLlm">
                                 <span class="api-mode-icon">◈</span>
                                 <span class="api-mode-label">LLM API</span>
-                                <span class="api-mode-desc">调用上方配置的接口</span>
+                                <span class="api-mode-desc">调用下方配置的接口</span>
                             </button>
                         </div>
                         <input type="hidden" id="apiUseMock" name="apiUseMock" />
+                    </div>
+                    <div class="api-config-global">
+                        <h3 class="api-config-section-title">全局默认</h3>
+                        <p class="api-config-hint">各阶段未单独配置时使用</p>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="apiBaseUrl">Base URL</label>
+                                <input type="url" id="apiBaseUrl" placeholder="https://api.openai.com/v1" />
+                            </div>
+                            <div class="form-group">
+                                <label for="apiKey">API Key</label>
+                                <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off" />
+                            </div>
+                            <div class="form-group">
+                                <label for="apiModel">Model</label>
+                                <input type="text" id="apiModel" placeholder="gpt-4o" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="api-config-phases">
+                        <h3 class="api-config-section-title">各阶段独立配置</h3>
+                        <p class="api-config-hint">留空则使用全局默认</p>
+                        <div class="api-phase-grid">
+                            <div class="api-phase-card" data-phase="atomicity">
+                                <h4>Atomicity</h4>
+                                <div class="form-group">
+                                    <label>Base URL</label>
+                                    <input type="url" id="phase-atomicity-baseUrl" placeholder="同全局" />
+                                </div>
+                                <div class="form-group">
+                                    <label>API Key</label>
+                                    <input type="password" id="phase-atomicity-apiKey" placeholder="同全局" autocomplete="off" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Model</label>
+                                    <input type="text" id="phase-atomicity-model" placeholder="gpt-4o" />
+                                </div>
+                            </div>
+                            <div class="api-phase-card" data-phase="decompose">
+                                <h4>Decompose</h4>
+                                <div class="form-group">
+                                    <label>Base URL</label>
+                                    <input type="url" id="phase-decompose-baseUrl" placeholder="同全局" />
+                                </div>
+                                <div class="form-group">
+                                    <label>API Key</label>
+                                    <input type="password" id="phase-decompose-apiKey" placeholder="同全局" autocomplete="off" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Model</label>
+                                    <input type="text" id="phase-decompose-model" placeholder="gpt-4o" />
+                                </div>
+                            </div>
+                            <div class="api-phase-card" data-phase="format">
+                                <h4>Format</h4>
+                                <div class="form-group">
+                                    <label>Base URL</label>
+                                    <input type="url" id="phase-format-baseUrl" placeholder="同全局" />
+                                </div>
+                                <div class="form-group">
+                                    <label>API Key</label>
+                                    <input type="password" id="phase-format-apiKey" placeholder="同全局" autocomplete="off" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Model</label>
+                                    <input type="text" id="phase-format-model" placeholder="gpt-4o" />
+                                </div>
+                            </div>
+                            <div class="api-phase-card" data-phase="execute">
+                                <h4>Execute</h4>
+                                <div class="form-group">
+                                    <label>Base URL</label>
+                                    <input type="url" id="phase-execute-baseUrl" placeholder="同全局" />
+                                </div>
+                                <div class="form-group">
+                                    <label>API Key</label>
+                                    <input type="password" id="phase-execute-apiKey" placeholder="同全局" autocomplete="off" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Model</label>
+                                    <input type="text" id="phase-execute-model" placeholder="gpt-4o" />
+                                </div>
+                            </div>
+                            <div class="api-phase-card" data-phase="validate">
+                                <h4>Validate</h4>
+                                <div class="form-group">
+                                    <label>Base URL</label>
+                                    <input type="url" id="phase-validate-baseUrl" placeholder="同全局" />
+                                </div>
+                                <div class="form-group">
+                                    <label>API Key</label>
+                                    <input type="password" id="phase-validate-apiKey" placeholder="同全局" autocomplete="off" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Model</label>
+                                    <input type="text" id="phase-validate-model" placeholder="gpt-4o" />
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div class="button-group" style="margin-top: 20px;">
                         <button type="submit">保存</button>
@@ -93,9 +180,10 @@
                         <div class="planner-thinking-placeholder" id="plannerThinkingPlaceholder">Thinking will appear here when generating plan...</div>
                     </div>
                     <div class="planner-tree-area" data-tree-area="planner">
-                    <div class="timetable-tree-container">
-                        <div class="tasks-tree planner-tasks-tree"></div>
-                    </div>
+                        <div class="planner-quality-badge" id="plannerQualityBadge" title="" style="display: none;"></div>
+                        <div class="timetable-tree-container">
+                            <div class="tasks-tree planner-tasks-tree"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -108,7 +196,7 @@
                     <div class="diagram-area">
                         <div id="diagramArea" class="diagram-content">
                             <div class="execution-map">
-                                <div class="map-info">No execution map found. Click "Generate execution map" to build the map.</div>
+                                <div class="map-info">No execution map found. Click "Generate Map" to build the map.</div>
                             </div>
                         </div>
                     </div>
@@ -120,8 +208,8 @@
                 </div>
             </div>
             <div class="button-group">
-                <button id="generateTimetableBtn">Generate execution map</button>
-                <button id="mockExecutionBtn">Mock Execution</button>
+                <button id="generateTimetableBtn">Generate Map</button>
+                <button id="executionBtn">Execution</button>
             </div>
         </section>
 
@@ -148,37 +236,42 @@
             </div>
         </section>
 
-        <section class="verifier-section">
-            <h2>Verifiers</h2>
-            <div class="verifier-content">
-                <div class="verifier-stats">
+        <section class="validator-section">
+            <h2>Validators</h2>
+            <div class="validator-content">
+                <div class="validator-stats">
                     <div class="stat-item">
                         <span class="stat-label">Total:</span>
-                        <span class="stat-value" id="verifierTotal">0</span>
+                        <span class="stat-value" id="validatorTotal">0</span>
                     </div>
                     <div class="stat-item">
                         <span class="stat-label">Busy:</span>
-                        <span class="stat-value stat-busy" id="verifierBusy">0</span>
+                        <span class="stat-value stat-busy" id="validatorBusy">0</span>
                     </div>
                     <div class="stat-item">
                         <span class="stat-label">Idle:</span>
-                        <span class="stat-value stat-idle" id="verifierIdle">0</span>
+                        <span class="stat-value stat-idle" id="validatorIdle">0</span>
                     </div>
                 </div>
-                <div class="verifier-grid" id="verifierGrid">
-                    <!-- Populated by loadVerifierStates on page load -->
+                <div class="validator-grid" id="validatorGrid">
+                    <!-- Populated by validator-states-update on connect -->
                 </div>
             </div>
         </section>
     </div>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
     <script src="task-tree.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/theme.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/planner.js"></script>
+    <script src="js/monitor.js"></script>
+    <script src="js/websocket.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 """
-Worker pool for executors and verifiers.
+Worker pool for executors and output validators.
+Validators check task output against validation criteria (distinct from planner's atomicity check).
 Manages state: idle | busy | failed
 """
 
@@ -75,7 +76,7 @@ def _create_worker_pool(max_workers: int) -> Dict:
 
 
 _executor_pool = _create_worker_pool(7)
-_verifier_pool = _create_worker_pool(5)
+_validator_pool = _create_worker_pool(5)
 
 executor_manager = {
     "get_all_executors": _executor_pool["get_all"],
@@ -87,14 +88,14 @@ executor_manager = {
     "initialize_executors": _executor_pool["initialize"],
 }
 
-verifier_manager = {
-    "get_all_verifiers": _verifier_pool["get_all"],
-    "get_verifier_by_id": _verifier_pool["get_by_id"],
-    "get_idle_verifier": _verifier_pool["get_idle"],
-    "assign_task": _verifier_pool["assign_task"],
-    "release_verifier_by_task_id": _verifier_pool["release_by_task_id"],
-    "get_verifier_stats": _verifier_pool["get_stats"],
-    "initialize_verifiers": _verifier_pool["initialize"],
+validator_manager = {
+    "get_all_validators": _validator_pool["get_all"],
+    "get_validator_by_id": _validator_pool["get_by_id"],
+    "get_idle_validator": _validator_pool["get_idle"],
+    "assign_task": _validator_pool["assign_task"],
+    "release_validator_by_task_id": _validator_pool["release_by_task_id"],
+    "get_validator_stats": _validator_pool["get_stats"],
+    "initialize_validators": _validator_pool["initialize"],
 }
 
 from .runner import ExecutorRunner

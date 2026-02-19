@@ -1,15 +1,18 @@
 """
-Executor Runner - handles task execution and verification via worker pools.
-Executor and verifier are both workers.
+Executor Runner - handles task execution and output validation via worker pools.
+Executor runs tasks; Validator checks task output against criteria (distinct from planner's atomicity check).
+Task status changes are persisted to execution.json in real-time.
 """
 
 import asyncio
 import random
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 from loguru import logger
 
-from . import executor_manager, verifier_manager
+from db import save_execution, save_task_artifact
+from . import executor_manager, validator_manager
+from .execution import resolve_artifacts, execute_task
 
 
 class ExecutorRunner:
@@ -26,9 +29,12 @@ class ExecutorRunner:
         self.reverse_dependency_index: Dict[str, List[str]] = {}
         self.task_failure_count: Dict[str, int] = {}
         self.EXECUTION_PASS_PROBABILITY = 0.95
-        self.VERIFY_PASS_PROBABILITY = 0.95
+        self.VALIDATION_PASS_PROBABILITY = 0.95
         self.MAX_FAILURES = 3
         self.timetable_layout = None
+        self.plan_id: Optional[str] = None
+        self.execution_cache: Optional[Dict] = None
+        self.api_config: Optional[Dict] = None
 
     def _emit(self, event: str, data: dict) -> None:
         """Emit event to all clients (fire-and-forget)."""
@@ -38,24 +44,31 @@ class ExecutorRunner:
             except RuntimeError:
                 pass
 
-    async def start_mock_execution(self) -> None:
+    async def start_execution(self, api_config: Optional[Dict] = None) -> None:
+        if api_config is not None:
+            self.api_config = api_config
         if self.is_running:
             raise ValueError("Execution is already running")
         if not self.chain_cache:
-            raise ValueError("No execution map cache found. Please generate execution map first.")
+            raise ValueError("No execution map cache found. Please generate map first.")
         if not self.timetable_layout:
-            raise ValueError("No timetable layout cache found. Please generate execution map first.")
+            raise ValueError("No timetable layout cache found. Please generate map first.")
 
         self.is_running = True
         try:
             executor_manager["initialize_executors"]()
-            verifier_manager["initialize_verifiers"]()
+            validator_manager["initialize_validators"]()
             self._broadcast_executor_states()
-            self._broadcast_verifier_states()
+            self._broadcast_validator_states()
 
             timetable_layout = self.timetable_layout
             for task in self.chain_cache:
                 task["status"] = "undone"
+            if self.execution_cache and self.plan_id:
+                for t in (self.execution_cache.get("tasks") or []):
+                    if t.get("task_id"):
+                        t["status"] = "undone"
+                await save_execution(self.execution_cache, self.plan_id)
 
             self.running_tasks.clear()
             self.completed_tasks.clear()
@@ -85,9 +98,9 @@ class ExecutorRunner:
         finally:
             self.is_running = False
             executor_manager["initialize_executors"]()
-            verifier_manager["initialize_verifiers"]()
+            validator_manager["initialize_validators"]()
             self._broadcast_executor_states()
-            self._broadcast_verifier_states()
+            self._broadcast_validator_states()
 
     def _get_pending_ready_tasks(self) -> List[Dict]:
         result = []
@@ -148,8 +161,27 @@ class ExecutorRunner:
         self._broadcast_executor_states()
 
         try:
-            await asyncio.sleep(0.5 + random.random() * 1.5)
-            execution_passed = random.random() < self.EXECUTION_PASS_PROBABILITY
+            input_spec = task.get("input") or {}
+            output_spec = task.get("output") or {}
+            if not output_spec:
+                raise ValueError(f"Task {task['task_id']} has no output spec")
+            try:
+                resolved_inputs = await resolve_artifacts(task, self.task_map, self.plan_id or "")
+                result = await execute_task(
+                    task_id=task["task_id"],
+                    description=task.get("description") or "",
+                    input_spec=input_spec,
+                    output_spec=output_spec,
+                    resolved_inputs=resolved_inputs,
+                    api_config=self.api_config or {},
+                    abort_event=None,
+                )
+                to_save = result if isinstance(result, dict) else {"content": result}
+                await save_task_artifact(self.plan_id or "", task["task_id"], to_save)
+                execution_passed = True
+            except Exception as exec_err:
+                logger.warning("LLM execution failed for task %s: %s", task["task_id"], exec_err)
+                execution_passed = False
 
             if not execution_passed:
                 self._update_task_status(task["task_id"], "execution-failed")
@@ -178,47 +210,47 @@ class ExecutorRunner:
             async with self._worker_lock:
                 executor_manager["release_executor_by_task_id"](task["task_id"])
             self._broadcast_executor_states()
-            self._update_task_status(task["task_id"], "verifying")
+            self._update_task_status(task["task_id"], "validating")
 
-            verifier_id = None
+            validator_id = None
             retry_count = 0
-            while verifier_id is None and retry_count < 50:
+            while validator_id is None and retry_count < 50:
                 async with self._worker_lock:
-                    verifier_id = verifier_manager["assign_task"](task["task_id"])
-                if verifier_id is None:
+                    validator_id = validator_manager["assign_task"](task["task_id"])
+                if validator_id is None:
                     await asyncio.sleep(min(0.1 + retry_count * 0.02, 0.5))
                     retry_count += 1
                     if retry_count % 5 == 0:
-                        self._broadcast_verifier_states()
+                        self._broadcast_validator_states()
                 else:
                     break
 
-            if verifier_id:
-                self._broadcast_verifier_states()
+            if validator_id:
+                self._broadcast_validator_states()
 
             await asyncio.sleep(0.2 + random.random() * 0.6)
-            verification_passed = random.random() < self.VERIFY_PASS_PROBABILITY
+            validation_passed = random.random() < self.VALIDATION_PASS_PROBABILITY
 
-            if verification_passed:
-                if verifier_id:
+            if validation_passed:
+                if validator_id:
                     async with self._worker_lock:
-                        verifier_manager["release_verifier_by_task_id"](task["task_id"])
-                    self._broadcast_verifier_states()
+                        validator_manager["release_validator_by_task_id"](task["task_id"])
+                    self._broadcast_validator_states()
             else:
-                self._update_task_status(task["task_id"], "verification-failed")
-                if verifier_id:
-                    ver_obj = verifier_manager["get_verifier_by_id"](verifier_id)
-                    if ver_obj:
-                        ver_obj["status"] = "failed"
-                        self._broadcast_verifier_states()
+                self._update_task_status(task["task_id"], "validation-failed")
+                if validator_id:
+                    validator_obj = validator_manager["get_validator_by_id"](validator_id)
+                    if validator_obj:
+                        validator_obj["status"] = "failed"
+                        self._broadcast_validator_states()
                         await asyncio.sleep(0.5)
                 failure_count = self.task_failure_count.get(task["task_id"], 0)
                 self.task_failure_count[task["task_id"]] = failure_count + 1
                 await asyncio.sleep(1.0)
-                if verifier_id:
+                if validator_id:
                     async with self._worker_lock:
-                        verifier_manager["release_verifier_by_task_id"](task["task_id"])
-                    self._broadcast_verifier_states()
+                        validator_manager["release_validator_by_task_id"](task["task_id"])
+                    self._broadcast_validator_states()
                 if failure_count < self.MAX_FAILURES - 1:
                     self.running_tasks.discard(task["task_id"])
                     self.completed_tasks.discard(task["task_id"])
@@ -233,9 +265,9 @@ class ExecutorRunner:
         except Exception as e:
             async with self._worker_lock:
                 executor_manager["release_executor_by_task_id"](task["task_id"])
-                verifier_manager["release_verifier_by_task_id"](task["task_id"])
+                validator_manager["release_validator_by_task_id"](task["task_id"])
             self._broadcast_executor_states()
-            self._broadcast_verifier_states()
+            self._broadcast_validator_states()
             raise
 
         self.running_tasks.discard(task["task_id"])
@@ -282,19 +314,13 @@ class ExecutorRunner:
         logger.exception("Error executing task %s", task["task_id"])
         async with self._worker_lock:
             executor_manager["release_executor_by_task_id"](task["task_id"])
-            verifier_manager["release_verifier_by_task_id"](task["task_id"])
+            validator_manager["release_validator_by_task_id"](task["task_id"])
         self._broadcast_executor_states()
-        self._broadcast_verifier_states()
+        self._broadcast_validator_states()
         self.completed_tasks.add(task["task_id"])
         self.running_tasks.discard(task["task_id"])
         self.pending_tasks.discard(task["task_id"])
-        self._update_task_status(task["task_id"], "verifying")
-
-        async def delayed_done() -> None:
-            await asyncio.sleep(0.3)
-            self._update_task_status(task["task_id"], "done")
-
-        asyncio.create_task(delayed_done())
+        self._update_task_status(task["task_id"], "execution-failed")
         dependents = self.reverse_dependency_index.get(task["task_id"], [])
         self._check_specific_tasks([self.task_map[id] for id in dependents if self.task_map.get(id)])
 
@@ -308,8 +334,17 @@ class ExecutorRunner:
         for t in self.chain_cache:
             if t.get("task_id") == task_id:
                 t["status"] = status
-                self._broadcast_task_states()
                 break
+        if self.execution_cache and self.plan_id:
+            for t in (self.execution_cache.get("tasks") or []):
+                if t.get("task_id") == task_id:
+                    t["status"] = status
+                    try:
+                        asyncio.create_task(save_execution(self.execution_cache, self.plan_id))
+                    except RuntimeError:
+                        pass
+                    break
+        self._broadcast_task_states()
 
     def _broadcast_task_states(self) -> None:
         task_states = [{"task_id": t["task_id"], "status": t["status"]} for t in self.chain_cache]
@@ -320,10 +355,10 @@ class ExecutorRunner:
         stats = executor_manager["get_executor_stats"]()
         self._emit("executor-states-update", {"executors": executors, "stats": stats})
 
-    def _broadcast_verifier_states(self) -> None:
-        verifiers = verifier_manager["get_all_verifiers"]()
-        stats = verifier_manager["get_verifier_stats"]()
-        self._emit("verifier-states-update", {"verifiers": verifiers, "stats": stats})
+    def _broadcast_validator_states(self) -> None:
+        validators = validator_manager["get_all_validators"]()
+        stats = validator_manager["get_validator_stats"]()
+        self._emit("validator-states-update", {"validators": validators, "stats": stats})
 
     async def _rollback_task(self, task: Dict) -> None:
         """Rollback task and all affected: upstream deps + downstream dependents.
@@ -360,10 +395,10 @@ class ExecutorRunner:
                     self.task_failure_count.pop(task_id, None)
                     self.task_tasks.pop(task_id, None)
                     executor_manager["release_executor_by_task_id"](task_id)
-                    verifier_manager["release_verifier_by_task_id"](task_id)
+                    validator_manager["release_validator_by_task_id"](task_id)
 
         self._broadcast_executor_states()
-        self._broadcast_verifier_states()
+        self._broadcast_validator_states()
 
         ready = [
             self.task_map[tid]
@@ -375,25 +410,56 @@ class ExecutorRunner:
         if ready:
             self._check_specific_tasks(ready)
 
-    def set_timetable_layout_cache(self, layout: Dict) -> None:
+    def set_timetable_layout_cache(
+        self,
+        layout: Dict,
+        plan_id: Optional[str] = None,
+        execution: Optional[Dict] = None,
+    ) -> None:
         self.timetable_layout = layout
+        self.plan_id = plan_id
+        self.execution_cache = execution
         self.chain_cache = []
+        task_status_by_id = {}
+        if execution:
+            for t in execution.get("tasks") or []:
+                if t.get("task_id"):
+                    task_status_by_id[t["task_id"]] = t.get("status") or "undone"
+        full_task_by_id = {}
+        if execution:
+            for t in execution.get("tasks") or []:
+                if t.get("task_id"):
+                    full_task_by_id[t["task_id"]] = t
         grid = layout.get("grid", [])
         isolated_tasks = layout.get("isolatedTasks", [])
         for row in grid:
             for cell in row or []:
                 if cell and cell.get("task_id"):
+                    tid = cell["task_id"]
+                    status = task_status_by_id.get(tid) or cell.get("status") or "undone"
+                    full = full_task_by_id.get(tid, {})
                     self.chain_cache.append({
-                        "task_id": cell["task_id"],
+                        "task_id": tid,
                         "dependencies": cell.get("dependencies") or [],
-                        "status": cell.get("status") or "undone",
+                        "status": status,
+                        "description": full.get("description") or cell.get("description"),
+                        "input": full.get("input") or cell.get("input"),
+                        "output": full.get("output") or cell.get("output"),
+                        "validation": full.get("validation") or cell.get("validation"),
                     })
         for t in isolated_tasks or []:
             if t and t.get("task_id"):
+                tid = t["task_id"]
+                status = task_status_by_id.get(tid) or t.get("status") or "undone"
+                full = full_task_by_id.get(tid, {})
                 self.chain_cache.append({
-                    "task_id": t["task_id"],
+                    "task_id": tid,
                     "dependencies": t.get("dependencies") or [],
-                    "status": t.get("status") or "undone",
+                    "status": status,
+                    "description": full.get("description") or t.get("description"),
+                    "input": full.get("input") or t.get("input"),
+                    "output": full.get("output") or t.get("output"),
+                    "validation": full.get("validation") or t.get("validation"),
                 })
 
     def stop(self) -> None:
@@ -402,10 +468,10 @@ class ExecutorRunner:
         task_ids = list(self.task_tasks.keys())
         for task_id in task_ids:
             executor_manager["release_executor_by_task_id"](task_id)
-            verifier_manager["release_verifier_by_task_id"](task_id)
+            validator_manager["release_validator_by_task_id"](task_id)
         self.task_tasks.clear()
         self._broadcast_executor_states()
-        self._broadcast_verifier_states()
+        self._broadcast_validator_states()
 
     async def stop_async(self) -> None:
         """Stop execution with lock-protected release (preferred from API)."""
@@ -414,7 +480,7 @@ class ExecutorRunner:
         async with self._worker_lock:
             for task_id in task_ids:
                 executor_manager["release_executor_by_task_id"](task_id)
-                verifier_manager["release_verifier_by_task_id"](task_id)
+                validator_manager["release_validator_by_task_id"](task_id)
         self.task_tasks.clear()
         self._broadcast_executor_states()
-        self._broadcast_verifier_states()
+        self._broadcast_validator_states()

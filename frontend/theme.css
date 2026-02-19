@@ -23,7 +23,7 @@
     --bg-section-planner: #fefefe;
     --bg-section-monitor: #fafbfc;
     --bg-section-executor: #fefefe;
-    --bg-section-verifier: #fefefe;
+    --bg-section-validator: #fefefe;
     --bg-area-primary: #ffffff;
     --bg-area-secondary: #f8f9fa;
     --bg-area-tertiary: #f1f3f5;
@@ -48,9 +48,9 @@
     --status-doing: #fff3cd;
     --status-doing-hover: #ffe69c;
     --status-doing-accent: #b38600;
-    --status-verifying: #b3d9ff;
-    --status-verifying-hover: #99ccff;
-    --status-verifying-accent: #1976d2;
+    --status-validating: #b3d9ff;
+    --status-validating-hover: #99ccff;
+    --status-validating-accent: #1976d2;
     --status-done: #d4edda;
     --status-done-hover: #c3e6cb;
     --status-done-accent: #2e7d32;
@@ -59,19 +59,19 @@
     --status-failed-border: #ff6666;
     --status-failed-text: #ff6666;
 
-    /* ========== Status - Executor/Verifier ========== */
+    /* ========== Status - Executor/Validator ========== */
     --executor-idle-bg: #e8f5e9;
     --executor-idle-border: #4caf50;
     --executor-idle-text: #4caf50;
     --executor-busy-bg: #fff3e0;
     --executor-busy-border: #ff9800;
     --executor-busy-text: #ff9800;
-    --verifier-idle-bg: #e3f2fd;
-    --verifier-idle-border: #2196f3;
-    --verifier-idle-text: #2196f3;
-    --verifier-busy-bg: #fff3e0;
-    --verifier-busy-border: #ff9800;
-    --verifier-busy-text: #ff9800;
+    --validator-idle-bg: #e3f2fd;
+    --validator-idle-border: #2196f3;
+    --validator-idle-text: #2196f3;
+    --validator-busy-bg: #fff3e0;
+    --validator-busy-border: #ff9800;
+    --validator-busy-text: #ff9800;
 
     /* ========== Interactive ========== */
     --interactive-hover: #f7fafc;
@@ -93,7 +93,7 @@
     --tree-line-stroke: #b0b8c4;
     --tree-idea-bg: #f1f5f9;
     --tree-status-doing-border: #e6b800;
-    --tree-status-verifying-border: #1976d2;
+    --tree-status-validating-border: #1976d2;
     --tree-status-done-border: #2e7d32;
 
     /* ========== Shadows ========== */
@@ -127,7 +127,7 @@
     --bg-section-planner: #16162a;
     --bg-section-monitor: #16162a;
     --bg-section-executor: #16162a;
-    --bg-section-verifier: #16162a;
+    --bg-section-validator: #16162a;
     --bg-area-primary: #1e1e35;
     --bg-area-secondary: #252540;
     --bg-area-tertiary: #2d2d4a;
@@ -149,9 +149,9 @@
     --status-doing: #5c4a00;
     --status-doing-hover: #7a6200;
     --status-doing-accent: #e6b800;
-    --status-verifying: #1e3a5f;
-    --status-verifying-hover: #2a4a7a;
-    --status-verifying-accent: #64b5f6;
+    --status-validating: #1e3a5f;
+    --status-validating-hover: #2a4a7a;
+    --status-validating-accent: #64b5f6;
     --status-done: #1b3d1f;
     --status-done-hover: #2e5c33;
     --status-done-accent: #81c784;
@@ -166,12 +166,12 @@
     --executor-busy-bg: #5c3a00;
     --executor-busy-border: #ffb74d;
     --executor-busy-text: #ffb74d;
-    --verifier-idle-bg: #1e3a5f;
-    --verifier-idle-border: #64b5f6;
-    --verifier-idle-text: #64b5f6;
-    --verifier-busy-bg: #5c3a00;
-    --verifier-busy-border: #ffb74d;
-    --verifier-busy-text: #ffb74d;
+    --validator-idle-bg: #1e3a5f;
+    --validator-idle-border: #64b5f6;
+    --validator-idle-text: #64b5f6;
+    --validator-busy-bg: #5c3a00;
+    --validator-busy-border: #ffb74d;
+    --validator-busy-text: #ffb74d;
 
     --interactive-hover: #252540;
     --interactive-active: #2d2d4a;
@@ -189,7 +189,7 @@
     --tree-line-stroke: #4a5568;
     --tree-idea-bg: #252540;
     --tree-status-doing-border: #e6b800;
-    --tree-status-verifying-border: #64b5f6;
+    --tree-status-validating-border: #64b5f6;
     --tree-status-done-border: #81c784;
 
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -222,7 +222,7 @@
     --bg-section-planner: #0a0a0a;
     --bg-section-monitor: #0a0a0a;
     --bg-section-executor: #0a0a0a;
-    --bg-section-verifier: #0a0a0a;
+    --bg-section-validator: #0a0a0a;
     --bg-area-primary: #0f0f0f;
     --bg-area-secondary: #141414;
     --bg-area-tertiary: #1a1a1a;
@@ -244,9 +244,9 @@
     --status-doing: #3d3000;
     --status-doing-hover: #524000;
     --status-doing-accent: #e6b800;
-    --status-verifying: #0f2847;
-    --status-verifying-hover: #1a3a5c;
-    --status-verifying-accent: #60a5fa;
+    --status-validating: #0f2847;
+    --status-validating-hover: #1a3a5c;
+    --status-validating-accent: #60a5fa;
     --status-done: #0f2e14;
     --status-done-hover: #1a4020;
     --status-done-accent: #4ade80;
@@ -261,12 +261,12 @@
     --executor-busy-bg: #3d2a00;
     --executor-busy-border: #fbbf24;
     --executor-busy-text: #fbbf24;
-    --verifier-idle-bg: #0f2847;
-    --verifier-idle-border: #60a5fa;
-    --verifier-idle-text: #60a5fa;
-    --verifier-busy-bg: #3d2a00;
-    --verifier-busy-border: #fbbf24;
-    --verifier-busy-text: #fbbf24;
+    --validator-idle-bg: #0f2847;
+    --validator-idle-border: #60a5fa;
+    --validator-idle-text: #60a5fa;
+    --validator-busy-bg: #3d2a00;
+    --validator-busy-border: #fbbf24;
+    --validator-busy-text: #fbbf24;
 
     --interactive-hover: #141414;
     --interactive-active: #1a1a1a;
@@ -284,7 +284,7 @@
     --tree-line-stroke: #404040;
     --tree-idea-bg: #141414;
     --tree-status-doing-border: #e6b800;
-    --tree-status-verifying-border: #60a5fa;
+    --tree-status-validating-border: #60a5fa;
     --tree-status-done-border: #4ade80;
 
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);

@@ -16,7 +16,7 @@ backend/
 │   ├── __init__.py       # build_layout_from_execution
 │   └── timetable.py      # build_task_layout、clean_dependencies
 ├── planner/               # Planner 模块（AI 规划）
-├── workers/               # Executor、Verifier 模块
+├── workers/               # Executor、Validator 模块
 ├── db/                    # 数据持久化
 └── test/                 # Mock AI、mock_stream
 ```

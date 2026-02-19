@@ -16,10 +16,10 @@ python3 -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001 --loop asyncio --htt
 
 | 操作 | 说明 |
 |------|------|
-| 输入 Idea + Generate Plan | AI 规划：Verify → Decompose → Format |
+| 输入 Idea + Generate Plan | AI 规划：Atomicity → Decompose → Format |
 | Load Example Idea | 加载示例想法 |
-| Generate execution map | 从 plan 生成 execution，渲染 Monitor 地图 |
-| Mock Execution | 模拟执行 |
+| Generate Map | 从 plan 生成 execution，渲染 Monitor 地图 |
+| Execution | 执行任务（Mock AI 模式为模拟执行，LLM 模式为真实调用） |
 | 主题切换 | 右上角 ☀/🌙/◻ 切换 Light / Dark / Black |
 
 ## 项目结构
@@ -28,11 +28,11 @@ python3 -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001 --loop asyncio --htt
 maars/
 ├── backend/
 │   ├── main.py          # FastAPI + Socket.io
-│   ├── planner/         # 规划（verify/decompose/format）
+│   ├── planner/         # 规划（atomicity/decompose/format）
 │   ├── monitor/         # 布局、execution 生成
-│   ├── workers/         # executor、verifier、runner
+│   ├── workers/         # executor、validator、runner
 │   ├── tasks/           # 任务缓存与阶段
-│   ├── db/              # db/{plan_id}/plan.json, execution.json, verification.json
+│   ├── db/              # db/{plan_id}/plan.json, execution.json, validation.json
 │   └── test/            # Mock AI、mock_stream
 └── frontend/
     ├── index.html

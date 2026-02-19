@@ -19,6 +19,31 @@ DEFAULT_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_MODEL = "gpt-4o"
 
 
+def merge_phase_config(api_config: dict, phase: str) -> dict:
+    """
+    Merge global api_config with phase-specific overrides.
+    phase: atomicity | decompose | format | execute | validate
+    Returns dict with baseUrl, apiKey, model (camelCase for compatibility).
+    """
+    cfg = dict(api_config or {})
+    phases = cfg.get("phases") or {}
+    phase_cfg = phases.get(phase) or {}
+    if isinstance(phase_cfg, dict):
+        base = {
+            "baseUrl": cfg.get("baseUrl") or cfg.get("base_url"),
+            "apiKey": cfg.get("apiKey") or cfg.get("api_key"),
+            "model": cfg.get("model"),
+        }
+        for k, v in phase_cfg.items():
+            key = k if k in ("baseUrl", "apiKey", "model") else {"base_url": "baseUrl", "api_key": "apiKey"}.get(k, k)
+            if v is not None and v != "":
+                base[key] = v
+        if not base.get("model"):
+            base["model"] = DEFAULT_MODEL
+        return base
+    return cfg
+
+
 def _create_client(api_config: dict) -> AsyncOpenAI:
     base_url = (api_config.get("baseUrl") or DEFAULT_BASE_URL).rstrip("/")
     api_key = api_config.get("apiKey") or "not-needed"
@@ -37,14 +62,20 @@ async def _chat_completion_impl(
     on_chunk: Optional[Callable[[str], None]],
     abort_event: Optional[Any],
     stream: bool,
+    temperature: Optional[float] = None,
+    response_format: Optional[dict] = None,
 ) -> str:
     """Inner implementation with retry."""
+    extra = {"temperature": temperature} if temperature is not None else {}
+    if response_format:
+        extra["response_format"] = response_format
     if stream:
         full_content = []
         stream_obj = await client.chat.completions.create(
             model=model,
             messages=messages,
             stream=True,
+            **extra,
         )
         async for chunk in stream_obj:
             if abort_event and abort_event.is_set():
@@ -60,6 +91,7 @@ async def _chat_completion_impl(
             model=model,
             messages=messages,
             stream=False,
+            **extra,
         )
         return resp.choices[0].message.content or ""
 
@@ -70,10 +102,13 @@ async def chat_completion(
     on_chunk: Optional[Callable[[str], None]] = None,
     abort_event: Optional[Any] = None,
     stream: bool = True,
+    temperature: Optional[float] = None,
+    response_format: Optional[dict] = None,
 ) -> str:
     """Call OpenAI-compatible chat completions API."""
     model = api_config.get("model") or DEFAULT_MODEL
+    temp = temperature if temperature is not None else api_config.get("temperature")
     client = _create_client(api_config)
     return await _chat_completion_impl(
-        client, model, messages, on_chunk, abort_event, stream
+        client, model, messages, on_chunk, abort_event, stream, temp, response_format
     )

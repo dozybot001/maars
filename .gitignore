@@ -1,0 +1,5 @@
+# Plan data folders (generated at runtime)
+backend/db/plan_*/
+
+# API config (contains secrets)
+backend/db/api_config.json

@@ -53,6 +53,7 @@
             status: task.status,
             input: task.input,
             output: task.output,
+            validation: task.validation,
             task_type: task.task_type,
             inputs: task.inputs,
             outputs: task.outputs,
@@ -346,6 +347,16 @@
         const out = task.output || {};
         const outputDesc = hasInputOutput ? [out.artifact || out.description, out.format].filter(Boolean).join(' · ') || '-' : '-';
         const outputRow = hasInputOutput ? `<div class="task-detail-row"><span class="task-detail-label">Output:</span><span class="task-detail-value">${escapeHtml(outputDesc)}</span></div>` : '';
+        const v = task.validation;
+        const hasValidation = v && (v.description || (Array.isArray(v.criteria) && v.criteria.length > 0));
+        const validationRow = hasValidation ? (() => {
+            const desc = v.description ? `<div class="validation-desc">${escapeHtml(v.description)}</div>` : '';
+            const criteriaList = (v.criteria || []).map(c => `<li>${escapeHtml(c)}</li>`).join('');
+            const criteriaHtml = criteriaList ? `<ul class="validation-criteria">${criteriaList}</ul>` : '';
+            const optionalList = (v.optionalChecks || []).map(c => `<li>${escapeHtml(c)}</li>`).join('');
+            const optionalHtml = optionalList ? `<ul class="validation-optional">${optionalList}</ul>` : '';
+            return `<div class="task-detail-row task-detail-validation"><span class="task-detail-label">Validation:</span><div class="task-detail-value">${desc}${criteriaHtml}${optionalHtml}</div></div>`;
+        })() : '';
 
         popoverEl = document.createElement('div');
         popoverEl.className = 'task-detail-popover';
@@ -362,6 +373,7 @@
                 ${statusRow}
                 ${inputRow}
                 ${outputRow}
+                ${validationRow}
             </div>
         `;
 
@@ -418,14 +430,31 @@
         });
     }
 
+    function updatePlannerQualityBadge(score, comment) {
+        const badge = document.getElementById('plannerQualityBadge');
+        if (!badge) return;
+        if (score == null || score === undefined) {
+            badge.style.display = 'none';
+            return;
+        }
+        badge.textContent = `质量: ${score}`;
+        badge.title = comment || '';
+        badge.style.display = '';
+        badge.classList.remove('quality-high', 'quality-mid', 'quality-low');
+        if (score >= 80) badge.classList.add('quality-high');
+        else if (score >= 60) badge.classList.add('quality-mid');
+        else badge.classList.add('quality-low');
+    }
+
     window.TaskTree = {
         AREA,
         renderPlannerTree,
         renderMonitorTasksTree: (data) => renderFull(data, AREA.monitor, { withStatus: (task) => task.status != null }),
-        clearPlannerTree: () => clear(AREA.planner),
+        clearPlannerTree: () => { clear(AREA.planner); updatePlannerQualityBadge(null); },
         initClickHandlers,
         showTaskPopover,
         hideTaskPopover,
+        updatePlannerQualityBadge,
         buildTaskDataForPopover: (task) => getTaskDataForPopover(task),
         get plannerTreeData() { return plannerTreeData; },
     };

@@ -1,1 +1,1 @@
-"""Planner module - verify, decompose, format."""
+"""Planner module - atomicity check, decompose, format."""
