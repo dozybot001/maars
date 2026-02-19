@@ -229,7 +229,7 @@ async def api_monitor_timetable(body: MonitorTimetableRequest):
     execution = body.execution
     plan_id = body.plan_id
     layout = build_layout_from_execution(execution)
-    executor_runner.set_timetable_layout_cache(layout, plan_id=plan_id, execution=execution)
+    executor_runner.set_layout(layout, plan_id=plan_id, execution=execution)
     return {"layout": layout}
 
 

@@ -33,8 +33,15 @@ class ExecutorRunner:
         self.MAX_FAILURES = 3
         self.timetable_layout = None
         self.plan_id: Optional[str] = None
-        self.execution_cache: Optional[Dict] = None
         self.api_config: Optional[Dict] = None
+
+    def _persist_execution(self) -> None:
+        """Persist chain_cache to execution.json (find-by-id updates are done in-place on chain_cache)."""
+        if self.plan_id and self.chain_cache:
+            try:
+                asyncio.create_task(save_execution({"tasks": self.chain_cache}, self.plan_id))
+            except RuntimeError:
+                pass
 
     def _emit(self, event: str, data: dict) -> None:
         """Emit event to all clients (fire-and-forget)."""
@@ -64,11 +71,8 @@ class ExecutorRunner:
             timetable_layout = self.timetable_layout
             for task in self.chain_cache:
                 task["status"] = "undone"
-            if self.execution_cache and self.plan_id:
-                for t in (self.execution_cache.get("tasks") or []):
-                    if t.get("task_id"):
-                        t["status"] = "undone"
-                await save_execution(self.execution_cache, self.plan_id)
+            if self.plan_id and self.chain_cache:
+                await save_execution({"tasks": self.chain_cache}, self.plan_id)
 
             self.running_tasks.clear()
             self.completed_tasks.clear()
@@ -92,7 +96,7 @@ class ExecutorRunner:
             self._broadcast_task_states()
             await self._execute_tasks()
         except Exception as e:
-            logger.exception("Error in mock execution")
+            logger.exception("Error in execution")
             self._emit("execution-error", {"error": str(e)})
             raise
         finally:
@@ -102,7 +106,7 @@ class ExecutorRunner:
             self._broadcast_executor_states()
             self._broadcast_validator_states()
 
-    def _get_pending_ready_tasks(self) -> List[Dict]:
+    def _get_ready_tasks(self) -> List[Dict]:
         result = []
         for task_id in self.pending_tasks:
             if task_id in self.running_tasks or task_id in self.completed_tasks:
@@ -113,7 +117,7 @@ class ExecutorRunner:
         return result
 
     async def _execute_tasks(self) -> None:
-        initial_ready = self._get_pending_ready_tasks()
+        initial_ready = self._get_ready_tasks()
         logger.info("Found %d initial ready tasks out of %d total tasks", len(initial_ready), len(self.chain_cache))
 
         for task in initial_ready:
@@ -125,17 +129,22 @@ class ExecutorRunner:
 
             self.task_tasks[task["task_id"]] = asyncio.create_task(run_with_error_handling())
 
-        # Event-driven: wait for completion (task completion triggers _check_specific_tasks)
-        while len(self.completed_tasks) < len(self.chain_cache) or len(self.running_tasks) > 0:
+        # Event-driven: wait for completion (task completion triggers _schedule_ready_tasks)
+        while self.is_running and (len(self.completed_tasks) < len(self.chain_cache) or len(self.running_tasks) > 0):
             await asyncio.sleep(0.1)
 
         logger.info("Final state: %d/%d tasks completed", len(self.completed_tasks), len(self.chain_cache))
-        self._emit("execution-complete", {"completed": len(self.completed_tasks), "total": len(self.chain_cache)})
+        if self.is_running:
+            self._emit("execution-complete", {"completed": len(self.completed_tasks), "total": len(self.chain_cache)})
+        else:
+            self._emit("execution-error", {"error": "Execution stopped by user"})
 
     async def _execute_task(self, task: Dict) -> None:
+        if not self.is_running:
+            return
         executor_id = None
         retry_count = 0
-        while executor_id is None and retry_count < 50:
+        while self.is_running and executor_id is None and retry_count < 50:
             async with self._worker_lock:
                 executor_id = executor_manager["assign_task"](task["task_id"])
             if executor_id is None:
@@ -153,7 +162,7 @@ class ExecutorRunner:
             self.pending_tasks.discard(task["task_id"])
             self._update_task_status(task["task_id"], "done")
             dependents = self.reverse_dependency_index.get(task["task_id"], [])
-            self._check_specific_tasks([self.task_map[id] for id in dependents if self.task_map.get(id)])
+            self._schedule_ready_tasks([self.task_map[id] for id in dependents if self.task_map.get(id)])
             return
 
         self.running_tasks.add(task["task_id"])
@@ -288,10 +297,10 @@ class ExecutorRunner:
                 if pt and self._are_dependencies_satisfied(pt):
                     candidates.add(task_id)
 
-        self._check_specific_tasks([self.task_map[id] for id in candidates if self.task_map.get(id)])
+        self._schedule_ready_tasks([self.task_map[id] for id in candidates if self.task_map.get(id)])
 
-    def _check_specific_tasks(self, tasks_to_check: List[Dict]) -> None:
-        if not tasks_to_check:
+    def _schedule_ready_tasks(self, tasks_to_check: List[Dict]) -> None:
+        if not tasks_to_check or not self.is_running:
             return
         ready = [
             t for t in tasks_to_check
@@ -322,7 +331,7 @@ class ExecutorRunner:
         self.pending_tasks.discard(task["task_id"])
         self._update_task_status(task["task_id"], "execution-failed")
         dependents = self.reverse_dependency_index.get(task["task_id"], [])
-        self._check_specific_tasks([self.task_map[id] for id in dependents if self.task_map.get(id)])
+        self._schedule_ready_tasks([self.task_map[id] for id in dependents if self.task_map.get(id)])
 
     def _are_dependencies_satisfied(self, task: Dict) -> bool:
         deps = task.get("dependencies") or []
@@ -331,19 +340,10 @@ class ExecutorRunner:
         return all(d in self.completed_tasks for d in deps)
 
     def _update_task_status(self, task_id: str, status: str) -> None:
-        for t in self.chain_cache:
-            if t.get("task_id") == task_id:
-                t["status"] = status
-                break
-        if self.execution_cache and self.plan_id:
-            for t in (self.execution_cache.get("tasks") or []):
-                if t.get("task_id") == task_id:
-                    t["status"] = status
-                    try:
-                        asyncio.create_task(save_execution(self.execution_cache, self.plan_id))
-                    except RuntimeError:
-                        pass
-                    break
+        t = self.task_map.get(task_id)
+        if t:
+            t["status"] = status
+        self._persist_execution()
         self._broadcast_task_states()
 
     def _broadcast_task_states(self) -> None:
@@ -408,9 +408,9 @@ class ExecutorRunner:
             and tid in self.pending_tasks
         ]
         if ready:
-            self._check_specific_tasks(ready)
+            self._schedule_ready_tasks(ready)
 
-    def set_timetable_layout_cache(
+    def set_layout(
         self,
         layout: Dict,
         plan_id: Optional[str] = None,
@@ -418,26 +418,20 @@ class ExecutorRunner:
     ) -> None:
         self.timetable_layout = layout
         self.plan_id = plan_id
-        self.execution_cache = execution
         self.chain_cache = []
-        task_status_by_id = {}
+        task_by_id = {}
         if execution:
             for t in execution.get("tasks") or []:
                 if t.get("task_id"):
-                    task_status_by_id[t["task_id"]] = t.get("status") or "undone"
-        full_task_by_id = {}
-        if execution:
-            for t in execution.get("tasks") or []:
-                if t.get("task_id"):
-                    full_task_by_id[t["task_id"]] = t
+                    task_by_id[t["task_id"]] = t
         grid = layout.get("grid", [])
         isolated_tasks = layout.get("isolatedTasks", [])
         for row in grid:
             for cell in row or []:
                 if cell and cell.get("task_id"):
                     tid = cell["task_id"]
-                    status = task_status_by_id.get(tid) or cell.get("status") or "undone"
-                    full = full_task_by_id.get(tid, {})
+                    full = task_by_id.get(tid, {})
+                    status = full.get("status") or cell.get("status") or "undone"
                     self.chain_cache.append({
                         "task_id": tid,
                         "dependencies": cell.get("dependencies") or [],
@@ -450,8 +444,8 @@ class ExecutorRunner:
         for t in isolated_tasks or []:
             if t and t.get("task_id"):
                 tid = t["task_id"]
-                status = task_status_by_id.get(tid) or t.get("status") or "undone"
-                full = full_task_by_id.get(tid, {})
+                full = task_by_id.get(tid, {})
+                status = full.get("status") or t.get("status") or "undone"
                 self.chain_cache.append({
                     "task_id": tid,
                     "dependencies": t.get("dependencies") or [],
@@ -462,25 +456,19 @@ class ExecutorRunner:
                     "validation": full.get("validation") or t.get("validation"),
                 })
 
-    def stop(self) -> None:
-        """Stop execution (sync). Use stop_async for lock-protected release."""
-        self.is_running = False
-        task_ids = list(self.task_tasks.keys())
-        for task_id in task_ids:
-            executor_manager["release_executor_by_task_id"](task_id)
-            validator_manager["release_validator_by_task_id"](task_id)
-        self.task_tasks.clear()
-        self._broadcast_executor_states()
-        self._broadcast_validator_states()
-
     async def stop_async(self) -> None:
         """Stop execution with lock-protected release (preferred from API)."""
         self.is_running = False
         task_ids = list(self.task_tasks.keys())
+        for task_id in task_ids:
+            asyncio_task = self.task_tasks.get(task_id)
+            if asyncio_task and not asyncio_task.done():
+                asyncio_task.cancel()
         async with self._worker_lock:
             for task_id in task_ids:
                 executor_manager["release_executor_by_task_id"](task_id)
                 validator_manager["release_validator_by_task_id"](task_id)
         self.task_tasks.clear()
+        self.running_tasks.clear()
         self._broadcast_executor_states()
         self._broadcast_validator_states()

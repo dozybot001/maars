@@ -10,6 +10,7 @@
     const diagramArea = document.getElementById('diagramArea');
     const generateTimetableBtn = document.getElementById('generateTimetableBtn');
     const executionBtn = document.getElementById('executionBtn');
+    const stopExecutionBtn = document.getElementById('stopExecutionBtn');
 
     window.MAARS.state = window.MAARS.state || {};
     const state = window.MAARS.state;
@@ -264,12 +265,23 @@
                 const error = await response.json();
                 throw new Error(error.error || 'Failed to start execution');
             }
+            if (stopExecutionBtn) stopExecutionBtn.style.display = '';
         } catch (error) {
             console.error('Error in execution:', error);
             alert('Error: ' + error.message);
             btn.textContent = originalText;
             btn.disabled = false;
+            if (stopExecutionBtn) stopExecutionBtn.style.display = 'none';
         }
+    }
+
+    function stopExecution() {
+        fetch(`${cfg.API_BASE_URL}/execution/stop`, { method: 'POST' }).catch(() => {});
+    }
+
+    function resetExecutionButtons() {
+        if (executionBtn) { executionBtn.disabled = false; executionBtn.textContent = 'Execution'; }
+        if (stopExecutionBtn) stopExecutionBtn.style.display = 'none';
     }
 
     async function generateTimetable() {
@@ -288,7 +300,7 @@
             if (!genRes.ok) throw new Error(genData.error || 'Failed to generate execution from plan');
             const execution = genData.execution;
             if (!execution || !execution.tasks?.length) {
-                alert('No atomic tasks in plan. Generate and decompose plan first.');
+                alert('No atomic tasks in plan. Generate plan first.');
                 btn.textContent = originalText;
                 btn.disabled = false;
                 return;
@@ -324,6 +336,7 @@
     function init() {
         if (generateTimetableBtn) generateTimetableBtn.addEventListener('click', generateTimetable);
         if (executionBtn) executionBtn.addEventListener('click', runExecution);
+        if (stopExecutionBtn) stopExecutionBtn.addEventListener('click', stopExecution);
     }
 
     window.MAARS.monitor = {
@@ -336,5 +349,6 @@
         renderExecutors,
         renderValidators,
         calculateFixedCellSize,
+        resetExecutionButtons,
     };
 })();

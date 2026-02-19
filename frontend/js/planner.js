@@ -1,5 +1,5 @@
 /**
- * MAARS planner - generate plan, decompose, stop.
+ * MAARS planner - generate plan, stop.
  */
 (function () {
     'use strict';
@@ -9,13 +9,12 @@
 
     const ideaInput = document.getElementById('ideaInput');
     const generatePlanBtn = document.getElementById('generatePlanBtn');
-    const decomposeBtn = document.getElementById('decomposeBtn');
     const stopPlanBtn = document.getElementById('stopPlanBtn');
     const loadExampleIdeaBtn = document.getElementById('loadExampleIdeaBtn');
 
     let planRunAbortController = null;
 
-    async function buildPlanRunBody(extra = {}) {
+    async function buildPlanRunRequest(extra = {}) {
         const planId = await cfg.resolvePlanId();
         return { planId, ...extra };
     }
@@ -34,7 +33,6 @@
 
         try {
             generatePlanBtn.disabled = true;
-            decomposeBtn.disabled = true;
             if (stopPlanBtn) stopPlanBtn.style.display = '';
             planRunAbortController = new AbortController();
 
@@ -42,7 +40,7 @@
             const response = await fetch(`${cfg.API_BASE_URL}/plan/run`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(await buildPlanRunBody({ idea })),
+                body: JSON.stringify(await buildPlanRunRequest({ idea })),
                 signal: planRunAbortController.signal
             });
 
@@ -56,35 +54,6 @@
         } finally {
             generatePlanBtn.disabled = false;
             generatePlanBtn.textContent = 'Generate Plan';
-            decomposeBtn.disabled = false;
-            if (stopPlanBtn) stopPlanBtn.style.display = 'none';
-            planRunAbortController = null;
-        }
-    }
-
-    async function decomposeTask() {
-        if (!decomposeBtn || decomposeBtn.disabled) return;
-        try {
-            decomposeBtn.disabled = true;
-            decomposeBtn.textContent = 'Decomposing...';
-            if (stopPlanBtn) stopPlanBtn.style.display = '';
-            planRunAbortController = new AbortController();
-
-            const response = await fetch(`${cfg.API_BASE_URL}/plan/run`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(await buildPlanRunBody()),
-                signal: planRunAbortController.signal
-            });
-            const res = await response.json();
-            if (!response.ok) throw new Error(res.error || 'Failed to decompose');
-        } catch (error) {
-            if (error.name === 'AbortError') return;
-            console.error('Error decomposing:', error);
-            alert('Error: ' + (error.message || 'Failed to decompose'));
-        } finally {
-            decomposeBtn.disabled = false;
-            decomposeBtn.textContent = 'Decompose';
             if (stopPlanBtn) stopPlanBtn.style.display = 'none';
             planRunAbortController = null;
         }
@@ -97,16 +66,14 @@
 
     function resetPlanButtons() {
         if (generatePlanBtn) { generatePlanBtn.disabled = false; generatePlanBtn.textContent = 'Generate Plan'; }
-        if (decomposeBtn) { decomposeBtn.disabled = false; decomposeBtn.textContent = 'Decompose'; }
         if (stopPlanBtn) stopPlanBtn.style.display = 'none';
     }
 
     function init() {
         if (generatePlanBtn) generatePlanBtn.addEventListener('click', generatePlan);
-        if (decomposeBtn) decomposeBtn.addEventListener('click', decomposeTask);
         if (stopPlanBtn) stopPlanBtn.addEventListener('click', stopPlanRun);
         if (loadExampleIdeaBtn) loadExampleIdeaBtn.addEventListener('click', api.loadExampleIdea);
     }
 
-    window.MAARS.planner = { init, generatePlan, decomposeTask, stopPlanRun, resetPlanButtons };
+    window.MAARS.planner = { init, generatePlan, stopPlanRun, resetPlanButtons };
 })();

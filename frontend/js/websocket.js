@@ -13,10 +13,8 @@
     state.plannerThinkingBlocks = [];
     window.MAARS.state = state;
 
-    const generatePlanBtn = document.getElementById('generatePlanBtn');
-    const decomposeBtn = document.getElementById('decomposeBtn');
-    const stopPlanBtn = document.getElementById('stopPlanBtn');
     const executionBtn = document.getElementById('executionBtn');
+    const stopExecutionBtn = document.getElementById('stopExecutionBtn');
 
     function init() {
         if (state.socket && state.socket.connected) return;
@@ -163,13 +161,17 @@
         });
 
         state.socket.on('execution-error', (data) => {
-            console.error('Execution error:', data.error);
-            alert('Execution error: ' + data.error);
-            if (executionBtn) { executionBtn.disabled = false; executionBtn.textContent = 'Execution'; }
+            const isStoppedByUser = (data.error || '').includes('stopped by user');
+            if (!isStoppedByUser) {
+                console.error('Execution error:', data.error);
+                alert('Execution error: ' + data.error);
+            }
+            monitor.resetExecutionButtons();
         });
 
         state.socket.on('execution-complete', (data) => {
             console.log(`Execution complete: ${data.completed}/${data.total} tasks completed`);
+            if (stopExecutionBtn) stopExecutionBtn.style.display = 'none';
             if (executionBtn) {
                 executionBtn.disabled = false;
                 executionBtn.textContent = 'Execution Complete!';
