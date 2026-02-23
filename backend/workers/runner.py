@@ -34,14 +34,26 @@ class ExecutorRunner:
         self.timetable_layout = None
         self.plan_id: Optional[str] = None
         self.api_config: Optional[Dict] = None
+        self.abort_event: Optional[asyncio.Event] = None
+        self._persist_lock = asyncio.Lock()
+        self._start_lock = asyncio.Lock()
 
     def _persist_execution(self) -> None:
-        """Persist chain_cache to execution.json (find-by-id updates are done in-place on chain_cache)."""
+        """Persist chain_cache to execution.json. Serialized via _persist_lock to avoid concurrent write races."""
         if self.plan_id and self.chain_cache:
             try:
-                asyncio.create_task(save_execution({"tasks": self.chain_cache}, self.plan_id))
+                asyncio.create_task(self._persist_execution_async())
             except RuntimeError:
                 pass
+
+    async def _persist_execution_async(self) -> None:
+        """Serialized persist: prevents multiple save_execution from overwriting each other with stale data."""
+        async with self._persist_lock:
+            if self.plan_id and self.chain_cache:
+                try:
+                    await save_execution({"tasks": list(self.chain_cache)}, self.plan_id)
+                except Exception as e:
+                    logger.warning("Failed to persist execution: %s", e)
 
     def _emit(self, event: str, data: dict) -> None:
         """Emit event to all clients (fire-and-forget)."""
@@ -54,14 +66,16 @@ class ExecutorRunner:
     async def start_execution(self, api_config: Optional[Dict] = None) -> None:
         if api_config is not None:
             self.api_config = api_config
-        if self.is_running:
-            raise ValueError("Execution is already running")
-        if not self.chain_cache:
-            raise ValueError("No execution map cache found. Please generate map first.")
-        if not self.timetable_layout:
-            raise ValueError("No timetable layout cache found. Please generate map first.")
-
-        self.is_running = True
+        async with self._start_lock:
+            if self.is_running:
+                raise ValueError("Execution is already running")
+            if not self.chain_cache:
+                raise ValueError("No execution map cache found. Please generate map first.")
+            if not self.timetable_layout:
+                raise ValueError("No timetable layout cache found. Please generate map first.")
+            self.is_running = True
+        self.abort_event = asyncio.Event()
+        self.abort_event.clear()
         try:
             executor_manager["initialize_executors"]()
             validator_manager["initialize_validators"]()
@@ -183,7 +197,7 @@ class ExecutorRunner:
                     output_spec=output_spec,
                     resolved_inputs=resolved_inputs,
                     api_config=self.api_config or {},
-                    abort_event=None,
+                    abort_event=self.abort_event,
                 )
                 to_save = result if isinstance(result, dict) else {"content": result}
                 await save_task_artifact(self.plan_id or "", task["task_id"], to_save)
@@ -416,6 +430,8 @@ class ExecutorRunner:
         plan_id: Optional[str] = None,
         execution: Optional[Dict] = None,
     ) -> None:
+        if self.is_running:
+            raise ValueError("Cannot set layout while execution is running")
         self.timetable_layout = layout
         self.plan_id = plan_id
         self.chain_cache = []
@@ -457,8 +473,10 @@ class ExecutorRunner:
                 })
 
     async def stop_async(self) -> None:
-        """Stop execution with lock-protected release (preferred from API)."""
+        """Stop execution: signal abort (stops API calls/token use), cancel tasks, release workers."""
         self.is_running = False
+        if self.abort_event:
+            self.abort_event.set()
         task_ids = list(self.task_tasks.keys())
         for task_id in task_ids:
             asyncio_task = self.task_tasks.get(task_id)

@@ -6,21 +6,9 @@
     const cfg = window.MAARS?.config;
     if (!cfg) return;
 
-    async function loadExampleIdea() {
+    function loadExampleIdea() {
         const ideaInput = document.getElementById('ideaInput');
-        try {
-            const planId = await cfg.resolvePlanId();
-            const response = await fetch(`${cfg.API_BASE_URL}/idea?planId=${encodeURIComponent(planId)}`);
-            const data = await response.json();
-            if (data.idea) {
-                ideaInput.value = typeof data.idea === 'string' ? data.idea : JSON.stringify(data.idea);
-            } else {
-                ideaInput.value = 'Research and analyze the latest trends in AI technology';
-            }
-        } catch (error) {
-            console.error('Error loading example idea:', error);
-            ideaInput.value = 'Research and analyze the latest trends in AI technology';
-        }
+        if (ideaInput) ideaInput.value = 'Compare Python vs JavaScript for backend development and summarize pros/cons.';
     }
 
     async function loadExecution() {
@@ -35,5 +23,11 @@
         }
     }
 
-    window.MAARS.api = { loadExampleIdea, loadExecution };
+    async function clearDb() {
+        const res = await fetch(`${cfg.API_BASE_URL}/db/clear`, { method: 'POST' });
+        if (!res.ok) throw new Error('Failed to clear DB');
+        return await res.json();
+    }
+
+    window.MAARS.api = { loadExampleIdea, loadExecution, clearDb };
 })();

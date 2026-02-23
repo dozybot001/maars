@@ -22,6 +22,10 @@
         if (str == null) return '';
         return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
+    function escapeHtml(str) {
+        if (str == null) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
 
     function buildChainCacheFromLayout(layout) {
         const cache = [];
@@ -55,10 +59,7 @@
         const safeTooltip = (desc || '').replace(/"/g, '&quot;');
         const popoverData = typeof TaskTree !== 'undefined' && TaskTree.buildTaskDataForPopover
             ? TaskTree.buildTaskDataForPopover(task) : { task_id: task.task_id, description: task.description, dependencies: task.dependencies, status: task.status, input: task.input, output: task.output, validation: task.validation };
-        return `<div class="timetable-cell task-status-${status}" data-task-id="${task.task_id}" data-task-data="${escapeHtmlAttr(JSON.stringify(popoverData))}" title="${safeTooltip}">
-            <span class="task-number">${task.task_id}</span>
-            <span class="task-description">${desc}</span>
-        </div>`;
+        return `<div class="timetable-cell task-status-${status}" data-task-id="${task.task_id}" data-task-data="${escapeHtmlAttr(JSON.stringify(popoverData))}" title="${safeTooltip}"><span class="timetable-cell-id">${escapeHtml(task.task_id)}</span></div>`;
     }
 
     function buildTimetableGridHtml(leftCols, leftRows, rightCols, rightRows, getLeftTask, getRightTask) {
@@ -162,7 +163,7 @@
         diagramArea.innerHTML = html;
 
         const treeData = layout?.treeData || [];
-        TaskTree.renderMonitorTasksTree(treeData);
+        TaskTree.renderMonitorTasksTree(treeData, layout?.layout);
 
         setTimeout(() => {
             const timetableWrapper = diagramArea.querySelector('.timetable-wrapper');
@@ -319,7 +320,7 @@
             state.previousTaskStates.clear();
             state.chainCache = buildChainCacheFromLayout(state.timetableLayout);
             renderTimetableDiagram();
-            if (state.timetableLayout?.treeData?.length) TaskTree.renderMonitorTasksTree(state.timetableLayout.treeData);
+            if (state.timetableLayout?.treeData?.length) TaskTree.renderMonitorTasksTree(state.timetableLayout.treeData, state.timetableLayout?.layout);
             const socket = window.MAARS?.state?.socket;
             if (socket && socket.connected) socket.emit('timetable-layout', { layout: state.timetableLayout });
             btn.textContent = 'Loaded!';

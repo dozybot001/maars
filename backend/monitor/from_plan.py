@@ -1,5 +1,9 @@
 """
-Generate execution from plan: extract atomic tasks, clean dependencies, recompute stages.
+Generate execution from plan: extract atomic tasks, resolve dependencies, recompute stages.
+
+Dependency resolution:
+  1. Inherit: each task inherits its ancestors' cross-subtree dependencies.
+  2. Resolve: non-atomic dep targets are replaced with their atomic descendants.
 """
 
 from typing import Dict, List, Set
@@ -10,56 +14,78 @@ def _is_atomic(task: Dict) -> bool:
     return bool(task.get("input") and task.get("output"))
 
 
-def _get_transitive_atomic_deps(
-    dep_id: str,
-    task_map: Dict[str, Dict],
-    atomic_ids: Set[str],
-    visited: Set[str],
-) -> List[str]:
-    """Get atomic task_ids that dep_id transitively depends on."""
-    if dep_id in visited:
-        return []
-    visited.add(dep_id)
-    if dep_id in atomic_ids:
-        return [dep_id]
-    task = task_map.get(dep_id)
-    if not task:
-        return []
-    result = []
-    for d in task.get("dependencies") or []:
-        result.extend(_get_transitive_atomic_deps(d, task_map, atomic_ids, visited))
-    return result
+def _get_parent_id(task_id: str) -> str:
+    if "_" in task_id:
+        return task_id.rsplit("_", 1)[0]
+    return "0"
 
 
-def _clean_dependencies_for_atomic(
-    tasks: List[Dict],
-    atomic_tasks: List[Dict],
-    task_map: Dict[str, Dict],
-) -> List[Dict]:
-    """Clean dependencies: remove non-atomic deps, replace with transitive atomic deps."""
+def _get_ancestor_chain(task_id: str) -> List[str]:
+    """Return ancestor ids from immediate parent up to root, e.g. '1_2_3' -> ['1_2', '1', '0']."""
+    chain = []
+    curr = task_id
+    while True:
+        parent = _get_parent_id(curr)
+        chain.append(parent)
+        if parent == "0":
+            break
+        curr = parent
+    return chain
+
+
+def _get_atomic_descendants(task_id: str, atomic_ids: Set[str]) -> List[str]:
+    """Find all atomic task_ids that are descendants of task_id in the decomposition tree."""
+    prefix = task_id + "_"
+    return [aid for aid in atomic_ids if aid.startswith(prefix)]
+
+
+def _resolve_deps_for_atomic(all_tasks: List[Dict], atomic_tasks: List[Dict]) -> List[Dict]:
+    """
+    Resolve execution dependencies for atomic tasks.
+
+    For each atomic task:
+      1. Collect own sibling deps + inherited ancestor deps (cross-subtree).
+      2. For each dep target: if atomic, keep; if non-atomic, replace with its atomic descendants.
+    """
+    task_map = {t["task_id"]: t for t in all_tasks if t.get("task_id")}
     atomic_ids = {t["task_id"] for t in atomic_tasks}
+
     result = []
     for t in atomic_tasks:
-        deps = t.get("dependencies") or []
-        new_deps = []
-        seen = set()
-        for dep_id in deps:
+        tid = t["task_id"]
+
+        collected_deps: Set[str] = set()
+        for d in t.get("dependencies") or []:
+            if d and isinstance(d, str):
+                collected_deps.add(d)
+
+        for ancestor_id in _get_ancestor_chain(tid):
+            ancestor = task_map.get(ancestor_id)
+            if not ancestor:
+                continue
+            for d in ancestor.get("dependencies") or []:
+                if d and isinstance(d, str):
+                    collected_deps.add(d)
+
+        resolved: Set[str] = set()
+        for dep_id in collected_deps:
+            if dep_id == tid:
+                continue
             if dep_id in atomic_ids:
-                if dep_id not in seen:
-                    new_deps.append(dep_id)
-                    seen.add(dep_id)
+                resolved.add(dep_id)
             else:
-                for aid in _get_transitive_atomic_deps(dep_id, task_map, atomic_ids, set()):
-                    if aid not in seen:
-                        new_deps.append(aid)
-                        seen.add(aid)
-        result.append({**t, "dependencies": new_deps})
+                for ad in _get_atomic_descendants(dep_id, atomic_ids):
+                    if ad != tid:
+                        resolved.add(ad)
+
+        result.append({**t, "dependencies": sorted(resolved)})
+
     return result
 
 
 def build_execution_from_plan(plan: Dict) -> Dict:
     """
-    Extract atomic tasks from plan, clean dependencies, recompute stages.
+    Extract atomic tasks from plan, resolve dependencies, recompute stages.
     Returns execution dict with tasks (each has status: "undone").
     """
     all_tasks = plan.get("tasks") or []
@@ -70,11 +96,10 @@ def build_execution_from_plan(plan: Dict) -> Dict:
     if not atomic_tasks:
         return {"tasks": []}
 
-    task_map = {t["task_id"]: t for t in all_tasks if t.get("task_id")}
-    cleaned = _clean_dependencies_for_atomic(all_tasks, atomic_tasks, task_map)
+    resolved = _resolve_deps_for_atomic(all_tasks, atomic_tasks)
 
-    from tasks.task_stages import compute_task_stages  # lazy to avoid circular import when run standalone
-    staged = compute_task_stages(cleaned)
+    from tasks.task_stages import compute_task_stages
+    staged = compute_task_stages(resolved)
     flat = []
     for stage_list in staged:
         for task in stage_list:

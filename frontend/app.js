@@ -24,6 +24,19 @@
             document.getElementById('themeToggleBtn')?.addEventListener('click', theme.toggleTheme);
             theme.initApiConfigModal();
         }
+        document.getElementById('clearDbBtn')?.addEventListener('click', async () => {
+            if (!confirm('确定清理 DB？将删除所有 plan')) return;
+            try {
+                const api = window.MAARS?.api;
+                if (!api?.clearDb) return;
+                await api.clearDb();
+                try { localStorage.removeItem(cfg?.PLAN_ID_KEY || 'maars-plan-id'); } catch (_) {}
+                location.reload();
+            } catch (e) {
+                console.error('Clear DB failed:', e);
+                alert('清理失败: ' + (e.message || e));
+            }
+        });
         if (cfg && cfg.resolvePlanId) cfg.resolvePlanId().catch(() => {});
         if (planner) planner.init();
         if (monitor) monitor.init();
@@ -72,6 +85,6 @@
             rightGrid.style.height = rightGrid.style.minHeight = `${h}px`;
         }
         const layout = window.MAARS?.state?.timetableLayout;
-        if (layout?.treeData?.length) TaskTree.renderMonitorTasksTree(layout.treeData);
+        if (layout?.treeData?.length) TaskTree.renderMonitorTasksTree(layout.treeData, layout?.layout);
     }, 150));
 })();

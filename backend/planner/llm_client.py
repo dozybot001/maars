@@ -77,16 +77,22 @@ async def _chat_completion_impl(
             stream=True,
             **extra,
         )
-        async for chunk in stream_obj:
-            if abort_event and abort_event.is_set():
-                raise asyncio.CancelledError("Aborted")
-            delta = chunk.choices[0].delta if chunk.choices else None
-            content = (delta.content or "") if delta else ""
-            if content and on_chunk:
-                on_chunk(content)
-            full_content.append(content)
+        try:
+            async for chunk in stream_obj:
+                if abort_event and abort_event.is_set():
+                    raise asyncio.CancelledError("Aborted")
+                delta = chunk.choices[0].delta if chunk.choices else None
+                content = (delta.content or "") if delta else ""
+                if content and on_chunk:
+                    on_chunk(content)
+                full_content.append(content)
+        except (asyncio.CancelledError, GeneratorExit):
+            await stream_obj.close()
+            raise
         return "".join(full_content)
     else:
+        if abort_event and abort_event.is_set():
+            raise asyncio.CancelledError("Aborted")
         resp = await client.chat.completions.create(
             model=model,
             messages=messages,

@@ -6,6 +6,7 @@ Builds layout from execution, generates execution from plan.
 import json
 from typing import Any, Dict, List
 
+from layout import compute_tree_layout
 from monitor.timetable import build_task_layout
 from tasks.task_cache import build_tree_data
 
@@ -23,7 +24,7 @@ def _group_by_stage(tree_data: List[Dict]) -> List[List[Dict]]:
 
 
 def build_layout_from_execution(execution: Any) -> Dict:
-    """Build layout from execution. Returns { grid, treeData, ... }."""
+    """Build layout from execution. Returns { grid, treeData, layout, ... }."""
     exec_data = execution
     if isinstance(execution, str):
         try:
@@ -33,8 +34,10 @@ def build_layout_from_execution(execution: Any) -> Dict:
 
     full_tasks = exec_data.get("tasks") if isinstance(exec_data.get("tasks"), list) else []
     if not full_tasks:
-        return {"treeData": [], "grid": [], "maxRows": 0, "maxCols": 0, "isolatedTasks": []}
+        return {"treeData": [], "layout": None, "grid": [], "maxRows": 0, "maxCols": 0, "isolatedTasks": []}
 
     tree_data = build_tree_data(full_tasks)
     staged = _group_by_stage(tree_data)
-    return build_task_layout(staged)
+    result = build_task_layout(staged)
+    result["layout"] = compute_tree_layout(result.get("treeData") or tree_data)
+    return result

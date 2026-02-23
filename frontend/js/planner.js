@@ -52,21 +52,19 @@
             console.error('Error generating plan:', error);
             alert('Error: ' + (error.message || 'Failed to generate plan'));
         } finally {
-            generatePlanBtn.disabled = false;
-            generatePlanBtn.textContent = 'Generate Plan';
-            if (stopPlanBtn) stopPlanBtn.style.display = 'none';
-            planRunAbortController = null;
+            resetPlanUI();
         }
     }
 
     function stopPlanRun() {
-        if (planRunAbortController) planRunAbortController.abort();
         fetch(`${cfg.API_BASE_URL}/plan/stop`, { method: 'POST' }).catch(() => {});
+        if (planRunAbortController) planRunAbortController.abort();
     }
 
-    function resetPlanButtons() {
+    function resetPlanUI() {
         if (generatePlanBtn) { generatePlanBtn.disabled = false; generatePlanBtn.textContent = 'Generate Plan'; }
         if (stopPlanBtn) stopPlanBtn.style.display = 'none';
+        planRunAbortController = null;
     }
 
     function init() {
@@ -75,5 +73,5 @@
         if (loadExampleIdeaBtn) loadExampleIdeaBtn.addEventListener('click', api.loadExampleIdea);
     }
 
-    window.MAARS.planner = { init, generatePlan, stopPlanRun, resetPlanButtons };
+    window.MAARS.planner = { init, generatePlan, stopPlanRun, resetPlanUI };
 })();

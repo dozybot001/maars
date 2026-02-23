@@ -29,135 +29,63 @@
                     <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
                     <span class="theme-icon theme-icon-black" aria-hidden="true">◻</span>
                 </button>
-                <button type="button" id="apiConfigBtn" class="icon-btn" title="API 配置" aria-label="API config">⚙</button>
+                <button type="button" id="clearDbBtn" class="icon-btn" title="清理 DB：删除所有 plan" aria-label="Clear DB"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+                <button type="button" id="apiConfigBtn" class="icon-btn" title="API 配置" aria-label="API config"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg></button>
             </div>
         </header>
 
         <div id="apiConfigModal" class="modal">
-            <div class="modal-content modal-content-wide">
-                <div class="modal-header">
-                    <h2>API 配置</h2>
-                    <span class="close" id="apiConfigModalClose">&times;</span>
-                </div>
-                <form id="apiConfigForm">
-                    <div class="form-group">
-                        <label class="form-label">AI 模式</label>
-                        <div class="api-mode-toggle" role="group" aria-label="AI mode">
-                            <button type="button" class="api-mode-option" data-mode="mock" id="apiModeMock">
-                                <span class="api-mode-icon">▢</span>
-                                <span class="api-mode-label">Mock AI</span>
-                                <span class="api-mode-desc">本地模拟，无需配置</span>
-                            </button>
-                            <button type="button" class="api-mode-option" data-mode="llm" id="apiModeLlm">
-                                <span class="api-mode-icon">◈</span>
-                                <span class="api-mode-label">LLM API</span>
-                                <span class="api-mode-desc">调用下方配置的接口</span>
-                            </button>
-                        </div>
-                        <input type="hidden" id="apiUseMock" name="apiUseMock" />
-                    </div>
-                    <div class="api-config-global">
-                        <h3 class="api-config-section-title">全局默认</h3>
-                        <p class="api-config-hint">各阶段未单独配置时使用</p>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="apiBaseUrl">Base URL</label>
-                                <input type="url" id="apiBaseUrl" placeholder="https://api.openai.com/v1" />
-                            </div>
-                            <div class="form-group">
-                                <label for="apiKey">API Key</label>
-                                <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off" />
-                            </div>
-                            <div class="form-group">
-                                <label for="apiModel">Model</label>
-                                <input type="text" id="apiModel" placeholder="gpt-4o" />
-                            </div>
-                        </div>
-                    </div>
-                    <div class="api-config-phases">
-                        <h3 class="api-config-section-title">各阶段独立配置</h3>
-                        <p class="api-config-hint">留空则使用全局默认</p>
-                        <div class="api-phase-grid">
-                            <div class="api-phase-card" data-phase="atomicity">
-                                <h4>Atomicity</h4>
-                                <div class="form-group">
-                                    <label>Base URL</label>
-                                    <input type="url" id="phase-atomicity-baseUrl" placeholder="同全局" />
-                                </div>
-                                <div class="form-group">
-                                    <label>API Key</label>
-                                    <input type="password" id="phase-atomicity-apiKey" placeholder="同全局" autocomplete="off" />
-                                </div>
-                                <div class="form-group">
-                                    <label>Model</label>
-                                    <input type="text" id="phase-atomicity-model" placeholder="gpt-4o" />
+            <div class="modal-content modal-content-config">
+                <header class="api-modal-header">
+                    <h2 class="api-modal-title">API 配置</h2>
+                    <button type="button" class="api-modal-close" id="apiConfigModalClose" aria-label="关闭">×</button>
+                </header>
+                <form id="apiConfigForm" class="api-config-form">
+                    <div class="api-config-body">
+                        <aside class="api-config-sidebar">
+                            <div class="api-mode-block">
+                                <span class="api-block-label">AI 模式</span>
+                                <div class="api-mode-segmented" role="group">
+                                    <button type="button" class="api-mode-seg" data-mode="mock" id="apiModeMock">Mock</button>
+                                    <button type="button" class="api-mode-seg" data-mode="llm" id="apiModeLlm">LLM</button>
                                 </div>
                             </div>
-                            <div class="api-phase-card" data-phase="decompose">
-                                <h4>Decompose</h4>
-                                <div class="form-group">
-                                    <label>Base URL</label>
-                                    <input type="url" id="phase-decompose-baseUrl" placeholder="同全局" />
+                            <div class="api-presets-block">
+                                <span class="api-block-label">预设</span>
+                                <div class="api-presets-list" id="presetCards"></div>
+                            </div>
+                        </aside>
+                        <main class="api-config-main" id="presetEditPanel">
+                            <div class="api-edit-card">
+                                <h3 class="api-edit-title" id="presetEditTitle">选择预设</h3>
+                                <div class="api-edit-fields">
+                                    <div class="api-field">
+                                        <label for="presetLabel">名称</label>
+                                        <input type="text" id="presetLabel" placeholder="My Config" />
+                                    </div>
+                                    <div class="api-field">
+                                        <label for="presetBaseUrl">Base URL</label>
+                                        <input type="url" id="presetBaseUrl" placeholder="https://api.openai.com/v1" />
+                                    </div>
+                                    <div class="api-field">
+                                        <label for="presetApiKey">API Key</label>
+                                        <input type="password" id="presetApiKey" placeholder="sk-..." autocomplete="off" />
+                                    </div>
+                                    <div class="api-field">
+                                        <label for="presetModel">Model</label>
+                                        <input type="text" id="presetModel" placeholder="gpt-4o" />
+                                    </div>
                                 </div>
-                                <div class="form-group">
-                                    <label>API Key</label>
-                                    <input type="password" id="phase-decompose-apiKey" placeholder="同全局" autocomplete="off" />
+                                <div class="api-phase-section">
+                                    <h4 class="api-phase-title">按阶段配置</h4>
+                                    <div class="api-phase-grid" id="phaseCards"></div>
                                 </div>
-                                <div class="form-group">
-                                    <label>Model</label>
-                                    <input type="text" id="phase-decompose-model" placeholder="gpt-4o" />
+                                <div class="api-edit-actions">
+                                    <button type="submit" class="api-btn-ghost">保存</button>
+                                    <button type="button" id="presetDeleteBtn" class="api-btn-ghost">删除</button>
                                 </div>
                             </div>
-                            <div class="api-phase-card" data-phase="format">
-                                <h4>Format</h4>
-                                <div class="form-group">
-                                    <label>Base URL</label>
-                                    <input type="url" id="phase-format-baseUrl" placeholder="同全局" />
-                                </div>
-                                <div class="form-group">
-                                    <label>API Key</label>
-                                    <input type="password" id="phase-format-apiKey" placeholder="同全局" autocomplete="off" />
-                                </div>
-                                <div class="form-group">
-                                    <label>Model</label>
-                                    <input type="text" id="phase-format-model" placeholder="gpt-4o" />
-                                </div>
-                            </div>
-                            <div class="api-phase-card" data-phase="execute">
-                                <h4>Execute</h4>
-                                <div class="form-group">
-                                    <label>Base URL</label>
-                                    <input type="url" id="phase-execute-baseUrl" placeholder="同全局" />
-                                </div>
-                                <div class="form-group">
-                                    <label>API Key</label>
-                                    <input type="password" id="phase-execute-apiKey" placeholder="同全局" autocomplete="off" />
-                                </div>
-                                <div class="form-group">
-                                    <label>Model</label>
-                                    <input type="text" id="phase-execute-model" placeholder="gpt-4o" />
-                                </div>
-                            </div>
-                            <div class="api-phase-card" data-phase="validate">
-                                <h4>Validate</h4>
-                                <div class="form-group">
-                                    <label>Base URL</label>
-                                    <input type="url" id="phase-validate-baseUrl" placeholder="同全局" />
-                                </div>
-                                <div class="form-group">
-                                    <label>API Key</label>
-                                    <input type="password" id="phase-validate-apiKey" placeholder="同全局" autocomplete="off" />
-                                </div>
-                                <div class="form-group">
-                                    <label>Model</label>
-                                    <input type="text" id="phase-validate-model" placeholder="gpt-4o" />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="button-group" style="margin-top: 20px;">
-                        <button type="submit">保存</button>
-                        <button type="button" id="apiConfigReset">重置</button>
+                        </main>
                     </div>
                 </form>
             </div>
@@ -264,12 +192,12 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
     <script src="task-tree.js"></script>
     <script src="js/config.js"></script>
     <script src="js/theme.js"></script>
     <script src="js/api.js"></script>
     <script src="js/planner.js"></script>
+    <script src="js/planner-thinking.js"></script>
     <script src="js/monitor.js"></script>
     <script src="js/websocket.js"></script>
     <script src="app.js"></script>

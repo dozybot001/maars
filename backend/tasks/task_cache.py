@@ -4,10 +4,8 @@ Plan.tasks is the single source; pipeline output overwrites for render and persi
 
 Pipeline (each run, no old stage reused):
   1. Extract: task_id, dependencies (never stage)
-  2. Sink: 依赖下沉
-  3. Stage: 重新计算 stage (topological sort)
-  4. Clean: 依赖清洗 (跨 stage 依赖，保险步骤)
-  5. Enrich: 合并完整 task 信息
+  2. Stage: topological sort + transitive reduction (minimal edges, wide parallel layout)
+  3. Enrich: 合并完整 task 信息
 """
 
 from typing import List, Dict
@@ -41,11 +39,11 @@ def enrich_tree_data(staged: List[List[Dict]], full_tasks: List[Dict]) -> List[D
 
 def build_tree_data(tasks: List[Dict]) -> List[Dict]:
     """
-    Build treeData from tasks. Never uses old stage.
-    Pipeline: extract (no stage) -> sink -> recompute stage -> clean deps -> enrich.
+    Build treeData for display. Never uses old stage.
+    Transitive reduction removes redundant edges while preserving parallelism.
     """
     if not tasks or len(tasks) == 0:
         return []
     cache = extract_cache_from_tasks(tasks)
-    staged = compute_task_stages(cache)
+    staged = compute_task_stages(cache, reduce=True)
     return enrich_tree_data(staged, tasks)

@@ -12,49 +12,68 @@ python3 -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001 --loop asyncio --htt
 
 访问 **http://localhost:3001**
 
-## 基本操作
+点击 **Load Example Idea** 可加载示例 idea：`Compare Python vs JavaScript for backend development and summarize pros/cons.`
 
-| 操作 | 说明 |
-|------|------|
-| 输入 Idea + Generate Plan | AI 规划：Atomicity → Decompose → Format |
-| Load Example Idea | 加载示例想法 |
-| Generate Map | 从 plan 生成 execution，渲染 Monitor 地图 |
-| Execution | 执行任务（Mock AI 模式为模拟执行，LLM 模式为真实调用） |
-| 主题切换 | 右上角 ☀/🌙/◻ 切换 Light / Dark / Black |
+## 工作流
+
+### Generate Plan（规划阶段）
+
+用户输入 idea → 后端递归分解任务树 → 保存 `plan.json`
+
+- **Atomicity**：判断任务是否为原子任务
+- **Decompose**：非原子任务分解为子任务（子任务仅含同级依赖）
+- **Format**：为原子任务生成 input/output 规范
+
+每次分解后，后端计算分解树布局（自实现 level-order 树布局，基于 task_id 层级），WebSocket 推送前端实时渲染。
+
+### Generate Map（执行阶段）
+
+从 plan 提取原子任务 → 解析依赖（继承+下沉） → 拓扑排序分 stage → 保存 `execution.json`
+
+- 继承：原子任务继承祖先的跨子树依赖
+- 下沉：非原子依赖目标替换为其原子后代
+- Monitor 依赖树布局（Sugiyama，基于 dependencies 字段）+ 网格布局
+
+### Execution（执行）
+
+Executor 池并行执行就绪任务，Validator 池验证输出，实时状态推送。
 
 ## 项目结构
 
 ```
 maars/
 ├── backend/
-│   ├── main.py          # FastAPI + Socket.io
-│   ├── planner/         # 规划（atomicity/decompose/format）
-│   ├── monitor/         # 布局、execution 生成
+│   ├── main.py          # FastAPI + Socket.io 入口
+│   ├── api/             # 路由、schemas、state（按领域拆分）
+│   ├── planner/         # AI 规划（atomicity/decompose/format）
+│   ├── monitor/         # execution 生成、依赖解析、网格布局
+│   ├── layout/          # Sugiyama 图布局算法
 │   ├── workers/         # executor、validator、runner
-│   ├── tasks/           # 任务缓存与阶段
-│   ├── db/              # db/{plan_id}/plan.json, execution.json, validation.json
-│   └── test/            # Mock AI、mock_stream
+│   ├── tasks/           # 任务阶段计算（拓扑排序、传递规约）
+│   ├── db/              # 文件存储：db/{plan_id}/plan.json, execution.json
+│   └── test/            # Mock AI 响应、mock_stream
 └── frontend/
     ├── index.html
-    ├── app.js
-    ├── task-tree.js
+    ├── app.js           # 入口，模块组装
+    ├── task-tree.js     # 任务树渲染（接收后端布局，纯渲染）
+    ├── js/              # planner, monitor, websocket, api, config, theme
     ├── styles.css
     └── theme.css
 ```
 
-## 环境变量
+## 配置 LLM API
 
-| 变量 | 默认 | 说明 |
-|------|------|------|
-| PORT | 3001 | 服务端口 |
+默认使用 Mock AI（无需真实 API）。切换为 LLM 模式：
 
-## 说明
+1. 点击右上角 **API 配置**
+2. 填写 Base URL、API Key、Model（支持 OpenAI 兼容接口）
+3. 关闭 Mock AI，保存
 
-Planner 使用 Mock AI（`backend/test/mock-ai/`），无需配置真实 API 即可运行。
+支持按阶段（atomicity check/decompose/format/quality assess/execute/validate）独立配置。
 
 ## 文档
 
+- [发布说明](RELEASE_NOTES.md)
 - [后端结构](backend/README.md)
 - [Planner 流程](backend/planner/README.md)
-- [任务树与 Timetable](backend/docs/task-tree-timetable.md)
-- [第三方依赖](backend/docs/DEPENDENCIES.md)
+- [Test 模块](backend/test/README.md)

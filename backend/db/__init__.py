@@ -5,10 +5,13 @@ Planner generates a new plan_id folder on each new plan; all reads/writes use pl
 Uses orjson for faster JSON parsing.
 """
 
+import asyncio
 import re
+import shutil
 from pathlib import Path
 
 import aiofiles
+import json_repair
 import orjson
 from loguru import logger
 
@@ -68,7 +71,7 @@ async def get_task_artifact(plan_id: str, task_id: str):
 
 
 async def save_task_artifact(plan_id: str, task_id: str, value) -> dict:
-    """Write artifact to db/{plan_id}/{task_id}/output.json. Accepts dict or str (wrapped as {"content": ...})."""
+    """Write artifact to db/{plan_id}/{task_id}/output.json. Atomic write. Accepts dict or str (wrapped as {"content": ...})."""
     _validate_plan_id(plan_id)
     _validate_task_id(task_id)
     if isinstance(value, str):
@@ -76,9 +79,11 @@ async def save_task_artifact(plan_id: str, task_id: str, value) -> dict:
     task_dir = _get_task_dir(plan_id, task_id)
     task_dir.mkdir(parents=True, exist_ok=True)
     file_path = task_dir / "output.json"
+    tmp_path = file_path.with_suffix(file_path.suffix + ".tmp")
     content = orjson.dumps(value, option=orjson.OPT_INDENT_2).decode("utf-8")
-    async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+    async with aiofiles.open(tmp_path, "w", encoding="utf-8") as f:
         await f.write(content)
+    tmp_path.replace(file_path)
     return {"success": True}
 
 
@@ -103,23 +108,15 @@ async def _read_json_file(plan_id: str, filename: str):
 
 
 async def _write_json_file(plan_id: str, filename: str, data: dict) -> dict:
+    """Atomic write: write to .tmp then rename to avoid partial/corrupt files on concurrent access."""
     await _ensure_plan_dir(plan_id)
     file_path = _get_file_path(plan_id, filename)
+    tmp_path = file_path.with_suffix(file_path.suffix + ".tmp")
     content = orjson.dumps(data, option=orjson.OPT_INDENT_2).decode("utf-8")
-    async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+    async with aiofiles.open(tmp_path, "w", encoding="utf-8") as f:
         await f.write(content)
+    tmp_path.replace(file_path)
     return {"success": True}
-
-
-async def get_idea(plan_id: str = DEFAULT_PLAN_ID):
-    """Get idea from plan (plan.idea or task0.description)."""
-    plan = await get_plan(plan_id)
-    if not plan:
-        return None
-    if plan.get("idea"):
-        return plan["idea"]
-    task0 = next((t for t in (plan.get("tasks") or []) if t.get("task_id") == "0"), None)
-    return task0.get("description") if task0 else None
 
 
 async def get_execution(plan_id: str = DEFAULT_PLAN_ID):
@@ -162,8 +159,24 @@ async def list_plan_ids() -> list:
     return [pid for pid, _ in result]
 
 
+def _resolve_api_config(raw: dict) -> dict:
+    """Resolve presets+current to effective config. useMock is top-level only."""
+    if not raw:
+        return {}
+    presets = raw.get("presets")
+    current = raw.get("current")
+    if isinstance(presets, dict) and current and current in presets:
+        cfg = dict(presets[current])
+        cfg.pop("label", None)
+        cfg.pop("useMock", None)
+    else:
+        cfg = {k: v for k, v in raw.items() if k not in ("presets", "current")}
+    cfg["useMock"] = raw.get("useMock", raw.get("use_mock", True))
+    return cfg
+
+
 async def get_api_config() -> dict:
-    """Get API config from db/api_config.json. Returns {} if not found."""
+    """Get full API config (with presets) from db/api_config.json. For frontend."""
     file_path = DB_DIR / API_CONFIG_FILE
     try:
         async with aiofiles.open(file_path, "rb") as f:
@@ -176,12 +189,20 @@ async def get_api_config() -> dict:
         return {}
 
 
+async def get_effective_api_config() -> dict:
+    """Get effective API config for LLM calls (resolves current preset)."""
+    raw = await get_api_config()
+    return _resolve_api_config(raw)
+
+
 async def save_api_config(config: dict) -> dict:
-    """Save API config to db/api_config.json."""
+    """Save API config to db/api_config.json. Atomic write to avoid corruption."""
     file_path = DB_DIR / API_CONFIG_FILE
+    tmp_path = file_path.with_suffix(file_path.suffix + ".tmp")
     content = orjson.dumps(config or {}, option=orjson.OPT_INDENT_2).decode("utf-8")
-    async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+    async with aiofiles.open(tmp_path, "w", encoding="utf-8") as f:
         await f.write(content)
+    tmp_path.replace(file_path)
     return {"success": True}
 
 
@@ -194,3 +215,79 @@ async def save_plan(plan: dict, plan_id: str = DEFAULT_PLAN_ID) -> dict:
     """Save plan."""
     await _write_json_file(plan_id, "plan.json", plan)
     return {"success": True, "plan": plan}
+
+
+# AI response persistence (atomicity, decompose, format) - per plan_id
+
+_ai_save_locks: dict = {}
+
+
+def _get_ai_save_lock(plan_id: str, response_type: str) -> asyncio.Lock:
+    key = (plan_id, response_type)
+    if key not in _ai_save_locks:
+        _ai_save_locks[key] = asyncio.Lock()
+    return _ai_save_locks[key]
+
+
+async def _read_ai_response_file(plan_id: str, response_type: str) -> dict:
+    """Read AI response file with json_repair fallback for corrupted files."""
+    await _ensure_plan_dir(plan_id)
+    file_path = _get_file_path(plan_id, f"{response_type}.json")
+    try:
+        async with aiofiles.open(file_path, "rb") as f:
+            raw = await f.read()
+        try:
+            data = orjson.loads(raw)
+        except orjson.JSONDecodeError:
+            data = json_repair.loads(raw.decode("utf-8"))
+        return data if isinstance(data, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        logger.warning("Failed to read %s: %s", file_path, e)
+        return {}
+
+
+async def get_ai_responses(plan_id: str, response_type: str) -> dict:
+    """Read AI responses for a plan. response_type: atomicity, decompose, format."""
+    if response_type not in ("atomicity", "decompose", "format"):
+        return {}
+    return await _read_ai_response_file(plan_id, response_type)
+
+
+async def _write_ai_response_file(plan_id: str, response_type: str, data: dict) -> None:
+    """Atomic write: write to .tmp then rename."""
+    await _ensure_plan_dir(plan_id)
+    file_path = _get_file_path(plan_id, f"{response_type}.json")
+    tmp_path = file_path.with_suffix(".json.tmp")
+    content = orjson.dumps(data, option=orjson.OPT_INDENT_2).decode("utf-8")
+    async with aiofiles.open(tmp_path, "w", encoding="utf-8") as f:
+        await f.write(content)
+    tmp_path.rename(file_path)
+
+
+async def save_ai_response(plan_id: str, response_type: str, key: str, entry: dict) -> None:
+    """Incrementally save one AI response. entry = {content: ..., reasoning: ...}. Serialized per file."""
+    if response_type not in ("atomicity", "decompose", "format"):
+        return
+    lock = _get_ai_save_lock(plan_id, response_type)
+    async with lock:
+        data = await get_ai_responses(plan_id, response_type)
+        data[key] = entry
+        await _write_ai_response_file(plan_id, response_type, data)
+
+
+async def clear_db() -> dict:
+    """Clear DB: remove all plan folders."""
+    if not DB_DIR.exists():
+        return {"success": True, "removed": []}
+    removed = []
+    for p in DB_DIR.iterdir():
+        if not p.is_dir() or p.name.startswith("."):
+            continue
+        try:
+            shutil.rmtree(p)
+            removed.append(p.name)
+        except OSError as e:
+            logger.warning("Failed to remove %s: %s", p, e)
+    return {"success": True, "removed": removed}

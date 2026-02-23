@@ -9,16 +9,17 @@ import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+import networkx as nx
 import orjson
 import json_repair
 
+from db import save_ai_response
+from layout.sugiyama import build_dependency_graph
 from .llm_client import chat_completion as real_chat_completion, merge_phase_config
 from test.mock_stream import mock_chat_completion
-from .graph_utils import has_cycle_in_subset
 
 PLANNER_DIR = Path(__file__).parent
 MOCK_AI_DIR = PLANNER_DIR.parent / "test" / "mock-ai"
-MAX_DECOMPOSE_DEPTH = 5
 MAX_CONCURRENT_CALLS = 10
 MAX_VALIDATION_RETRIES = 2
 RETRY_TEMPERATURE = 0.5
@@ -53,7 +54,8 @@ def _get_mock_cached(response_type: str) -> Dict:
     return _mock_cache[response_type]
 
 
-def _load_mock_response(response_type: str, task_id: str) -> Optional[Dict]:
+async def _load_mock_response(response_type: str, task_id: str) -> Optional[Dict]:
+    """Load mock from test/mock-ai/."""
     data = _get_mock_cached(response_type)
     entry = data.get(task_id) or data.get("_default")
     if not entry:
@@ -72,8 +74,7 @@ def _load_mock_response(response_type: str, task_id: str) -> Optional[Dict]:
 _OP_LABELS = {
     "atomicity": "Atomicity",
     "decompose": "Decompose",
-    "format_io": "Format (IO)",
-    "format_validate": "Format (Validate)",
+    "format": "Format",
     "quality": "Quality",
 }
 
@@ -108,7 +109,24 @@ def _build_user_message(response_type: str, task: Dict, context: Optional[Dict] 
     tid = task.get("task_id", "")
     desc = task.get("description", "")
     if response_type == "atomicity":
-        return f'Input: task_id "{tid}", description "{desc}"\nOutput:'
+        parts = [f'Input: task_id "{tid}", description "{desc}"']
+        ctx = context or {}
+        if ctx.get("depth") is not None:
+            parts.append(f'\nContext - depth: {ctx["depth"]}')
+        if ctx.get("ancestor_path"):
+            parts.append(f'\nContext - ancestor path: {ctx["ancestor_path"]}')
+        if ctx.get("idea"):
+            parts.append(f'\nContext - idea: {ctx["idea"]}')
+        if ctx.get("siblings"):
+            sib = ctx["siblings"]
+            if isinstance(sib, list):
+                sib_str = "; ".join(f'{t.get("task_id","")}: {t.get("description","")}' for t in sib if t.get("task_id"))
+            else:
+                sib_str = str(sib)
+            if sib_str:
+                parts.append(f'\nContext - sibling tasks: {sib_str}')
+        parts.append('\nOutput:')
+        return "".join(parts)
     if response_type == "decompose":
         parts = [f'**Input:** task_id "{tid}", description "{desc}"']
         ctx = context or {}
@@ -133,17 +151,8 @@ def _build_user_message(response_type: str, task: Dict, context: Optional[Dict] 
         idea = ctx.get("idea", "")
         tasks_summary = ctx.get("tasksSummary", "")
         return f'**Idea:** {idea}\n\n**Tasks:**\n{tasks_summary}\n\n**Output:**'
-    if response_type == "format_io":
+    if response_type == "format":
         return f'**Input task:** task_id "{tid}", description "{desc}"\n\n**Output:**'
-    if response_type == "format_validate":
-        parts = [f'**Input task:** task_id "{tid}", description "{desc}"']
-        ctx = context or {}
-        io_spec = ctx.get("inputOutputSpec")
-        if io_spec:
-            io_str = orjson.dumps(io_spec, option=orjson.OPT_INDENT_2).decode("utf-8")
-            parts.append(f'\n\n**Input/Output spec (from Phase 1):**\n```json\n{io_str}\n```')
-        parts.append('\n\n**Output:**')
-        return "".join(parts)
     return f"Task: {tid} - {desc}"
 
 
@@ -155,6 +164,7 @@ async def _call_chat_completion(
     use_mock: bool = False,
     api_config: Optional[Dict] = None,
     temperature: Optional[float] = None,
+    plan_id: Optional[str] = None,
 ) -> str:
     response_type = context["type"]
     task_id = context["taskId"]
@@ -166,7 +176,7 @@ async def _call_chat_completion(
             on_thinking(chunk, task_id=task_id, operation=op_label)
 
     if use_mock:
-        mock = _load_mock_response(response_type, task_id)
+        mock = await _load_mock_response(response_type, task_id)
         if not mock:
             raise ValueError(f"No mock data for {response_type}/{task_id}")
         effective_on_thinking = stream_chunk if (stream and on_thinking) else None
@@ -183,15 +193,14 @@ async def _call_chat_completion(
     prompt_file = {
         "atomicity": "atomicity-prompt.txt",
         "decompose": "decompose-prompt.txt",
-        "format_io": "format-io-prompt.txt",
-        "format_validate": "format-validate-prompt.txt",
+        "format": "format-prompt.txt",
         "quality": "quality-assess-prompt.txt",
     }.get(response_type, "atomicity-prompt.txt")
     system_prompt = _get_prompt_cached(prompt_file)
     msg_ctx = (
         context.get("decomposeContext") if response_type == "decompose"
         else context.get("qualityContext") if response_type == "quality"
-        else context.get("formatContext") if response_type == "format_validate"
+        else context.get("atomicityContext") if response_type == "atomicity"
         else None
     )
     user_message = _build_user_message(response_type, context.get("task", {}), msg_ctx)
@@ -199,10 +208,17 @@ async def _call_chat_completion(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_message},
     ]
-    phase = "atomicity" if response_type in ("atomicity", "quality") else "decompose" if response_type == "decompose" else "format"
+    if response_type == "atomicity":
+        phase = "atomicity"
+    elif response_type == "quality":
+        phase = "quality"
+    elif response_type == "decompose":
+        phase = "decompose"
+    else:
+        phase = "format"
     cfg = merge_phase_config(api_config, phase)
     effective_on_chunk = stream_chunk if (stream and on_thinking) else None
-    # JSON mode for atomicity/quality (pure JSON); decompose/format_* keep reasoning + JSON block
+    # JSON mode for atomicity/quality (pure JSON); decompose/format keep reasoning + JSON block
     response_format = {"type": "json_object"} if response_type in ("atomicity", "quality") else None
     async with _get_call_semaphore():
         return await real_chat_completion(
@@ -247,7 +263,6 @@ def _validate_decompose_response(result: Any, parent_id: str) -> tuple[bool, str
         return False, "tasks must be a non-empty list"
     seen_ids: set[str] = set()
     valid_prefix = parent_id if parent_id == "0" else f"{parent_id}_"
-    allowed_deps = {parent_id} | seen_ids
     for i, t in enumerate(tasks):
         if not isinstance(t, dict):
             return False, f"Task {i} is not a dict"
@@ -257,7 +272,6 @@ def _validate_decompose_response(result: Any, parent_id: str) -> tuple[bool, str
         if tid in seen_ids:
             return False, f"Duplicate task_id: {tid}"
         seen_ids.add(tid)
-        allowed_deps.add(tid)
         if parent_id == "0":
             if not tid.isdigit() or tid == "0":
                 return False, f"Top-level task_id must be 1,2,3,... got {tid}"
@@ -272,11 +286,19 @@ def _validate_decompose_response(result: Any, parent_id: str) -> tuple[bool, str
         for d in deps:
             if not isinstance(d, str):
                 return False, f"Task {tid} has non-string dependency"
-            if d and d not in allowed_deps:
-                return False, f"Task {tid} dependency {d} does not exist (must be {parent_id} or sibling)"
-    if has_cycle_in_subset(tasks, seen_ids):
+            if d == parent_id:
+                return False, f"Task {tid} must not depend on parent {parent_id} (use task_id hierarchy instead)"
+            if d and d not in seen_ids:
+                return False, f"Task {tid} dependency {d} must be an earlier sibling"
+    if seen_ids and not nx.is_directed_acyclic_graph(build_dependency_graph(tasks, ids=seen_ids)):
         return False, "Circular dependency detected among children"
     return True, ""
+
+
+def _raise_if_aborted(abort_event: Optional[Any]) -> None:
+    """Raise CancelledError if abort_event is set. Call before any LLM/API call to avoid token waste."""
+    if abort_event is not None and abort_event.is_set():
+        raise asyncio.CancelledError("Aborted")
 
 
 async def _decompose_task(
@@ -288,7 +310,9 @@ async def _decompose_task(
     depth: int = 0,
     use_mock: bool = False,
     api_config: Optional[Dict] = None,
+    plan_id: Optional[str] = None,
 ) -> List[Dict]:
+    _raise_if_aborted(abort_event)
     ctx: Dict[str, Any] = {"type": "decompose", "taskId": parent_task["task_id"], "task": parent_task}
     pid = parent_task["task_id"]
     siblings = [t for t in all_tasks if t.get("task_id") != pid and _get_parent_id(t.get("task_id", "")) == _get_parent_id(pid)]
@@ -300,6 +324,7 @@ async def _decompose_task(
     }
     last_err: Optional[Exception] = None
     for attempt in range(MAX_VALIDATION_RETRIES + 1):
+        _raise_if_aborted(abort_event)
         try:
             content = await _call_chat_completion(
                 on_thinking,
@@ -309,17 +334,24 @@ async def _decompose_task(
                 use_mock=use_mock,
                 api_config=api_config,
                 temperature=RETRY_TEMPERATURE if attempt > 0 else None,
+                plan_id=plan_id,
             )
             result = _parse_json_response(content)
             valid, err_msg = _validate_decompose_response(result, pid)
             if not valid:
                 raise ValueError(f"Decompose validation failed: {err_msg}")
             tasks = result.get("tasks") or []
-            return [
+            out = [
                 t
                 for t in tasks
                 if t.get("task_id") and t.get("description") and isinstance(t.get("dependencies"), list)
             ]
+            if plan_id:
+                asyncio.create_task(save_ai_response(
+                    plan_id, "decompose", pid,
+                    {"content": {"tasks": tasks}, "reasoning": ""},
+                ))
+            return out
         except Exception as e:
             last_err = e
             if attempt >= MAX_VALIDATION_RETRIES:
@@ -331,25 +363,39 @@ async def _check_atomicity(
     task: Dict,
     on_thinking: Callable[[str], None],
     abort_event: Optional[Any],
+    atomicity_context: Optional[Dict] = None,
     use_mock: bool = False,
     api_config: Optional[Dict] = None,
+    plan_id: Optional[str] = None,
 ) -> Dict:
+    _raise_if_aborted(abort_event)
+    ctx: Dict[str, Any] = {"type": "atomicity", "taskId": task["task_id"], "task": task}
+    if atomicity_context:
+        ctx["atomicityContext"] = atomicity_context
     last_err: Optional[Exception] = None
     for attempt in range(MAX_VALIDATION_RETRIES + 1):
+        _raise_if_aborted(abort_event)
         try:
             content = await _call_chat_completion(
                 on_thinking,
-                {"type": "atomicity", "taskId": task["task_id"], "task": task},
+                ctx,
                 abort_event,
                 stream=False,
                 use_mock=use_mock,
                 api_config=api_config,
-                temperature=RETRY_TEMPERATURE if attempt > 0 else None,
+                temperature=0.0 if attempt == 0 else RETRY_TEMPERATURE,
+                plan_id=plan_id,
             )
             result = _parse_json_response(content)
             if not _validate_atomicity_response(result):
                 raise ValueError("Atomicity response invalid: missing or invalid atomic field")
-            return {"atomic": bool(result.get("atomic"))}
+            out = {"atomic": bool(result.get("atomic"))}
+            if plan_id:
+                asyncio.create_task(save_ai_response(
+                    plan_id, "atomicity", task["task_id"],
+                    {"content": {"atomic": out["atomic"]}, "reasoning": ""},
+                ))
+            return out
         except Exception as e:
             last_err = e
             if attempt >= MAX_VALIDATION_RETRIES:
@@ -363,43 +409,33 @@ async def _format_task(
     abort_event: Optional[Any],
     use_mock: bool = False,
     api_config: Optional[Dict] = None,
+    plan_id: Optional[str] = None,
 ) -> Optional[Dict]:
-    # Phase 1: Define input/output specification
-    content_io = await _call_chat_completion(
+    _raise_if_aborted(abort_event)
+    content = await _call_chat_completion(
         on_thinking,
-        {"type": "format_io", "taskId": task.get("task_id", ""), "task": task},
+        {"type": "format", "taskId": task.get("task_id", ""), "task": task},
         abort_event,
         stream=True,
         use_mock=use_mock,
         api_config=api_config,
+        plan_id=plan_id,
     )
-    result_io = _parse_json_response(content_io)
-    if not result_io.get("input") or not result_io.get("output"):
+    result = _parse_json_response(content)
+    if not result.get("input") or not result.get("output"):
         return None
-    io_spec = {"input": result_io["input"], "output": result_io["output"]}
-
-    # Phase 2: Define validation specification (context includes input/output from Phase 1)
-    content_val = await _call_chat_completion(
-        on_thinking,
-        {
-            "type": "format_validate",
-            "taskId": task.get("task_id", ""),
-            "task": task,
-            "formatContext": {"inputOutputSpec": io_spec},
-        },
-        abort_event,
-        stream=True,
-        use_mock=use_mock,
-        api_config=api_config,
-    )
-    result_val = _parse_json_response(content_val)
-    validation = result_val.get("validation") if isinstance(result_val.get("validation"), dict) else None
-
-    return {
-        "input": io_spec["input"],
-        "output": io_spec["output"],
+    validation = result.get("validation") if isinstance(result.get("validation"), dict) else None
+    out = {
+        "input": result["input"],
+        "output": result["output"],
         **({"validation": validation} if validation else {}),
     }
+    if plan_id:
+        asyncio.create_task(save_ai_response(
+            plan_id, "format", task.get("task_id", ""),
+            {"content": {"input": result["input"], "output": result["output"], "validation": validation or {}}, "reasoning": ""},
+        ))
+    return out
 
 
 async def _atomicity_and_decompose_recursive(
@@ -414,24 +450,24 @@ async def _atomicity_and_decompose_recursive(
     idea: Optional[str] = None,
     use_mock: bool = False,
     api_config: Optional[Dict] = None,
+    plan_id: Optional[str] = None,
 ) -> None:
     if check_aborted and check_aborted():
         raise asyncio.CancelledError("Aborted")
 
-    if depth >= MAX_DECOMPOSE_DEPTH:
-        io_result = await _format_task(task, on_thinking, abort_event, use_mock, api_config)
-        if not io_result:
-            raise ValueError(f"Format failed for task {task['task_id']} at max depth: missing input/output")
-        idx = _find_task_idx(all_tasks, task["task_id"])
-        if idx >= 0:
-            all_tasks[idx] = {**all_tasks[idx], **io_result}
-        return
-
-    v = await _check_atomicity(task, on_thinking, abort_event, use_mock, api_config)
+    pid = task["task_id"]
+    siblings = [t for t in all_tasks if t.get("task_id") != pid and _get_parent_id(t.get("task_id", "")) == _get_parent_id(pid)]
+    atomicity_context = {
+        "depth": depth,
+        "ancestor_path": _get_ancestor_path(pid),
+        "idea": idea or "",
+        "siblings": siblings,
+    }
+    v = await _check_atomicity(task, on_thinking, abort_event, atomicity_context, use_mock, api_config, plan_id)
     atomic = v["atomic"]
 
     if atomic:
-        io_result = await _format_task(task, on_thinking, abort_event, use_mock, api_config)
+        io_result = await _format_task(task, on_thinking, abort_event, use_mock, api_config, plan_id)
         if not io_result:
             raise ValueError(f"Format failed for atomic task {task['task_id']}: missing input/output")
         idx = _find_task_idx(all_tasks, task["task_id"])
@@ -439,7 +475,7 @@ async def _atomicity_and_decompose_recursive(
             all_tasks[idx] = {**all_tasks[idx], **io_result}
         return
 
-    children = await _decompose_task(task, on_thinking, abort_event, all_tasks, idea, depth, use_mock, api_config)
+    children = await _decompose_task(task, on_thinking, abort_event, all_tasks, idea, depth, use_mock, api_config, plan_id)
     if not children:
         raise ValueError(f"Decompose returned no children for task {task['task_id']}")
 
@@ -453,7 +489,7 @@ async def _atomicity_and_decompose_recursive(
     await asyncio.gather(*[
         _atomicity_and_decompose_recursive(
             child, all_tasks, on_task, on_thinking, depth + 1, check_aborted, abort_event, on_tasks_batch,
-            idea, use_mock, api_config,
+            idea, use_mock, api_config, plan_id,
         )
         for child in children
     ])
@@ -467,6 +503,7 @@ async def _assess_quality(
     api_config: Optional[Dict] = None,
 ) -> Dict[str, Any]:
     """Assess plan quality. Returns {score, comment} or {score: 0, comment: 'N/A'} on failure."""
+    _raise_if_aborted(abort_event)
     if use_mock:
         return {"score": 85, "comment": "Mock assessment"}
     idea = plan.get("idea", "")
@@ -515,6 +552,7 @@ async def run_plan(
     use_mock: bool = False,
     api_config: Optional[Dict] = None,
     skip_quality_assessment: bool = False,
+    plan_id: Optional[str] = None,
 ) -> Dict:
     """Run atomicity->decompose->format from root task, top-down to all atomic tasks."""
 
@@ -536,10 +574,11 @@ async def run_plan(
     idea = plan.get("idea") or root_task.get("description") or ""
     await _atomicity_and_decompose_recursive(
         root_task, all_tasks, on_task, on_thinking_fn, 0, check_aborted, abort_event, on_tasks_batch,
-        idea=idea, use_mock=use_mock, api_config=api_config,
+        idea=idea, use_mock=use_mock, api_config=api_config, plan_id=plan_id,
     )
     plan["tasks"] = all_tasks
     if not skip_quality_assessment:
+        _raise_if_aborted(abort_event)
         quality = await _assess_quality(plan, on_thinking_fn, abort_event, use_mock, api_config)
         plan["qualityScore"] = quality.get("score", 0)
         plan["qualityComment"] = quality.get("comment", "")

@@ -1,70 +1,9 @@
 """
 Task Layout Module
-Builds grid layout from staged tasks (already cleaned by compute_task_stages).
+Builds grid layout from staged tasks.
 """
 
-import re
-from typing import Any, List, Dict, Optional
-
-
-def deep_clone(obj: Any) -> Any:
-    """Deep clone an object to avoid modifying original data."""
-    if obj is None or not isinstance(obj, (dict, list)):
-        return obj
-    if isinstance(obj, list):
-        return [deep_clone(item) for item in obj]
-    return {k: deep_clone(v) for k, v in obj.items()}
-
-
-def clean_dependencies(execution_stages: List[List[Dict]]) -> List[List[Dict]]:
-    """
-    Clean dependencies: only keep dependencies from the previous stage.
-    Stage 0: keeps all dependencies (initial tasks)
-    Stage 1+: only keeps dependencies from the previous stage (stage - 1)
-    """
-    if not execution_stages or len(execution_stages) == 0:
-        return []
-
-    cleaned_stages = deep_clone(execution_stages)
-
-    # Build task-to-stage mapping cache
-    task_stage_cache: Dict[str, int] = {}
-    for stage_index, stage in enumerate(cleaned_stages):
-        if stage and isinstance(stage, list):
-            for task in stage:
-                if task and task.get("task_id"):
-                    task_stage_cache[task["task_id"]] = stage_index
-
-    # Clean dependencies starting from stage 1
-    for stage_index in range(1, len(cleaned_stages)):
-        current_stage = cleaned_stages[stage_index]
-        previous_stage_index = stage_index - 1
-
-        if not current_stage or not isinstance(current_stage, list):
-            continue
-
-        previous_stage = cleaned_stages[previous_stage_index]
-        previous_stage_task_ids = set()
-        if previous_stage and isinstance(previous_stage, list):
-            for task in previous_stage:
-                if task and task.get("task_id"):
-                    previous_stage_task_ids.add(task["task_id"])
-
-        for task in current_stage:
-            if not task or not task.get("dependencies") or not isinstance(task["dependencies"], list):
-                continue
-
-            def keep_dep(dep_id):
-                if not dep_id or not isinstance(dep_id, str):
-                    return False
-                trimmed = dep_id.strip()
-                if not trimmed or trimmed in ("undefined", "null"):
-                    return False
-                return trimmed in previous_stage_task_ids
-
-            task["dependencies"] = [d.strip() for d in task["dependencies"] if keep_dep(d)]
-
-    return cleaned_stages
+from typing import List, Dict
 
 
 def build_task_layout(task_stages: List[List[Dict]]) -> Dict:
@@ -75,12 +14,10 @@ def build_task_layout(task_stages: List[List[Dict]]) -> Dict:
     if not task_stages or len(task_stages) == 0:
         return {"grid": [], "maxRows": 0, "maxCols": 0, "isolatedTasks": [], "treeData": []}
 
-    cleaned_stages = task_stages
-
     all_tasks: Dict[str, Dict] = {}
     task_dependents: Dict[str, List[str]] = {}
 
-    for stage in cleaned_stages:
+    for stage in task_stages:
         for task in stage:
             tid = task.get("task_id")
             if tid:
@@ -177,7 +114,7 @@ def build_task_layout(task_stages: List[List[Dict]]) -> Dict:
             grid[pos["row"]][pos["col"]] = pos["task"]
 
     tree_data = []
-    for stage in cleaned_stages:
+    for stage in task_stages:
         for task in stage:
             tree_data.append({**task, "stage": task.get("stage", 1)})
 
