@@ -32,7 +32,7 @@ python3 -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001 --loop asyncio --htt
 
 - 继承：原子任务继承祖先的跨子树依赖
 - 下沉：非原子依赖目标替换为其原子后代
-- Monitor 依赖树布局（Sugiyama，基于 dependencies 字段）+ 网格布局
+- Monitor 依赖树布局（stage-based：stage 行 + 等价任务合并，详见 [STAGE_LAYOUT_RULES](backend/layout/STAGE_LAYOUT_RULES.md)）+ 网格布局
 
 ### Execution（执行）
 
@@ -47,7 +47,7 @@ maars/
 │   ├── api/             # 路由、schemas、state（按领域拆分）
 │   ├── planner/         # AI 规划（atomicity/decompose/format）
 │   ├── monitor/         # execution 生成、依赖解析、网格布局
-│   ├── layout/          # Sugiyama 图布局算法
+│   ├── layout/          # 分解树/执行图布局（tree_layout + stage_layout）
 │   ├── workers/         # executor、validator、runner
 │   ├── tasks/           # 任务阶段计算（拓扑排序、传递规约）
 │   ├── db/              # 文件存储：db/{plan_id}/plan.json, execution.json
@@ -75,5 +75,6 @@ maars/
 
 - [发布说明](RELEASE_NOTES.md)
 - [后端结构](backend/README.md)
+- [Layout 模块](backend/layout/README.md)（含 [执行图布局规则](backend/layout/STAGE_LAYOUT_RULES.md)）
 - [Planner 流程](backend/planner/README.md)
 - [Test 模块](backend/test/README.md)

@@ -51,3 +51,9 @@ plan.json ──Generate Map──→ execution.json ──Execution──→ �
 
 - **plan.json**：完整任务树（含分解层级和依赖），Planner 视图数据源
 - **execution.json**：仅原子任务（依赖已解析，含 stage/status），Monitor 视图数据源
+
+## Layout 模块
+
+- **tree_layout.py**：Planner 分解树，按 task_id 层级 level-order 布局
+- **stage_layout.py**：Monitor 执行图，按 stage 分层、等价任务合并，详见 [STAGE_LAYOUT_RULES.md](layout/STAGE_LAYOUT_RULES.md)
+- **graph.py**：`build_dependency_graph`、`natural_task_id_key`，供 planner、tasks 共用
