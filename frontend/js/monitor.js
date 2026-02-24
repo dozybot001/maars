@@ -55,11 +55,12 @@
             return '<div class="timetable-cell timetable-cell-empty"></div>';
         }
         const status = task.status || 'undone';
+        const statusClass = (status && status !== 'undone') ? ` task-status-${status}` : '';
         const desc = task.description || task.objective || task.task_id;
         const safeTooltip = (desc || '').replace(/"/g, '&quot;');
         const popoverData = typeof TaskTree !== 'undefined' && TaskTree.buildTaskDataForPopover
             ? TaskTree.buildTaskDataForPopover(task) : { task_id: task.task_id, description: task.description, dependencies: task.dependencies, status: task.status, input: task.input, output: task.output, validation: task.validation };
-        return `<div class="timetable-cell task-status-${status}" data-task-id="${task.task_id}" data-task-data="${escapeHtmlAttr(JSON.stringify(popoverData))}" title="${safeTooltip}"><span class="timetable-cell-id">${escapeHtml(task.task_id)}</span></div>`;
+        return `<div class="timetable-cell${statusClass}" data-task-id="${task.task_id}" data-task-data="${escapeHtmlAttr(JSON.stringify(popoverData))}" title="${safeTooltip}"><span class="timetable-cell-id">${escapeHtml(task.task_id)}</span></div>`;
     }
 
     function buildTimetableGridHtml(leftCols, leftRows, rightCols, rightRows, getLeftTask, getRightTask) {
@@ -181,8 +182,22 @@
         const area = document.querySelector('.monitor-tasks-tree-area') || document.querySelector('.tasks-tree-section');
         const svg = area?.querySelector('.tree-connection-lines');
         if (!svg) return;
-        const selector = direction === 'upstream' ? `path[data-to-task="${taskId}"]` : `path[data-from-task="${taskId}"]`;
-        const lines = Array.from(svg.querySelectorAll(selector));
+        const paths = Array.from(svg.querySelectorAll('path.connection-line'));
+        const lines = direction === 'upstream'
+            ? paths.filter(p => {
+                const to = p.getAttribute('data-to-task');
+                const toTasks = p.getAttribute('data-to-tasks');
+                if (to === taskId) return true;
+                if (toTasks) return toTasks.split(',').map(s => s.trim()).includes(taskId);
+                return false;
+            })
+            : paths.filter(p => {
+                const from = p.getAttribute('data-from-task');
+                const fromTasks = p.getAttribute('data-from-tasks');
+                if (from === taskId) return true;
+                if (fromTasks) return fromTasks.split(',').map(s => s.trim()).includes(taskId);
+                return false;
+            });
         if (lines.length === 0) return;
         const animClass = color === 'yellow' ? 'animate-yellow-glow' : 'animate-red-glow';
         lines.forEach(line => line.classList.remove('animate-yellow-glow', 'animate-red-glow'));

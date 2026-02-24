@@ -17,9 +17,11 @@ backend/
 │   ├── from_plan.py     # plan → execution：提取原子任务，依赖继承+下沉+解析
 │   ├── timetable.py     # 网格布局（stage 列 + 孤立任务区）
 │   └── __init__.py      # build_layout_from_execution 入口
-├── layout/              # Sugiyama 分层图布局
-│   ├── sugiyama.py      # 层分配、交叉最小化、坐标分配、边路由
-│   └── __init__.py      # compute_decomposition_layout / compute_tree_layout
+├── layout/              # 图布局
+│   ├── graph.py         # build_dependency_graph
+│   ├── tree_layout.py   # Planner 分解树：层级布局
+│   ├── stage_layout.py  # Monitor 执行树：stage 行
+│   └── __init__.py      # compute_decomposition_layout / compute_monitor_layout
 ├── workers/             # 执行与验证
 │   ├── __init__.py      # executor/validator 工作池管理
 │   ├── runner.py        # ExecutorRunner：调度执行+验证+状态推送

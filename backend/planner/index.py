@@ -14,7 +14,7 @@ import orjson
 import json_repair
 
 from db import save_ai_response
-from layout.sugiyama import build_dependency_graph
+from layout.graph import build_dependency_graph
 from .llm_client import chat_completion as real_chat_completion, merge_phase_config
 from test.mock_stream import mock_chat_completion
 

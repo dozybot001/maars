@@ -60,5 +60,5 @@ async def run_execution():
 
 @router.post("/stop")
 async def stop_execution():
-    await executor_runner.stop_async()
+    await api_state.executor_runner.stop_async()
     return {"success": True, "message": "Execution stopped"}

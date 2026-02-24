@@ -50,21 +50,44 @@
         return el;
     }
 
+    function aggregateStatus(tasks) {
+        const hasError = tasks.some(t => t?.status === 'execution-failed' || t?.status === 'validation-failed');
+        const allDone = tasks.length > 0 && tasks.every(t => t?.status === 'done');
+        const allUndone = tasks.length > 0 && tasks.every(t => !t?.status || t?.status === 'undone');
+        if (hasError) return 'execution-failed';
+        if (allDone) return 'done';
+        if (allUndone) return 'undone';
+        return 'doing';
+    }
+
+    function createMergedTaskNodeEl(taskIds, taskById) {
+        const tid = taskIds[0] || '?';
+        const taskDatas = taskIds.map(id => getTaskDataForPopover(taskById.get(id) || { task_id: id }));
+        const status = aggregateStatus(taskDatas);
+        const desc = taskIds.join(', ');
+
+        const el = document.createElement('div');
+        el.className = 'tree-task tree-task-leaf tree-task-merged';
+        if (status && status !== 'undone') el.classList.add('task-status-' + status);
+        el.setAttribute('data-task-id', tid);
+        el.setAttribute('data-task-ids', taskIds.join(','));
+        el.setAttribute('data-task-data', JSON.stringify(taskDatas));
+        el.setAttribute('title', desc);
+
+        const badge = document.createElement('span');
+        badge.className = 'tree-task-count';
+        badge.textContent = String(taskIds.length);
+        el.appendChild(badge);
+
+        return el;
+    }
+
     function buildSmoothPath(pts) {
-        if (pts.length === 2) {
-            const [x1, y1] = pts[0];
-            const [x2, y2] = pts[1];
-            const my = (y1 + y2) / 2;
-            return `M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}`;
-        }
-        let d = `M ${pts[0][0]} ${pts[0][1]}`;
-        for (let i = 0; i < pts.length - 1; i++) {
-            const [x1, y1] = pts[i];
-            const [x2, y2] = pts[i + 1];
-            const my = (y1 + y2) / 2;
-            d += ` C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}`;
-        }
-        return d;
+        if (!pts || pts.length < 2) return '';
+        const [x1, y1] = pts[0];
+        const [x2, y2] = pts[1];
+        const my = (y1 + y2) / 2;
+        return `M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}`;
     }
 
     function renderFull(treeData, layout, areaSelector) {
@@ -104,9 +127,19 @@
             path.setAttribute('d', d);
             path.setAttribute('stroke-width', '1.5');
             path.setAttribute('fill', 'none');
-            path.setAttribute('data-from-task', edge.from);
-            path.setAttribute('data-to-task', edge.to);
-            path.setAttribute('class', 'connection-line');
+            const fromVal = edge.from;
+            const toVal = edge.to;
+            if (Array.isArray(fromVal)) {
+                path.setAttribute('data-from-tasks', fromVal.join(','));
+            } else {
+                path.setAttribute('data-from-task', fromVal);
+            }
+            if (Array.isArray(toVal)) {
+                path.setAttribute('data-to-tasks', toVal.join(','));
+            } else {
+                path.setAttribute('data-to-task', toVal);
+            }
+            path.setAttribute('class', 'connection-line' + (areaSelector === AREA.monitor && edge.adjacent === false ? ' connection-line-cross-layer' : ''));
             svg.appendChild(path);
         });
 
@@ -116,20 +149,37 @@
         ctx.tree.appendChild(nodesContainer);
 
         const taskById = new Map(tasks.map(t => [t.task_id, t]));
-        const parentIds = new Set((edges || []).map(e => e.from));
+        const parentIds = new Set();
+        (edges || []).forEach(e => {
+            const f = e.from;
+            if (Array.isArray(f)) f.forEach(id => parentIds.add(id));
+            else parentIds.add(f);
+        });
         const leafIds = new Set(Object.keys(nodes).filter(id => !parentIds.has(id)));
 
+        /* 样式统一：普通=tree-task，特殊=tree-task-leaf。分解树叶子/执行图合并节点用特殊样式 */
         for (const [taskId, pos] of Object.entries(nodes)) {
-            const task = taskById.get(taskId);
-            if (!task) continue;
-
-            const el = createTaskNodeEl(task);
-            if (areaSelector === AREA.planner && leafIds.has(taskId)) el.classList.add('tree-task-leaf');
+            const ids = pos.ids;
+            const isMerged = ids && ids.length >= 2;
+            let el;
+            if (isMerged && areaSelector === AREA.monitor) {
+                el = createMergedTaskNodeEl(ids, taskById);
+            } else {
+                const task = taskById.get(taskId);
+                if (!task) continue;
+                el = createTaskNodeEl(task);
+                if (areaSelector === AREA.planner && leafIds.has(taskId)) {
+                    el.classList.add('tree-task-leaf');
+                }
+                if (areaSelector === AREA.monitor && task.status && task.status !== 'undone') {
+                    el.classList.add('task-status-' + task.status);
+                }
+            }
             el.style.position = 'absolute';
             el.style.left = pos.x + 'px';
             el.style.top = pos.y + 'px';
             el.style.width = pos.w + 'px';
-            el.style.minHeight = pos.h + 'px';
+            el.style.height = pos.h + 'px';
             nodesContainer.appendChild(el);
         }
     }
@@ -167,13 +217,7 @@
         return div.innerHTML;
     }
 
-    function showTaskPopover(task, anchorEl) {
-        if (popoverEl && popoverAnchor === anchorEl) {
-            hideTaskPopover();
-            return;
-        }
-        hideTaskPopover();
-
+    function buildTaskDetailBody(task) {
         const desc = (task.description || task.objective || '').trim() || '-';
         const deps = (task.dependencies || []).length > 0 ? (task.dependencies || []).join(', ') : 'None';
         const hasStatus = task.status != null;
@@ -186,32 +230,67 @@
         const v = task.validation;
         const hasValidation = v && (v.description || (Array.isArray(v.criteria) && v.criteria.length > 0));
         const validationRow = hasValidation ? (() => {
-            const desc = v.description ? `<div class="validation-desc">${escapeHtml(v.description)}</div>` : '';
+            const vdesc = v.description ? `<div class="validation-desc">${escapeHtml(v.description)}</div>` : '';
             const criteriaList = (v.criteria || []).map(c => `<li>${escapeHtml(c)}</li>`).join('');
             const criteriaHtml = criteriaList ? `<ul class="validation-criteria">${criteriaList}</ul>` : '';
             const optionalList = (v.optionalChecks || []).map(c => `<li>${escapeHtml(c)}</li>`).join('');
             const optionalHtml = optionalList ? `<ul class="validation-optional">${optionalList}</ul>` : '';
-            return `<div class="task-detail-row task-detail-validation"><span class="task-detail-label">Validation:</span><div class="task-detail-value">${desc}${criteriaHtml}${optionalHtml}</div></div>`;
+            return `<div class="task-detail-row task-detail-validation"><span class="task-detail-label">Validation:</span><div class="task-detail-value">${vdesc}${criteriaHtml}${optionalHtml}</div></div>`;
         })() : '';
+        return `<div class="task-detail-row"><span class="task-detail-label">Description:</span><span class="task-detail-value">${escapeHtml(desc)}</span></div>
+                <div class="task-detail-row"><span class="task-detail-label">Dependencies:</span><span class="task-detail-value">${escapeHtml(deps)}</span></div>
+                ${statusRow}
+                ${inputRow}
+                ${outputRow}
+                ${validationRow}`;
+    }
+
+    function showTaskPopover(taskOrTasks, anchorEl) {
+        if (popoverEl && popoverAnchor === anchorEl) {
+            hideTaskPopover();
+            return;
+        }
+        hideTaskPopover();
+
+        const tasks = Array.isArray(taskOrTasks) ? taskOrTasks : [taskOrTasks];
+        const single = tasks.length === 1;
 
         popoverEl = document.createElement('div');
         popoverEl.className = 'task-detail-popover';
         popoverEl.setAttribute('role', 'dialog');
         popoverEl.setAttribute('aria-label', 'Task details');
-        popoverEl.innerHTML = `
-            <div class="task-detail-popover-header">
-                <span class="task-detail-popover-title">${escapeHtml(task.task_id)}</span>
-                <button class="task-detail-popover-close" aria-label="Close">&times;</button>
-            </div>
-            <div class="task-detail-popover-body">
-                <div class="task-detail-row"><span class="task-detail-label">Description:</span><span class="task-detail-value">${escapeHtml(desc)}</span></div>
-                <div class="task-detail-row"><span class="task-detail-label">Dependencies:</span><span class="task-detail-value">${escapeHtml(deps)}</span></div>
-                ${statusRow}
-                ${inputRow}
-                ${outputRow}
-                ${validationRow}
-            </div>
-        `;
+
+        if (single) {
+            const task = tasks[0];
+            popoverEl.innerHTML = `
+                <div class="task-detail-popover-header">
+                    <span class="task-detail-popover-title">${escapeHtml(task.task_id)}</span>
+                    <button class="task-detail-popover-close" aria-label="Close">&times;</button>
+                </div>
+                <div class="task-detail-popover-body">${buildTaskDetailBody(task)}</div>
+            `;
+        } else {
+            const tabsHtml = tasks.map((t, i) => {
+                const statusClass = (t.status && t.status !== 'undone') ? ` task-status-${t.status}` : '';
+                return `<button type="button" class="task-detail-tab${statusClass}" data-tab-index="${i}" data-tab-task-id="${escapeHtml(t.task_id)}" aria-pressed="${i === 0}">${escapeHtml(t.task_id)}</button>`;
+            }).join('');
+            popoverEl.innerHTML = `
+                <div class="task-detail-popover-header task-detail-popover-header-tabs">
+                    <div class="task-detail-tabs">${tabsHtml}</div>
+                    <button class="task-detail-popover-close" aria-label="Close">&times;</button>
+                </div>
+                <div class="task-detail-popover-body">${buildTaskDetailBody(tasks[0])}</div>
+            `;
+            const tabs = popoverEl.querySelectorAll('.task-detail-tab');
+            const body = popoverEl.querySelector('.task-detail-popover-body');
+            tabs.forEach((tab, i) => {
+                tab.addEventListener('click', () => {
+                    tabs.forEach(t => t.setAttribute('aria-pressed', 'false'));
+                    tab.setAttribute('aria-pressed', 'true');
+                    body.innerHTML = buildTaskDetailBody(tasks[i]);
+                });
+            });
+        }
 
         document.body.appendChild(popoverEl);
         popoverAnchor = anchorEl;
@@ -230,7 +309,7 @@
 
         popoverEl.querySelector('.task-detail-popover-close').addEventListener('click', hideTaskPopover);
         popoverOutsideClickHandler = (e) => {
-            if (popoverEl && !popoverEl.contains(e.target) && !e.target.closest('.tree-task')) hideTaskPopover();
+            if (popoverEl && !popoverEl.contains(e.target) && !e.target.closest('.tree-task') && !e.target.closest('.timetable-cell')) hideTaskPopover();
         };
         popoverKeydownHandler = (e) => { if (e.key === 'Escape') hideTaskPopover(); };
         document.addEventListener('click', popoverOutsideClickHandler);

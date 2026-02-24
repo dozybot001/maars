@@ -5,17 +5,13 @@ Each node gets a fixed slot — subtree width does not affect sibling spacing.
 
 from typing import Any, Dict, List, Optional, Tuple
 
+from .graph import natural_task_id_key
+
 DEFAULT_NODE_W = 36
 DEFAULT_NODE_H = 28
 DEFAULT_NODE_SEP = 12   # 兄弟节点横向间距（固定槽位）
 DEFAULT_RANK_SEP = 48   # 父子层级纵向间距
 DEFAULT_PADDING = 24
-
-
-def _natural_task_id_key(tid: str) -> Tuple:
-    """Sort key: '1' < '1_1' < '1_2' < '1_10'."""
-    parts = tid.split("_")
-    return tuple(int(p) if p.isdigit() else p for p in parts)
 
 
 def _build_tree(tasks: List[Dict]) -> Dict[str, List[str]]:
@@ -30,7 +26,7 @@ def _build_tree(tasks: List[Dict]) -> Dict[str, List[str]]:
         if parent in ids and parent != tid:
             children.setdefault(parent, []).append(tid)
     for pid in children:
-        children[pid].sort(key=_natural_task_id_key)
+        children[pid].sort(key=natural_task_id_key)
     return children
 
 
@@ -55,7 +51,7 @@ def compute_decomposition_layout(
     children_map = _build_tree(valid)
 
     all_children = {c for cs in children_map.values() for c in cs}
-    roots = sorted([tid for tid in ids if tid not in all_children], key=_natural_task_id_key)
+    roots = sorted([tid for tid in ids if tid not in all_children], key=natural_task_id_key)
     if not roots:
         return None
 
@@ -68,7 +64,7 @@ def compute_decomposition_layout(
         levels.append(frontier[:])
         next_frontier = []
         for nid in frontier:
-            kids = sorted(children_map.get(nid, []), key=_natural_task_id_key)
+            kids = sorted(children_map.get(nid, []), key=natural_task_id_key)
             next_frontier.extend(kids)
         frontier = next_frontier
 

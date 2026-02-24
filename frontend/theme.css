@@ -100,6 +100,11 @@
     --scrollbar-thumb: #cbd5e0;
     --scrollbar-thumb-hover: #a0aec0;
 
+    /* ========== Timetable cells (task brighter than empty) ========== */
+    --timetable-cell-bg: #ffffff;
+    --timetable-cell-empty-bg: #f1f3f5;
+    --timetable-cell-hover-bg: #f7fafc;
+
     /* ========== Tree ========== */
     --tree-line-stroke: #b0b8c4;
     --tree-idea-bg: #f1f5f9;
@@ -188,6 +193,10 @@
     --interactive-active: #2d2d4a;
     --interactive-border-hover: #4a5568;
 
+    --timetable-cell-bg: #252540;
+    --timetable-cell-empty-bg: #1e1e35;
+    --timetable-cell-hover-bg: #2d2d4a;
+
     --accent-primary: #94a3b8;
     --accent-primary-soft: #1e293b;
     --accent-primary-border: #64748b;
@@ -259,6 +268,10 @@
     --border-color: #262626;
     --border-color-hover: #404040;
     --border-disabled: #404040;
+
+    --timetable-cell-bg: #141414;
+    --timetable-cell-empty-bg: #0f0f0f;
+    --timetable-cell-hover-bg: #1a1a1a;
 
     --status-undone: #1a1a1a;
     --status-doing: #3d3000;

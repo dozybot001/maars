@@ -3,7 +3,7 @@
 :root {
     /* Layout (non-color) */
     --area-height: 300px;
-    --border-radius: 6px;
+    --border-radius: 8px;
     --padding: 16px;
     --gap: 20px;
 
@@ -12,7 +12,7 @@
     --tree-task-height: 52px;
     --tree-task-font-number: 12px;
     --tree-task-font-desc: 10px;
-    --tree-task-radius: 8px;
+    --tree-task-radius: 10px;
     --tree-node-shadow: var(--shadow-md);
     --tree-node-shadow-hover: var(--shadow-lg);
 
@@ -57,7 +57,7 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: 'JetBrains Mono', monospace;
     line-height: 1.6;
     color: var(--text-color);
     background: var(--bg-color);
@@ -315,7 +315,7 @@ section {
 .planner-thinking-content.markdown-body code {
     padding: 0.15em 0.35em;
     font-size: 0.9em;
-    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-family: 'JetBrains Mono', monospace;
     background: var(--bg-area-tertiary);
     border-radius: 4px;
 }
@@ -326,7 +326,7 @@ section {
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
     font-size: 11px;
-    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-family: 'JetBrains Mono', monospace;
     background: var(--bg-area-tertiary);
     border-radius: 4px;
     white-space: pre-wrap;
@@ -600,6 +600,45 @@ button.stop-btn:hover:not(:disabled) {
     background: var(--bg-area-secondary);
     border-radius: var(--border-radius) var(--border-radius) 0 0;
 }
+
+.task-detail-popover-header-tabs {
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.task-detail-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
+.task-detail-tab {
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--status-undone);
+    color: var(--text-color);
+    cursor: pointer;
+}
+
+.task-detail-tab:hover {
+    background: var(--interactive-hover);
+}
+
+.task-detail-tab[aria-pressed="true"] {
+    border-color: var(--accent-primary-border);
+    background: var(--accent-primary-soft);
+}
+
+.task-detail-tab.task-status-doing { background: var(--status-doing); color: var(--text-on-dark); }
+.task-detail-tab.task-status-validating { background: var(--status-validating); color: var(--text-on-dark); }
+.task-detail-tab.task-status-done { background: var(--status-done); color: var(--text-on-dark); }
+.task-detail-tab.task-status-validation-failed,
+.task-detail-tab.task-status-execution-failed { background: var(--failure-bg); color: var(--status-failed-text); }
 
 .task-detail-popover-title {
     font-weight: 600;
@@ -1152,7 +1191,7 @@ button.stop-btn:hover:not(:disabled) {
 
 /* Execution Map */
 .execution-map {
-    font-family: 'Monaco', 'Courier New', monospace;
+    font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
     width: 100%;
     height: 100%;
@@ -1246,12 +1285,7 @@ button.stop-btn:hover:not(:disabled) {
     cursor: pointer;
 }
 
-/* Task status colors for grid containers - subtle background colors */
-.task-container.task-status-undone {
-    background: var(--bg-white) !important;
-    color: var(--text-on-dark) !important;
-}
-
+/* Task status colors for grid containers - undone = default */
 .task-container.task-status-doing {
     background: var(--status-doing) !important;
     color: var(--text-on-dark) !important;
@@ -1403,11 +1437,26 @@ button.stop-btn:hover:not(:disabled) {
     overflow: visible;
 }
 
+.tree-task-count {
+    font-size: var(--tree-task-font-number, 12px);
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.tree-task-merged {
+    position: relative;
+}
+
 .tree-connection-lines path {
     stroke: var(--tree-line-stroke);
     stroke-linecap: round;
     stroke-linejoin: round;
     transition: stroke 0.3s ease, stroke-width 0.3s ease;
+}
+
+.connection-line.connection-line-cross-layer {
+    stroke-dasharray: 4 4;
+    stroke-opacity: 0.15;
 }
 
 /* Connection line animations - task start (yellow) & rollback (red) */
@@ -1447,6 +1496,9 @@ button.stop-btn:hover:not(:disabled) {
 
 
 /* ========== Task Tree Node - unified design (planner & monitor) ========== */
+/* 节点样式统一：普通样式（非叶子）、特殊样式（叶子）
+ * 分解树：非叶子=普通，叶子=特殊
+ * 执行图：普通节点=普通，合并节点=特殊 */
 .tree-task {
     --node-bg: var(--bg-area-secondary);
     --node-border: var(--border-color);
@@ -1475,24 +1527,13 @@ button.stop-btn:hover:not(:disabled) {
 }
 
 /* Leaf nodes - more prominent border */
+/* 特殊样式：分解树叶子 / 执行图合并节点 */
 .tree-task-leaf {
     border-width: 2px;
     border-color: var(--text-light);
 }
 
-/* Task status - unified palette */
-.tree-task.task-status-undone {
-    --node-bg: var(--bg-area-secondary);
-    --node-border: var(--border-color);
-    background: var(--node-bg);
-    border-color: var(--node-border);
-}
-
-.tree-task.task-status-undone:hover {
-    background: var(--interactive-hover);
-    border-color: var(--interactive-border-hover);
-}
-
+/* Task status - undone = default, only add class for other statuses */
 .tree-task.task-status-doing {
     --node-bg: var(--status-doing);
     --node-border: var(--tree-status-doing-border);
@@ -1673,7 +1714,7 @@ button.stop-btn:hover:not(:disabled) {
 
 .timetable-cell {
     padding: 0;
-    background: var(--bg-area-primary);
+    background: var(--timetable-cell-bg);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1701,28 +1742,19 @@ button.stop-btn:hover:not(:disabled) {
 }
 
 .timetable-cell:hover {
-    background: var(--interactive-hover);
+    background: var(--timetable-cell-hover-bg);
 }
 
 .timetable-cell-empty {
-    background: var(--bg-area-tertiary);
+    background: var(--timetable-cell-empty-bg);
     cursor: default;
 }
 
 .timetable-cell-empty:hover {
-    background: var(--bg-area-tertiary);
+    background: var(--timetable-cell-empty-bg);
 }
 
-/* Task status colors - minimal and clean */
-.timetable-cell.task-status-undone {
-    background: var(--status-undone) !important;
-    color: var(--text-color) !important;
-}
-
-.timetable-cell.task-status-undone:hover {
-    background: var(--interactive-hover) !important;
-}
-
+/* Task status colors - undone = default, only add class for other statuses */
 .timetable-cell.task-status-doing {
     background: var(--status-doing) !important;
     color: var(--text-color) !important;

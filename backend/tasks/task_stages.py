@@ -1,14 +1,14 @@
 """
 Unified task stages module.
 Single source: compute stages from flat task list. Does not modify original data.
-Uses layout.sugiyama for graph, networkx for topological sort and transitive reduction.
+Uses layout.graph.build_dependency_graph, networkx for topological sort and transitive reduction.
 """
 
 from typing import List, Dict
 
 import networkx as nx
 
-from layout.sugiyama import build_dependency_graph
+from layout.graph import build_dependency_graph
 
 
 def _reduce_dependencies(G: nx.DiGraph, stages: List[List[Dict]]) -> List[List[Dict]]:

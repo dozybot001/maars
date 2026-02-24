@@ -72,18 +72,39 @@
                 data.tasks.forEach(taskState => {
                     const monitorSection = document.querySelector('.monitor-section');
                     if (monitorSection) {
-                        const cells = monitorSection.querySelectorAll(`[data-task-id="${taskState.task_id}"]`);
+                        const byId = monitorSection.querySelectorAll(`[data-task-id="${taskState.task_id}"]`);
+                        const byIds = monitorSection.querySelectorAll('[data-task-ids]');
+                        const cells = Array.from(byId);
+                        byIds.forEach(cell => {
+                            const ids = (cell.getAttribute('data-task-ids') || '').split(',').map(s => s.trim());
+                            if (ids.includes(taskState.task_id)) cells.push(cell);
+                        });
                         cells.forEach(cell => {
                             cell.classList.remove('task-status-undone', 'task-status-doing', 'task-status-validating', 'task-status-done', 'task-status-validation-failed', 'task-status-execution-failed');
-                            cell.classList.add(`task-status-${taskState.status}`);
                             const dataAttr = cell.getAttribute('data-task-data');
                             if (dataAttr) {
                                 try {
                                     const d = JSON.parse(dataAttr);
-                                    d.status = taskState.status;
-                                    cell.setAttribute('data-task-data', JSON.stringify(d));
-                                } catch (_) {}
+                                    const arr = Array.isArray(d) ? d : [d];
+                                    const updated = arr.map(t => t.task_id === taskState.task_id ? { ...t, status: taskState.status } : t);
+                                    cell.setAttribute('data-task-data', JSON.stringify(Array.isArray(d) ? updated : updated[0]));
+                                    const status = arr.length === 1 ? taskState.status : (() => {
+                                        const hasError = updated.some(t => t.status === 'execution-failed' || t.status === 'validation-failed');
+                                        const allDone = updated.every(t => t.status === 'done');
+                                        const allUndone = updated.every(t => !t.status || t.status === 'undone');
+                                        return hasError ? 'execution-failed' : allDone ? 'done' : allUndone ? 'undone' : 'doing';
+                                    })();
+                                    if (status && status !== 'undone') cell.classList.add(`task-status-${status}`);
+                                } catch (_) {
+                                    if (taskState.status && taskState.status !== 'undone') cell.classList.add(`task-status-${taskState.status}`);
                                 }
+                            } else {
+                                if (taskState.status && taskState.status !== 'undone') cell.classList.add(`task-status-${taskState.status}`);
+                            }
+                            document.querySelectorAll(`.task-detail-tab[data-tab-task-id="${taskState.task_id}"]`).forEach(tab => {
+                                tab.classList.remove('task-status-undone', 'task-status-doing', 'task-status-validating', 'task-status-done', 'task-status-validation-failed', 'task-status-execution-failed');
+                                if (taskState.status && taskState.status !== 'undone') tab.classList.add(`task-status-${taskState.status}`);
+                            });
                         });
                     }
                 });
