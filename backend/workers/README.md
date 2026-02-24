@@ -96,3 +96,9 @@ Plan (plan.json)
 | Executor | `llm_executor.execute_task` | 真实 LLM 调用，支持 useMock |
 | Validator | 随机模拟 | `runner.py` 中 `validation_passed = random.random() < 0.95`，未按 criteria 校验 |
 | Artifact 解析 | `output.artifact` 映射 | 依赖任务的 output 需定义 artifact 名称 |
+
+---
+
+## 七、改进规划
+
+Executor 升级为 Agent、接入 Agent Skills、Atomicity 与能力边界联动等规划详见 [EXECUTOR_IMPROVEMENTS.md](EXECUTOR_IMPROVEMENTS.md)。

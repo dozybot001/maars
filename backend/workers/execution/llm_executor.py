@@ -1,10 +1,11 @@
 """
 LLM-based task executor. Generates output from task description and input artifacts.
 Supports mock mode (useMock=True): returns simulated output without LLM calls.
+Supports streaming via on_thinking callback for real-time output display.
 """
 
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 import orjson
 import json_repair
@@ -12,11 +13,25 @@ import json_repair
 from planner.llm_client import chat_completion, merge_phase_config
 
 
-def _mock_execute(output_format: str, task_id: str) -> Any:
-    """Return simulated output for mock mode. No LLM call."""
+def _mock_execute(output_format: str, task_id: str, on_thinking: Optional[Callable] = None) -> Any:
+    """Return simulated output for mock mode. No LLM call. Optionally streams to on_thinking."""
     if _is_json_format(output_format):
-        return {"_mock": True, "task_id": task_id, "note": "Simulated output (Mock AI mode)"}
-    return f"# Mock Output\n\nSimulated content for task {task_id}.\n\n(Mock AI mode)"
+        result = {"_mock": True, "task_id": task_id, "note": "Simulated output (Mock AI mode)"}
+        if on_thinking:
+            for chunk in _chunk_string(orjson.dumps(result, option=orjson.OPT_INDENT_2).decode("utf-8"), 20):
+                on_thinking(chunk, task_id=task_id, operation="Execute")
+        return result
+    text = f"# Mock Output\n\nSimulated content for task {task_id}.\n\n(Mock AI mode)"
+    if on_thinking:
+        for chunk in _chunk_string(text, 20):
+            on_thinking(chunk, task_id=task_id, operation="Execute")
+    return text
+
+
+def _chunk_string(s: str, size: int):
+    """Yield string in chunks for simulated streaming."""
+    for i in range(0, len(s), size):
+        yield s[i : i + size]
 
 
 def _is_json_format(output_format: str) -> bool:
@@ -35,6 +50,7 @@ async def execute_task(
     resolved_inputs: Dict[str, Any],
     api_config: Optional[Dict[str, Any]] = None,
     abort_event: Optional[Any] = None,
+    on_thinking: Optional[Callable[[str, Optional[str], Optional[str]], None]] = None,
 ) -> Any:
     """
     Execute task via LLM. Returns parsed output (dict for JSON, str for Markdown).
@@ -43,7 +59,7 @@ async def execute_task(
     raw_cfg = api_config or {}
     if raw_cfg.get("useMock") or raw_cfg.get("use_mock"):
         output_format = (output_spec or {}).get("format") or ""
-        return _mock_execute(output_format, task_id)
+        return _mock_execute(output_format, task_id, on_thinking)
 
     api_config = merge_phase_config(raw_cfg, "execute")
     output_format = output_spec.get("format") or ""
@@ -86,13 +102,18 @@ Produce the output now. Output ONLY the result, no explanation."""
 
     use_json_mode = _is_json_format(output_format)
     response_format = {"type": "json_object"} if use_json_mode else None
+    stream = on_thinking is not None
+
+    def _on_chunk(chunk: str) -> None:
+        if on_thinking and chunk:
+            on_thinking(chunk, task_id=task_id, operation="Execute")
 
     content = await chat_completion(
         messages,
         api_config,
-        on_chunk=None,
+        on_chunk=_on_chunk if stream else None,
         abort_event=abort_event,
-        stream=False,
+        stream=stream,
         temperature=0.3,
         response_format=response_format,
     )

@@ -1,9 +1,13 @@
 """
 Level-order tree layout for decomposition (task_id hierarchy).
 Each node gets a fixed slot — subtree width does not affect sibling spacing.
+
+居中策略（统一公式 offset = (container - content) / 2）:
+  - 树内居中: 每层在 max_level_width 内居中
+  - 树整体居中: 整棵树在画布 width 内居中
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from .graph import natural_task_id_key
 
@@ -68,13 +72,14 @@ def compute_decomposition_layout(
             next_frontier.extend(kids)
         frontier = next_frontier
 
-    # Assign x by slot index — fixed slot per node; each level centered to prevent overflow
+    # 统一居中公式: offset = (container - content) / 2
+    # 1) 树内居中: 每层在其容器(max_level_width)内居中
     max_level_width = max(len(layer) * slot_w for layer in levels) if levels else 0
     positions: Dict[str, Dict[str, Any]] = {}
     for depth, layer in enumerate(levels):
         y = depth * (node_h + rank_sep)
         level_width = len(layer) * slot_w
-        level_offset = (max_level_width - level_width) / 2  # 居中对齐
+        level_offset = (max_level_width - level_width) / 2
         for idx, nid in enumerate(layer):
             x = level_offset + idx * slot_w
             positions[nid] = {"x": x, "y": y, "w": node_w, "h": node_h}
@@ -101,20 +106,25 @@ def compute_decomposition_layout(
             })
 
     # Normalize to origin and add padding
-    xs = [p["x"] for p in positions.values()]
-    ys = [p["y"] for p in positions.values()]
-    ws = [p["x"] + p["w"] for p in positions.values()]
-    hs = [p["y"] + p["h"] for p in positions.values()]
-    min_x, min_y = min(xs), min(ys)
-    max_x, max_y = max(ws), max(hs)
+    min_x = min(p["x"] for p in positions.values())
+    min_y = min(p["y"] for p in positions.values())
+    max_x = max(p["x"] + p["w"] for p in positions.values())
+    max_y = max(p["y"] + p["h"] for p in positions.values())
+    content_w = max_x - min_x
+    content_h = max_y - min_y
     off_x = min_x - padding
     off_y = min_y - padding
+
+    width = round(max(content_w + padding * 2, 200), 1)
+    height = round(max(content_h + padding * 2, 100), 1)
+    # 2) 树整体居中: 内容在画布内居中（统一公式 container - content）
+    center_offset = (width - content_w - padding * 2) / 2
 
     nodes_out = {}
     for nid, pos in positions.items():
         if nid in ids:
             nodes_out[nid] = {
-                "x": round(pos["x"] - off_x, 1),
+                "x": round(pos["x"] - off_x + center_offset, 1),
                 "y": round(pos["y"] - off_y, 1),
                 "w": pos["w"],
                 "h": pos["h"],
@@ -122,10 +132,7 @@ def compute_decomposition_layout(
 
     edges_out = []
     for e in edges:
-        shifted = [[round(pt[0] - off_x, 1), round(pt[1] - off_y, 1)] for pt in e["points"]]
+        shifted = [[round(pt[0] - off_x + center_offset, 1), round(pt[1] - off_y, 1)] for pt in e["points"]]
         edges_out.append({"from": e["from"], "to": e["to"], "points": shifted})
-
-    width = round(max(max_x - min_x + padding * 2, 200), 1)
-    height = round(max(max_y - min_y + padding * 2, 100), 1)
 
     return {"nodes": nodes_out, "edges": edges_out, "width": width, "height": height}

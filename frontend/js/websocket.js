@@ -8,6 +8,7 @@
     const planner = window.MAARS?.planner;
     const monitor = window.MAARS?.monitor;
     const plannerThinking = window.MAARS?.plannerThinking;
+    const executorThinking = window.MAARS?.executorThinking;
     if (!cfg || !planner || !monitor) return;
 
     const state = window.MAARS.state || {};
@@ -111,6 +112,20 @@
             }
         });
 
+        state.socket.on('execution-start', () => {
+            if (executorThinking) executorThinking.clear();
+        });
+
+        state.socket.on('executor-thinking', (data) => {
+            if (!data.chunk || !executorThinking) return;
+            executorThinking.appendChunk(data.chunk, data.taskId, data.operation);
+        });
+
+        state.socket.on('executor-output', (data) => {
+            if (!executorThinking || !data.taskId) return;
+            executorThinking.setTaskOutput(data.taskId, data.output);
+        });
+
         state.socket.on('executor-states-update', (data) => {
             if (data.executors && data.stats) monitor.renderExecutors(data.executors, data.stats);
         });
@@ -130,6 +145,7 @@
 
         state.socket.on('execution-complete', (data) => {
             console.log(`Execution complete: ${data.completed}/${data.total} tasks completed`);
+            if (executorThinking) executorThinking.applyHighlight();
             if (stopExecutionBtn) stopExecutionBtn.style.display = 'none';
             if (executionBtn) {
                 executionBtn.disabled = false;

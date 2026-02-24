@@ -21,6 +21,11 @@ from .. import state as api_state
 router = APIRouter()
 
 
+def _tree_update_payload(plan):
+    """Build treeData + layout payload for plan-tree-update / plan-complete."""
+    return {"treeData": plan["tasks"], "layout": compute_decomposition_layout(plan["tasks"])}
+
+
 @router.get("")
 async def get_plan_route(plan_id: str = Query("test", alias="planId")):
     plan = await get_plan(plan_id)
@@ -32,9 +37,7 @@ async def get_plan_tree(plan_id: str = Query("test", alias="planId")):
     plan = await get_plan(plan_id)
     if not plan or not plan.get("tasks") or len(plan["tasks"]) == 0:
         return {"treeData": [], "layout": None}
-    tasks = plan["tasks"]
-    layout = compute_decomposition_layout(tasks)
-    return {"treeData": tasks, "layout": layout}
+    return _tree_update_payload(plan)
 
 
 @router.post("/stop")
@@ -76,16 +79,14 @@ async def _run_plan_inner(body: PlanRunRequest):
         await api_state.sio.emit("plan-start")
 
         if plan["tasks"]:
-            layout = compute_decomposition_layout(plan["tasks"])
-            await api_state.sio.emit("plan-tree-update", {"treeData": plan["tasks"], "layout": layout})
+            await api_state.sio.emit("plan-tree-update", _tree_update_payload(plan))
 
         def on_tasks_batch(children, parent_task, all_tasks):
             if abort_event and abort_event.is_set():
                 return
             plan["tasks"] = all_tasks
             if plan["tasks"]:
-                layout = compute_decomposition_layout(plan["tasks"])
-                asyncio.create_task(api_state.sio.emit("plan-tree-update", {"treeData": plan["tasks"], "layout": layout}))
+                asyncio.create_task(api_state.sio.emit("plan-tree-update", _tree_update_payload(plan)))
 
         def on_thinking(chunk, task_id=None, operation=None):
             if abort_event and abort_event.is_set():
@@ -105,10 +106,8 @@ async def _run_plan_inner(body: PlanRunRequest):
         )
         plan["tasks"] = result["tasks"]
         await save_plan(plan, plan_id)
-        layout = compute_decomposition_layout(plan["tasks"])
         await api_state.sio.emit("plan-complete", {
-            "treeData": plan["tasks"],
-            "layout": layout,
+            **_tree_update_payload(plan),
             "planId": plan_id,
             "qualityScore": plan.get("qualityScore"),
             "qualityComment": plan.get("qualityComment"),

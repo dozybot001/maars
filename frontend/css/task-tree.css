@@ -264,7 +264,7 @@
 
 .connection-line.connection-line-cross-layer {
     stroke-dasharray: 4 4;
-    stroke-opacity: 0.15;
+    stroke-opacity: 0.25;
 }
 
 @keyframes yellowGlowTopToBottom {

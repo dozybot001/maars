@@ -199,9 +199,7 @@
 
     function renderPlannerTree(treeData, layout) {
         if (!Array.isArray(treeData)) return;
-        plannerTreeData = treeData;
-        plannerLayout = layout || null;
-        renderFull(plannerTreeData, layout, AREA.planner);
+        renderFull(treeData, layout, AREA.planner);
     }
 
     // Popover
@@ -370,7 +368,7 @@
         showTaskPopover,
         hideTaskPopover,
         updatePlannerQualityBadge,
-        buildTaskDataForPopover: (task) => getTaskDataForPopover(task),
+        buildTaskDataForPopover: getTaskDataForPopover,
         get plannerTreeData() { return plannerTreeData; },
         get plannerLayout() { return plannerLayout; },
     };

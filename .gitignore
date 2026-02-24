@@ -3,3 +3,8 @@ backend/db/plan_*/
 
 # API config (contains secrets)
 backend/db/api_config.json
+
+# IDE & editor
+.cursor
+.history
+history

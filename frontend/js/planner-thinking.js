@@ -9,7 +9,7 @@
     state.plannerThinkingBlocks = state.plannerThinkingBlocks || [];
     state.plannerThinkingUserScrolled = state.plannerThinkingUserScrolled || false;
     state.plannerThinkingBlockUserScrolled = state.plannerThinkingBlockUserScrolled || {};
-    state.lastUpdatedBlockKey = state.lastUpdatedBlockKey || '';
+    state.plannerLastUpdatedBlockKey = state.plannerLastUpdatedBlockKey || '';
     window.MAARS.state = state;
 
     const RENDER_THROTTLE_MS = 120;
@@ -56,7 +56,7 @@
             });
         }
         state.plannerThinkingBlockUserScrolled = state.plannerThinkingBlockUserScrolled || {};
-        const lastKey = state.lastUpdatedBlockKey || '';
+        const lastKey = state.plannerLastUpdatedBlockKey || '';
         el.querySelectorAll('.planner-thinking-block').forEach((blockEl) => {
             const key = blockEl.getAttribute('data-block-key') || '';
             const body = blockEl.querySelector('.planner-thinking-block-body');
@@ -100,7 +100,7 @@
         state.plannerThinkingBlocks = [];
         state.plannerThinkingUserScrolled = false;
         state.plannerThinkingBlockUserScrolled = {};
-        state.lastUpdatedBlockKey = '';
+        state.plannerLastUpdatedBlockKey = '';
         const el = document.getElementById('plannerThinkingContent');
         const area = document.getElementById('plannerThinkingArea');
         if (el) el.innerHTML = '';
@@ -115,7 +115,7 @@
             state.plannerThinkingBlocks.push(block);
         }
         block.content += chunk;
-        state.lastUpdatedBlockKey = key;
+        state.plannerLastUpdatedBlockKey = key;
         scheduleRender();
     }
 

@@ -106,6 +106,7 @@ class ExecutorRunner:
                     if dep_id in self.reverse_dependency_index:
                         self.reverse_dependency_index[dep_id].append(task["task_id"])
 
+            self._emit("execution-start", {})
             self._emit("timetable-layout", {"layout": timetable_layout})
             self._broadcast_task_states()
             await self._execute_tasks()
@@ -190,6 +191,10 @@ class ExecutorRunner:
                 raise ValueError(f"Task {task['task_id']} has no output spec")
             try:
                 resolved_inputs = await resolve_artifacts(task, self.task_map, self.plan_id or "")
+
+                def _on_thinking(chunk: str, task_id: Optional[str] = None, operation: Optional[str] = None) -> None:
+                    self._emit("executor-thinking", {"chunk": chunk, "taskId": task_id, "operation": operation or "Execute"})
+
                 result = await execute_task(
                     task_id=task["task_id"],
                     description=task.get("description") or "",
@@ -198,9 +203,11 @@ class ExecutorRunner:
                     resolved_inputs=resolved_inputs,
                     api_config=self.api_config or {},
                     abort_event=self.abort_event,
+                    on_thinking=_on_thinking,
                 )
                 to_save = result if isinstance(result, dict) else {"content": result}
                 await save_task_artifact(self.plan_id or "", task["task_id"], to_save)
+                self._emit("executor-output", {"taskId": task["task_id"], "output": result})
                 execution_passed = True
             except Exception as exec_err:
                 logger.warning("LLM execution failed for task %s: %s", task["task_id"], exec_err)

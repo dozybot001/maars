@@ -286,15 +286,13 @@ def compute_stage_layout(
             to_val = t_slot if t_slot else tid
             edges.append({"from": from_val, "to": to_val, "points": [src_pt, dst_pt], "adjacent": adjacent})
 
-    xs = [p["x"] for p in slot_positions.values()]
-    ys = [p["y"] for p in slot_positions.values()]
-    ws = [p["x"] + p["w"] for p in slot_positions.values()]
-    hs = [p["y"] + p["h"] for p in slot_positions.values()]
-    if not xs:
+    if not slot_positions:
         return None
 
-    min_x, min_y = min(xs), min(ys)
-    max_x, max_y = max(ws), max(hs)
+    min_x = min(p["x"] for p in slot_positions.values())
+    min_y = min(p["y"] for p in slot_positions.values())
+    max_x = max(p["x"] + p["w"] for p in slot_positions.values())
+    max_y = max(p["y"] + p["h"] for p in slot_positions.values())
     width = max(max_x - min_x + padding * 2, 200)
     height = round(max(max_y - min_y + padding * 2, 100), 1)
     off_x = (min_x + max_x) / 2 - width / 2

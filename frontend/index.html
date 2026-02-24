@@ -146,21 +146,35 @@
             <h2>Executors</h2>
             <div class="executor-content">
                 <div class="executor-stats">
-                    <div class="stat-item">
-                        <span class="stat-label">Total:</span>
-                        <span class="stat-value" id="executorTotal">0</span>
+                    <div class="executor-stats-items">
+                        <div class="stat-item">
+                            <span class="stat-label">Total:</span>
+                            <span class="stat-value" id="executorTotal">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Busy:</span>
+                            <span class="stat-value stat-busy" id="executorBusy">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Idle:</span>
+                            <span class="stat-value stat-idle" id="executorIdle">0</span>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Busy:</span>
-                        <span class="stat-value stat-busy" id="executorBusy">0</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Idle:</span>
-                        <span class="stat-value stat-idle" id="executorIdle">0</span>
+                    <div class="executor-chips" id="executorChips">
+                        <!-- Populated by renderExecutors -->
                     </div>
                 </div>
-                <div class="executor-grid" id="executorGrid">
-                    <!-- Populated by loadExecutorStates on page load -->
+                <div class="executor-thinking-output-row">
+                    <div class="executor-thinking-area" id="executorThinkingArea">
+                        <div class="executor-thinking-label">AI Thinking</div>
+                        <div class="executor-thinking-content markdown-body" id="executorThinkingContent"></div>
+                        <div class="executor-thinking-placeholder" id="executorThinkingPlaceholder">Thinking will appear here when executing tasks...</div>
+                    </div>
+                    <div class="executor-output-area" id="executorOutputArea">
+                        <div class="executor-output-label">Task Output</div>
+                        <div class="executor-output-content markdown-body" id="executorOutputContent"></div>
+                        <div class="executor-output-placeholder" id="executorOutputPlaceholder">Final output will appear here when tasks complete...</div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -199,6 +213,7 @@
     <script src="js/api.js"></script>
     <script src="js/planner.js"></script>
     <script src="js/planner-thinking.js"></script>
+    <script src="js/executor-thinking.js"></script>
     <script src="js/monitor.js"></script>
     <script src="js/websocket.js"></script>
     <script src="app.js"></script>

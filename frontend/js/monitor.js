@@ -212,13 +212,13 @@
     }
 
     function renderExecutors(executors, stats) {
-        const executorGrid = document.getElementById('executorGrid');
+        const executorChips = document.getElementById('executorChips');
         const executorTotal = document.getElementById('executorTotal');
         const executorBusy = document.getElementById('executorBusy');
         const executorIdle = document.getElementById('executorIdle');
-        if (!executorGrid || !executorTotal || !executorBusy || !executorIdle) return;
+        if (!executorChips || !executorTotal || !executorBusy || !executorIdle) return;
         if (!executors || executors.length === 0) {
-            executorGrid.innerHTML = '';
+            executorChips.innerHTML = '';
             executorTotal.textContent = executorBusy.textContent = executorIdle.textContent = '0';
             return;
         }
@@ -228,10 +228,9 @@
         let html = '';
         executors.forEach(executor => {
             const statusClass = executor.status === 'busy' ? 'executor-busy' : executor.status === 'failed' ? 'executor-failed' : 'executor-idle';
-            const taskText = executor.taskId ? `Task: ${executor.taskId}` : '';
-            html += `<div class="executor-item ${statusClass}"><div class="executor-id">Executor ${executor.id}</div><div class="executor-status status-${executor.status}">${executor.status.toUpperCase()}</div><div class="executor-task">${taskText}</div></div>`;
+            html += `<div class="executor-chip ${statusClass}" data-executor-id="${executor.id}" title="Executor ${executor.id}${executor.taskId ? ': ' + executor.taskId : ''}">${executor.id}</div>`;
         });
-        executorGrid.innerHTML = html;
+        executorChips.innerHTML = html;
     }
 
     function renderValidators(validators, stats) {
