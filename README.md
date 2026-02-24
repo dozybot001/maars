@@ -73,6 +73,7 @@ maars/
 
 ## 文档
 
+- [Release Note 撰写标准](docs/RELEASE_NOTE_STANDARD.md)
 - [后端结构](backend/README.md)
 - [Layout 模块](backend/layout/README.md)（含 [执行图布局规则](backend/layout/STAGE_LAYOUT_RULES.md)）
 - [Planner 流程](backend/planner/README.md)
