@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field
 class PlanRunRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     idea: Optional[str] = None
-    plan_id: str = Field(default="test", alias="planId")
     skip_quality_assessment: bool = Field(default=False, alias="skipQualityAssessment")
 
 

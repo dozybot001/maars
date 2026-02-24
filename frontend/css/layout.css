@@ -1,0 +1,152 @@
+/**
+ * Layout - Page header, sections, typography, theme toggle
+ */
+
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--gap);
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.header-title {
+    flex: 1;
+    min-width: 0;
+}
+
+.header-title h1,
+.header-title .subtitle {
+    text-align: left;
+}
+
+.header-title .subtitle {
+    margin-bottom: 0;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.icon-btn {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    font-size: 18px;
+    border: 1px solid transparent;
+    background: var(--bg-area-secondary);
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+}
+
+.icon-btn:hover {
+    background: var(--interactive-hover);
+    border-color: var(--border-color-hover);
+    color: var(--text-color);
+}
+
+.theme-toggle-btn {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    position: relative;
+    border: 1px solid transparent;
+    background: var(--bg-area-secondary);
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+}
+
+.theme-toggle-btn:hover {
+    background: var(--interactive-hover);
+    border-color: var(--border-color-hover);
+    color: var(--text-color);
+}
+
+.theme-toggle-btn .theme-icon {
+    position: absolute;
+    font-size: 20px;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.theme-toggle-btn .theme-icon-sun {
+    opacity: 1;
+}
+
+.theme-toggle-btn .theme-icon-moon,
+.theme-toggle-btn .theme-icon-black {
+    opacity: 0;
+}
+
+[data-theme="dark"] .theme-toggle-btn .theme-icon-sun,
+[data-theme="dark"] .theme-toggle-btn .theme-icon-black {
+    opacity: 0;
+}
+
+[data-theme="dark"] .theme-toggle-btn .theme-icon-moon {
+    opacity: 1;
+}
+
+[data-theme="black"] .theme-toggle-btn .theme-icon-sun,
+[data-theme="black"] .theme-toggle-btn .theme-icon-moon {
+    opacity: 0;
+}
+
+[data-theme="black"] .theme-toggle-btn .theme-icon-black {
+    opacity: 1;
+}
+
+h1 {
+    font-size: 32px;
+    font-weight: 300;
+    text-align: center;
+    margin-bottom: 6px;
+    letter-spacing: 2px;
+}
+
+.subtitle {
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    text-align: center;
+    margin-bottom: 20px;
+    letter-spacing: 0.5px;
+}
+
+h2 {
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: var(--gap);
+    color: var(--text-color);
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+    letter-spacing: 0.2px;
+}
+
+section {
+    margin-bottom: 50px;
+}
+
+/* Unified section styling */
+.planner-section,
+.monitor-section,
+.executor-section,
+.validator-section {
+    padding: var(--padding);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-white);
+    box-shadow: var(--shadow-md);
+}

@@ -60,23 +60,18 @@ async def _run_plan_inner(body: PlanRunRequest):
 
     try:
         idea = body.idea
+        if not idea or not isinstance(idea, str) or not idea.strip():
+            raise ValueError("Idea is required for plan generation.")
+
         api_config = await get_effective_api_config()
         use_mock = api_config.get("useMock", api_config.get("use_mock", True))
 
-        if idea is not None and isinstance(idea, str) and idea.strip():
-            plan_id = f"plan_{int(time.time() * 1000)}"
-        else:
-            plan_id = body.plan_id
-
-        plan = await get_plan(plan_id) or {}
-        if idea is not None and isinstance(idea, str) and idea.strip():
-            task0 = {"task_id": "0", "description": idea.strip(), "dependencies": []}
-            plan["tasks"] = [task0]
-            plan["idea"] = idea.strip()
-            await save_plan(plan, plan_id)
-
-        if not plan.get("tasks") or len(plan["tasks"]) == 0:
-            raise ValueError("No plan found. Provide idea or generate plan first.")
+        plan_id = f"plan_{int(time.time() * 1000)}"
+        plan = {
+            "tasks": [{"task_id": "0", "description": idea.strip(), "dependencies": []}],
+            "idea": idea.strip(),
+        }
+        await save_plan(plan, plan_id)
 
         await api_state.sio.emit("plan-start")
 
@@ -144,7 +139,7 @@ async def run_plan_route(body: PlanRunRequest):
         err_msg = str(e)
         logger.warning("Plan run error: %s", err_msg)
         await api_state.sio.emit("plan-error", {"error": "Plan generation stopped by user" if is_aborted else err_msg})
-        if "No decomposable task" in err_msg or "Provide idea" in err_msg:
+        if "No decomposable task" in err_msg or "Idea is required" in err_msg or "Provide idea" in err_msg:
             return JSONResponse(status_code=400, content={"error": err_msg})
         return JSONResponse(status_code=500, content={"error": err_msg or "Failed to run plan"})
     finally:

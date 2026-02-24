@@ -15,8 +15,7 @@
     let planRunAbortController = null;
 
     async function buildPlanRunRequest(extra = {}) {
-        const planId = await cfg.resolvePlanId();
-        return { planId, ...extra };
+        return { ...extra };
     }
 
     async function generatePlan() {

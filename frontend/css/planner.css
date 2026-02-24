@@ -1,0 +1,192 @@
+/**
+ * Planner - Idea input, AI thinking area, task tree layout
+ */
+
+/* Idea input row */
+.idea-input-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: var(--gap);
+    align-items: center;
+}
+
+.idea-input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    font-size: 14px;
+    font-family: inherit;
+    background: var(--bg-input);
+    color: var(--text-color);
+}
+
+.idea-input:focus {
+    outline: none;
+    border-color: var(--accent-primary-border);
+    box-shadow: 0 0 0 2px var(--accent-primary-soft);
+}
+
+.idea-input::placeholder {
+    color: var(--text-muted);
+}
+
+/* Planner: AI thinking + task tree side by side (30% / 70%) */
+.planner-content {
+    width: 100%;
+}
+
+.planner-thinking-tree-row {
+    display: flex;
+    gap: var(--gap);
+    margin-top: var(--gap);
+    min-height: 400px;
+}
+
+.planner-thinking-tree-row .planner-thinking-area {
+    flex: 0 0 30%;
+    width: 30%;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background: var(--bg-area-secondary);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    min-width: 0;
+    height: 400px;
+}
+
+.planner-thinking-label {
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: var(--bg-area-tertiary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.planner-thinking-content {
+    flex: 1;
+    margin: 0;
+    padding: 12px 14px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    overflow-y: auto;
+    overflow-x: hidden;
+    word-break: break-word;
+    min-height: 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    overflow-anchor: none;
+}
+
+/* Markdown styles for AI thinking */
+.planner-thinking-content.markdown-body h1,
+.planner-thinking-content.markdown-body h2,
+.planner-thinking-content.markdown-body h3 {
+    margin: 0.8em 0 0.4em;
+    font-size: 1.1em;
+    font-weight: 600;
+    color: var(--text-color);
+}
+.planner-thinking-content.markdown-body h1:first-child,
+.planner-thinking-content.markdown-body h2:first-child,
+.planner-thinking-content.markdown-body h3:first-child { margin-top: 0; }
+.planner-thinking-content.markdown-body p { margin: 0.4em 0; }
+.planner-thinking-content.markdown-body ul,
+.planner-thinking-content.markdown-body ol { margin: 0.4em 0; padding-left: 1.4em; }
+.planner-thinking-content.markdown-body li { margin: 0.2em 0; }
+.planner-thinking-content.markdown-body code {
+    padding: 0.15em 0.35em;
+    font-size: 0.9em;
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg-area-tertiary);
+    border-radius: 4px;
+}
+.planner-thinking-content.markdown-body pre {
+    margin: 0.6em 0;
+    padding: 10px 12px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg-area-tertiary);
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.planner-thinking-content.markdown-body pre code { padding: 0; background: none; }
+.planner-thinking-content.markdown-body blockquote {
+    margin: 0.4em 0;
+    padding-left: 12px;
+    border-left: 3px solid var(--border-color);
+    color: var(--text-muted);
+}
+.planner-thinking-content.markdown-body strong { font-weight: 600; }
+.planner-thinking-content.markdown-body em { font-style: italic; }
+.planner-thinking-content.markdown-body hr {
+    margin: 0.8em 0;
+    border: none;
+    border-top: 1px solid var(--border-color);
+}
+
+.planner-thinking-block {
+    height: 140px;
+    min-height: 140px;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+    background: var(--bg-area-tertiary);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+    cursor: pointer;
+}
+.planner-thinking-block.is-focused {
+    border-color: var(--text-muted, #6b7280);
+    box-shadow: 0 0 0 1px var(--text-muted, #6b7280);
+}
+.planner-thinking-block:last-child {
+    margin-bottom: 0;
+}
+.planner-thinking-block-header {
+    flex-shrink: 0;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg-area-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+.planner-thinking-block-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: hidden;
+    overflow-x: hidden;
+    padding: 8px 10px;
+    cursor: pointer;
+}
+.planner-thinking-block.is-focused .planner-thinking-block-body {
+    overflow-y: auto;
+    cursor: default;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.planner-thinking-placeholder {
+    position: absolute;
+    top: 36px;
+    left: 14px;
+    right: 14px;
+    padding: 12px 0;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+    pointer-events: none;
+}
+.planner-thinking-area.has-content .planner-thinking-placeholder {
+    display: none;
+}

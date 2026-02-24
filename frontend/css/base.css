@@ -1,0 +1,72 @@
+/**
+ * Base - Reset, variables, scrollbar, body
+ */
+
+:root {
+    /* Layout (non-color) */
+    --area-height: 300px;
+    --border-radius: 8px;
+    --padding: 16px;
+    --gap: 20px;
+
+    /* Task tree - unified node design */
+    --tree-task-width: 110px;
+    --tree-task-height: 52px;
+    --tree-task-font-number: 12px;
+    --tree-task-font-desc: 10px;
+    --tree-task-radius: 10px;
+    --tree-node-shadow: var(--shadow-md);
+    --tree-node-shadow-hover: var(--shadow-lg);
+
+    /* Placeholder */
+    --placeholder-color: var(--text-muted);
+    --placeholder-font-size: 14px;
+
+    /* Scrollbar */
+    --scrollbar-width: 10px;
+
+    /* Button */
+    --button-padding-y: 10px;
+    --button-padding-x: 20px;
+    --button-font-size: 14px;
+    --button-font-weight: 500;
+    --button-border-radius: var(--border-radius);
+    --button-transition: all 0.2s ease;
+}
+
+/* Unified scrollbar (all scrollable areas) */
+*::-webkit-scrollbar {
+    width: var(--scrollbar-width);
+    height: var(--scrollbar-width);
+}
+*::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: var(--border-radius);
+}
+*::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border-radius: calc(var(--scrollbar-width) / 2);
+    border: 2px solid var(--scrollbar-track);
+}
+*::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1.6;
+    color: var(--text-color);
+    background: var(--bg-color);
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 20px;
+}

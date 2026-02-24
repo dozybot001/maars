@@ -73,8 +73,10 @@ maars/
 
 ## 文档
 
-- [发布说明](RELEASE_NOTES.md)
 - [后端结构](backend/README.md)
 - [Layout 模块](backend/layout/README.md)（含 [执行图布局规则](backend/layout/STAGE_LAYOUT_RULES.md)）
 - [Planner 流程](backend/planner/README.md)
+- [Planner 改进建议](backend/planner/PLANNER_IMPROVEMENTS.md)（待开发特性）
+- [执行阶段工作流](backend/workers/README.md)（Generate Map + Execution）
+- [Monitor 模块](backend/monitor/README.md)
 - [Test 模块](backend/test/README.md)
