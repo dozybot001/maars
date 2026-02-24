@@ -56,7 +56,7 @@ Plan (plan.json)
 |------|------|
 | 1. 分配 Executor | 从 7 个 worker 池取空闲 |
 | 2. 解析输入 | `resolve_artifacts`：从 `db/{plan_id}/{dep_id}/output.json` 读取依赖产出 |
-| 3. 执行任务 | `execute_task`：LLM 根据 description、input/output spec 生成结果 |
+| 3. 执行任务 | `execute_task`：LLM 根据 description、input/output spec 生成结果（支持流式输出，实时推送至前端） |
 | 4. 保存产出 | `save_task_artifact` 写入 `db/{plan_id}/{task_id}/output.json` |
 | 5. 分配 Validator | 从 5 个 worker 池取空闲 |
 | 6. 验证 | 按 task 的 `validation.criteria` 校验（当前实现见下方说明） |
@@ -75,7 +75,7 @@ Plan (plan.json)
 | 文件 | 用途 |
 |------|------|
 | runner.py | ExecutorRunner：调度、worker 分配、状态持久化、WebSocket 推送 |
-| execution/llm_executor.py | LLM 执行任务（支持 Mock） |
+| execution/llm_executor.py | LLM 执行任务（支持 Mock、流式输出与 on_thinking 回调） |
 | execution/artifact_resolver.py | 从依赖任务解析 input artifacts |
 | __init__.py | executor_manager、validator_manager 工作池（7 Executor、5 Validator） |
 
@@ -93,7 +93,7 @@ Plan (plan.json)
 
 | 模块 | 实现 | 备注 |
 |------|------|------|
-| Executor | `llm_executor.execute_task` | 真实 LLM 调用，支持 useMock |
+| Executor | `llm_executor.execute_task` | 真实 LLM 调用，支持 useMock、流式输出（streaming） |
 | Validator | 随机模拟 | `runner.py` 中 `validation_passed = random.random() < 0.95`，未按 criteria 校验 |
 | Artifact 解析 | `output.artifact` 映射 | 依赖任务的 output 需定义 artifact 名称 |
 

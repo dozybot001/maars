@@ -157,12 +157,12 @@
 
 ---
 
-## 8. 版本历史索引（示例）
+## 8. 版本历史索引
 
 | 版本 | 发布日期 | 摘要 |
 |------|----------|------|
-| v1.0.0 | 2025-xx-xx | 初始版本：Planner + Monitor + Executor 基础流程 |
-| v1.1.0 | 2025-xx-xx | （示例） |
+| [v2.4.1](releases/RELEASE_v2.4.1.md) | 2026-02-25 | Release Note 撰写规范与发布流程 |
+| [v2.4.0](releases/RELEASE_v2.4.0.md) | 2026-02-25 | Executor 流式思考输出、AI Thinking 与 Task Output 双栏 UI |
 
 ---
 

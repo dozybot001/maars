@@ -56,7 +56,7 @@ maars/
     ├── index.html
     ├── app.js           # 入口，模块组装
     ├── task-tree.js     # 任务树渲染（接收后端布局，纯渲染）
-    ├── js/              # planner, monitor, websocket, api, config, theme
+    ├── js/              # planner, planner-thinking, monitor, executor-thinking, websocket, api, config, theme
     ├── styles.css
     └── theme.css
 ```
@@ -73,7 +73,7 @@ maars/
 
 ## 文档
 
-- [Release Note 撰写标准](docs/RELEASE_NOTE_STANDARD.md)
+- [Release Note 撰写标准](docs/RELEASE_NOTE_STANDARD.md) | [版本发布](docs/releases/)
 - [后端结构](backend/README.md)
 - [Layout 模块](backend/layout/README.md)（含 [执行图布局规则](backend/layout/STAGE_LAYOUT_RULES.md)）
 - [Planner 流程](backend/planner/README.md)
