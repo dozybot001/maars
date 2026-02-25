@@ -1,6 +1,6 @@
-# 前端脚本加载顺序与模块依赖
+# 前端脚本与模块依赖
 
-本文档说明 `frontend/index.html` 中脚本的加载顺序及模块依赖关系，便于维护和调试。
+`frontend/index.html` 中脚本加载顺序及模块依赖。
 
 ## 加载顺序
 
@@ -84,7 +84,7 @@ planner-thinking  executor-thinking  validator-thinking
 | `*ThinkingBlocks` | thinking-area | 各 thinking 区域块 |
 | `*ThinkingUserScrolled` | thinking-area | 用户滚动状态 |
 
-## 常见问题
+## 注意
 
-- **顺序错误**：若 `validator-thinking.js` 在 `executor-thinking.js` 之前，或 `websocket.js` 在 thinking 模块之前，会导致 `window.MAARS.validatorThinking` 等未定义，WebSocket 事件无法正确分发。
-- **utils 未加载**：若 `utils.js` 在 `task-tree.js` 之后，task-tree 会使用内联 fallback，功能正常但存在重复实现。
+- thinking 模块必须在 websocket 之前；validator-thinking 必须在 executor-thinking 之后
+- utils 必须在 task-tree 之前

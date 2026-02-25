@@ -73,13 +73,8 @@ maars/
 
 ## 文档
 
-- [前端脚本加载顺序与模块依赖](docs/FRONTEND_SCRIPTS.md)
-- [Release Note 撰写标准](docs/RELEASE_NOTE_STANDARD.md) | [版本发布](docs/releases/)
-- [后端结构](backend/README.md)
-- [Layout 模块](backend/layout/README.md)（含 [执行图布局规则](backend/layout/STAGE_LAYOUT_RULES.md)）
-- [Planner 流程](backend/planner/README.md)
-- [Planner 改进建议](backend/planner/PLANNER_IMPROVEMENTS.md)（待开发特性）
-- [执行阶段工作流](backend/workers/README.md)（Generate Map + Execution）
-- [Executor 改进规划](backend/workers/EXECUTOR_IMPROVEMENTS.md)（Agent 化、Agent Skills、Atomicity 联动）
-- [Monitor 模块](backend/monitor/README.md)
-- [Test 模块](backend/test/README.md)
+- [前端脚本与模块依赖](docs/FRONTEND_SCRIPTS.md)
+- [Release Note 标准](docs/RELEASE_NOTE_STANDARD.md) | [版本发布](docs/releases/)
+- [后端结构](backend/README.md) | [Layout](backend/layout/README.md) | [Planner](backend/planner/README.md) | [Workers](backend/workers/README.md) | [Monitor](backend/monitor/README.md) | [Test](backend/test/README.md)
+- [执行图布局规则](backend/layout/STAGE_LAYOUT_RULES.md)
+- 待开发：[Planner 改进](backend/planner/PLANNER_IMPROVEMENTS.md) | [Executor 改进](backend/workers/EXECUTOR_IMPROVEMENTS.md)

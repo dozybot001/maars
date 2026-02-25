@@ -2,7 +2,7 @@
 
 Mock AI 响应，无需真实 API 即可运行完整流程。
 
-## mock-ai/
+## mock-ai
 
 Planner 各阶段的预设响应（按 task_id 匹配，未命中则用 `_default`）：
 
@@ -16,4 +16,4 @@ Planner 各阶段的预设响应（按 task_id 匹配，未命中则用 `_defaul
 
 ## mock_stream.py
 
-模拟 LLM 流式输出：将 reasoning 文本分块，通过 on_thinking 回调逐步发送。
+模拟 LLM 流式输出：reasoning 分块通过 on_thinking 回调发送。

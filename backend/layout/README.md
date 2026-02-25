@@ -1,6 +1,6 @@
 # Layout 模块
 
-图布局计算，为 Planner 分解树和 Monitor 执行图提供节点坐标与连线。
+为 Planner 分解树和 Monitor 执行图提供节点坐标与连线。
 
 ## 文件
 

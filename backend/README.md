@@ -1,10 +1,12 @@
 # MAARS Backend
 
+运行方式见项目根 [README 快速开始](../README.md#快速开始)。
+
 ## 结构
 
 ```
 backend/
-├── main.py              # FastAPI + Socket.io 入口，注册路由
+├── main.py              # FastAPI + Socket.io 入口
 ├── api/                 # 路由、schemas、state（按领域拆分）
 │   ├── routes/         # db, plan, plans, execution, monitor, config, workers
 │   ├── schemas.py      # Pydantic 请求模型
@@ -34,13 +36,6 @@ backend/
 └── requirements.txt
 ```
 
-## 运行
-
-```bash
-pip install -r requirements.txt
-python3 -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001 --loop asyncio --http h11
-```
-
 ## 核心数据流
 
 ```
@@ -52,12 +47,4 @@ plan.json ──Generate Map──→ execution.json ──Execution──→ �
 - **plan.json**：完整任务树（含分解层级和依赖），Planner 视图数据源
 - **execution.json**：仅原子任务（依赖已解析，含 stage/status），Monitor 视图数据源
 
-## 执行阶段
-
-Generate Map + Execution 流程详见 [Workers 模块](workers/README.md)。
-
-## Layout 模块
-
-- **tree_layout.py**：Planner 分解树，按 task_id 层级 level-order 布局
-- **stage_layout.py**：Monitor 执行图，按 stage 分层、等价任务合并，详见 [STAGE_LAYOUT_RULES.md](layout/STAGE_LAYOUT_RULES.md)
-- **graph.py**：`build_dependency_graph`、`natural_task_id_key`，供 planner、tasks 共用
+Generate Map + Execution 详见 [Workers](workers/README.md)。Layout 详见 [layout/README](layout/README.md)。

@@ -24,11 +24,11 @@
 - **Runner**：Mock 模式下 emit `validator-thinking` 流式内容，与 Executor 体验一致
 - **index.html**：新增 Validator AI Thinking 区域及 validator-thinking.js 引用
 
-## 修复 (Fixed)
-
-- （本版本无专项 Bug 修复）
-
 ## 技术细节
 
 - **thinking-area 工厂**：`createThinkingArea(config)` 接收 prefix、contentElId、areaElId、blockClass，返回 clear、appendChunk、render、applyHighlight，内部统一节流与滚动逻辑
 - **脚本加载顺序**：utils → task-tree → config → constants → theme → api → planner → thinking-area → planner-thinking / executor-thinking / validator-thinking → monitor → websocket → app
+
+## 修复 (Fixed)
+
+- （本版本无专项 Bug 修复）
