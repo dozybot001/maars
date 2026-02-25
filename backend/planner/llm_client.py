@@ -1,10 +1,11 @@
 """
 OpenAI-compatible LLM client for planner.
 Uses openai SDK with tenacity retry.
+Supports tools (function calling) for Agent mode.
 """
 
 import asyncio
-from typing import Any, Callable, Optional
+from typing import Any, Callable, List, Optional, Union
 
 from openai import AsyncOpenAI
 from openai import APIConnectionError, APITimeoutError, RateLimitError
@@ -50,6 +51,28 @@ def _create_client(api_config: dict) -> AsyncOpenAI:
     return AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=120.0)
 
 
+def _message_to_result(message, finish_reason: str) -> Union[str, dict]:
+    """Convert API message to result. Returns dict with tool_calls when finish_reason is tool_calls."""
+    if finish_reason == "tool_calls" and message.tool_calls:
+        tool_calls = [
+            {
+                "id": tc.id,
+                "type": getattr(tc, "type", "function"),
+                "function": {
+                    "name": tc.function.name,
+                    "arguments": tc.function.arguments or "",
+                },
+            }
+            for tc in message.tool_calls
+        ]
+        return {
+            "content": message.content or "",
+            "tool_calls": tool_calls,
+            "finish_reason": "tool_calls",
+        }
+    return message.content or ""
+
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -64,11 +87,20 @@ async def _chat_completion_impl(
     stream: bool,
     temperature: Optional[float] = None,
     response_format: Optional[dict] = None,
-) -> str:
-    """Inner implementation with retry."""
+    tools: Optional[List[dict]] = None,
+) -> Union[str, dict]:
+    """Inner implementation with retry.
+    When tools is provided: uses stream=False, no response_format; may return dict with tool_calls.
+    """
     extra = {"temperature": temperature} if temperature is not None else {}
     if response_format:
         extra["response_format"] = response_format
+    if tools:
+        extra["tools"] = tools
+        # Agent mode: tools incompatible with response_format; streaming with tool_calls is complex
+        extra.pop("response_format", None)
+        stream = False
+
     if stream:
         full_content = []
         stream_obj = await client.chat.completions.create(
@@ -84,7 +116,9 @@ async def _chat_completion_impl(
                 delta = chunk.choices[0].delta if chunk.choices else None
                 content = (delta.content or "") if delta else ""
                 if content and on_chunk:
-                    on_chunk(content)
+                    r = on_chunk(content)
+                    if asyncio.iscoroutine(r):
+                        await r
                 full_content.append(content)
         except (asyncio.CancelledError, GeneratorExit):
             await stream_obj.close()
@@ -99,7 +133,10 @@ async def _chat_completion_impl(
             stream=False,
             **extra,
         )
-        return resp.choices[0].message.content or ""
+        choice = resp.choices[0]
+        message = choice.message
+        finish_reason = getattr(choice, "finish_reason", None) or ""
+        return _message_to_result(message, finish_reason)
 
 
 async def chat_completion(
@@ -110,11 +147,15 @@ async def chat_completion(
     stream: bool = True,
     temperature: Optional[float] = None,
     response_format: Optional[dict] = None,
-) -> str:
-    """Call OpenAI-compatible chat completions API."""
+    tools: Optional[List[dict]] = None,
+) -> Union[str, dict]:
+    """Call OpenAI-compatible chat completions API.
+    When tools is provided: uses stream=False, omits response_format; may return dict with
+    content, tool_calls, finish_reason when model requests tool calls.
+    """
     model = api_config.get("model") or DEFAULT_MODEL
     temp = temperature if temperature is not None else api_config.get("temperature")
     client = _create_client(api_config)
     return await _chat_completion_impl(
-        client, model, messages, on_chunk, abort_event, stream, temp, response_format
+        client, model, messages, on_chunk, abort_event, stream, temp, response_format, tools
     )

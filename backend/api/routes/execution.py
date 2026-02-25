@@ -43,6 +43,7 @@ async def post_execution(body: ExecutionRequest):
 
 @router.post("/run")
 async def run_execution():
+    """Start execution. Returns immediately; errors are pushed via WebSocket execution-error."""
     api_config = await get_effective_api_config()
     runner = api_state.executor_runner
     sio = api_state.sio

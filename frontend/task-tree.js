@@ -208,12 +208,14 @@
     let popoverOutsideClickHandler = null;
     let popoverKeydownHandler = null;
 
-    function escapeHtml(str) {
-        if (str == null) return '';
-        const div = document.createElement('div');
-        div.textContent = String(str);
-        return div.innerHTML;
-    }
+    const escapeHtml = (() => {
+        const u = typeof window !== 'undefined' && window.MAARS?.utils;
+        if (u?.escapeHtml) return u.escapeHtml;
+        return function (str) {
+            if (str == null) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        };
+    })();
 
     function buildTaskDetailBody(task) {
         const desc = (task.description || task.objective || '').trim() || '-';
@@ -361,6 +363,7 @@
 
     window.TaskTree = {
         AREA,
+        aggregateStatus,
         renderPlannerTree,
         renderMonitorTasksTree: (data, layout) => renderFull(data, layout, AREA.monitor),
         clearPlannerTree: () => { clear(AREA.planner); updatePlannerQualityBadge(null); },

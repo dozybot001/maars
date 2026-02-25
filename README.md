@@ -73,6 +73,7 @@ maars/
 
 ## 文档
 
+- [前端脚本加载顺序与模块依赖](docs/FRONTEND_SCRIPTS.md)
 - [Release Note 撰写标准](docs/RELEASE_NOTE_STANDARD.md) | [版本发布](docs/releases/)
 - [后端结构](backend/README.md)
 - [Layout 模块](backend/layout/README.md)（含 [执行图布局规则](backend/layout/STAGE_LAYOUT_RULES.md)）

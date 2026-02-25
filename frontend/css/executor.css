@@ -149,6 +149,7 @@
     border: 1px solid var(--border-color);
     overflow: hidden;
     cursor: pointer;
+    transition: var(--state-transition);
 }
 .executor-thinking-block.is-focused,
 .executor-output-block.is-focused {
@@ -168,6 +169,10 @@
     color: var(--text-muted);
     background: var(--bg-area-secondary);
     border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
 }
 .executor-thinking-block-body,
 .executor-output-block-body {
@@ -235,7 +240,7 @@
     font-weight: 600;
     color: var(--text-color);
     background: var(--bg-area-secondary);
-    transition: var(--button-transition);
+    transition: var(--state-transition);
 }
 
 .executor-chip.executor-idle {
@@ -271,6 +276,7 @@
     font-size: 16px;
     font-weight: 500;
     color: var(--text-color);
+    transition: var(--state-transition);
 }
 
 .stat-value.stat-busy {
@@ -279,4 +285,43 @@
 
 .stat-value.stat-idle {
     color: var(--executor-idle-text);
+}
+
+/* Executor Task Output 全屏模态框 */
+.executor-output-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px 48px;
+    background: transparent;
+}
+.executor-output-modal.is-open {
+    display: flex;
+}
+.executor-output-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: var(--shadow-overlay);
+    backdrop-filter: blur(var(--modal-backdrop-blur));
+    -webkit-backdrop-filter: blur(var(--modal-backdrop-blur));
+    z-index: -1;
+}
+.executor-output-modal-dialog {
+    width: min(900px, 94vw);
+    height: calc(100vh - 96px);
+    background: var(--bg-area-primary);
+}
+.executor-output-modal-body {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+.executor-output-modal-body.markdown-body pre,
+.executor-output-modal-body.markdown-body code {
+    font-size: 12px;
 }

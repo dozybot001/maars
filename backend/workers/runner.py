@@ -5,6 +5,7 @@ Task status changes are persisted to execution.json in real-time.
 """
 
 import asyncio
+import os
 import random
 from typing import Any, Dict, List, Optional, Set
 
@@ -13,6 +14,28 @@ from loguru import logger
 from db import save_execution, save_task_artifact
 from . import executor_manager, validator_manager
 from .execution import resolve_artifacts, execute_task
+
+# Mock validator chunk delay (seconds), same as executor for consistent streaming UX
+_MOCK_VALIDATOR_CHUNK_DELAY = 0.03
+
+# Configurable via env (Mock mode); defaults for tuning
+def _float_env(name: str, default: float) -> float:
+    v = os.environ.get(name)
+    return float(v) if v is not None else default
+
+def _int_env(name: str, default: int) -> int:
+    v = os.environ.get(name)
+    return int(v) if v is not None else default
+
+_RUNNER_EXECUTION_PASS_PROBABILITY = _float_env("MAARS_EXECUTION_PASS_PROBABILITY", 0.95)
+_RUNNER_VALIDATION_PASS_PROBABILITY = _float_env("MAARS_VALIDATION_PASS_PROBABILITY", 0.95)
+_RUNNER_MAX_FAILURES = _int_env("MAARS_MAX_FAILURES", 3)
+
+
+def _chunk_string(s: str, size: int):
+    """Yield string in chunks for simulated streaming."""
+    for i in range(0, len(s), size):
+        yield s[i : i + size]
 
 
 class ExecutorRunner:
@@ -28,9 +51,9 @@ class ExecutorRunner:
         self.task_map: Dict[str, Dict] = {}
         self.reverse_dependency_index: Dict[str, List[str]] = {}
         self.task_failure_count: Dict[str, int] = {}
-        self.EXECUTION_PASS_PROBABILITY = 0.95
-        self.VALIDATION_PASS_PROBABILITY = 0.95
-        self.MAX_FAILURES = 3
+        self.EXECUTION_PASS_PROBABILITY = _RUNNER_EXECUTION_PASS_PROBABILITY
+        self.VALIDATION_PASS_PROBABILITY = _RUNNER_VALIDATION_PASS_PROBABILITY
+        self.MAX_FAILURES = _RUNNER_MAX_FAILURES
         self.timetable_layout = None
         self.plan_id: Optional[str] = None
         self.api_config: Optional[Dict] = None
@@ -61,6 +84,14 @@ class ExecutorRunner:
             try:
                 asyncio.create_task(self.sio.emit(event, data))
             except RuntimeError:
+                pass
+
+    async def _emit_await(self, event: str, data: dict) -> None:
+        """Emit event and await; use for order-sensitive events (e.g. thinking chunks)."""
+        if hasattr(self.sio, "emit"):
+            try:
+                await self.sio.emit(event, data)
+            except Exception:
                 pass
 
     async def start_execution(self, api_config: Optional[Dict] = None) -> None:
@@ -192,8 +223,8 @@ class ExecutorRunner:
             try:
                 resolved_inputs = await resolve_artifacts(task, self.task_map, self.plan_id or "")
 
-                def _on_thinking(chunk: str, task_id: Optional[str] = None, operation: Optional[str] = None) -> None:
-                    self._emit("executor-thinking", {"chunk": chunk, "taskId": task_id, "operation": operation or "Execute"})
+                async def _on_thinking(chunk: str, task_id: Optional[str] = None, operation: Optional[str] = None) -> None:
+                    await self._emit_await("executor-thinking", {"chunk": chunk, "taskId": task_id, "operation": operation or "Execute"})
 
                 result = await execute_task(
                     task_id=task["task_id"],
@@ -204,6 +235,7 @@ class ExecutorRunner:
                     api_config=self.api_config or {},
                     abort_event=self.abort_event,
                     on_thinking=_on_thinking,
+                    plan_id=self.plan_id or "",
                 )
                 to_save = result if isinstance(result, dict) else {"content": result}
                 await save_task_artifact(self.plan_id or "", task["task_id"], to_save)
@@ -258,8 +290,23 @@ class ExecutorRunner:
             if validator_id:
                 self._broadcast_validator_states()
 
-            await asyncio.sleep(0.2 + random.random() * 0.6)
+            # Mock validator thinking stream (simulates validation report)
             validation_passed = random.random() < self.VALIDATION_PASS_PROBABILITY
+            task_id = task["task_id"]
+            mock_report = (
+                f"# Validating Task {task_id}\n\n"
+                "Checking output against criteria...\n\n"
+                "- Criterion 1: Output format ✓\n"
+                "- Criterion 2: Content completeness ✓\n"
+                "- Criterion 3: Alignment with spec ✓\n\n"
+                f"**Result: {'PASS' if validation_passed else 'FAIL'}**\n\n"
+                "(Mock validation mode)"
+            )
+            for chunk in _chunk_string(mock_report, 20):
+                await self._emit_await("validator-thinking", {"chunk": chunk, "taskId": task_id, "operation": "Validate"})
+                await asyncio.sleep(_MOCK_VALIDATOR_CHUNK_DELAY)
+
+            await asyncio.sleep(0.1)
 
             if validation_passed:
                 if validator_id:

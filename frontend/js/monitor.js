@@ -18,14 +18,9 @@
     state.chainCache = state.chainCache ?? [];
     state.previousTaskStates = state.previousTaskStates ?? new Map();
 
-    function escapeHtmlAttr(str) {
-        if (str == null) return '';
-        return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
-    function escapeHtml(str) {
-        if (str == null) return '';
-        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
+    const utils = window.MAARS?.utils;
+    const escapeHtml = utils?.escapeHtml || ((s) => (s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')));
+    const escapeHtmlAttr = utils?.escapeHtmlAttr || ((s) => (s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')));
 
     function buildChainCacheFromLayout(layout) {
         const cache = [];
@@ -57,7 +52,7 @@
         const status = task.status || 'undone';
         const statusClass = (status && status !== 'undone') ? ` task-status-${status}` : '';
         const desc = task.description || task.objective || task.task_id;
-        const safeTooltip = (desc || '').replace(/"/g, '&quot;');
+        const safeTooltip = escapeHtmlAttr(desc || '');
         const popoverData = typeof TaskTree !== 'undefined' && TaskTree.buildTaskDataForPopover
             ? TaskTree.buildTaskDataForPopover(task) : { task_id: task.task_id, description: task.description, dependencies: task.dependencies, status: task.status, input: task.input, output: task.output, validation: task.validation };
         return `<div class="timetable-cell${statusClass}" data-task-id="${task.task_id}" data-task-data="${escapeHtmlAttr(JSON.stringify(popoverData))}" title="${safeTooltip}"><span class="timetable-cell-id">${escapeHtml(task.task_id)}</span></div>`;
@@ -211,49 +206,63 @@
         });
     }
 
-    function renderExecutors(executors, stats) {
-        const executorChips = document.getElementById('executorChips');
-        const executorTotal = document.getElementById('executorTotal');
-        const executorBusy = document.getElementById('executorBusy');
-        const executorIdle = document.getElementById('executorIdle');
-        if (!executorChips || !executorTotal || !executorBusy || !executorIdle) return;
-        if (!executors || executors.length === 0) {
-            executorChips.innerHTML = '';
-            executorTotal.textContent = executorBusy.textContent = executorIdle.textContent = '0';
+    function renderChips(containerId, items, stats, opts) {
+        const { chipClass, chipIdAttr, getStatusClass, getTitle } = opts;
+        const chipsEl = document.getElementById(containerId);
+        const totalEl = document.getElementById(containerId.replace('Chips', 'Total'));
+        const busyEl = document.getElementById(containerId.replace('Chips', 'Busy'));
+        const idleEl = document.getElementById(containerId.replace('Chips', 'Idle'));
+        if (!chipsEl || !totalEl || !busyEl || !idleEl) return;
+        if (!items || items.length === 0) {
+            chipsEl.innerHTML = '';
+            totalEl.textContent = busyEl.textContent = idleEl.textContent = '0';
             return;
         }
-        executorTotal.textContent = stats.total || executors.length;
-        executorBusy.textContent = stats.busy || 0;
-        executorIdle.textContent = stats.idle || 0;
-        let html = '';
-        executors.forEach(executor => {
-            const statusClass = executor.status === 'busy' ? 'executor-busy' : executor.status === 'failed' ? 'executor-failed' : 'executor-idle';
-            html += `<div class="executor-chip ${statusClass}" data-executor-id="${executor.id}" title="Executor ${executor.id}${executor.taskId ? ': ' + executor.taskId : ''}">${executor.id}</div>`;
+        totalEl.textContent = stats.total ?? items.length;
+        busyEl.textContent = stats.busy ?? 0;
+        idleEl.textContent = stats.idle ?? 0;
+        const existing = new Map();
+        chipsEl.querySelectorAll(`.${chipClass}`).forEach((el) => {
+            const id = el.getAttribute(chipIdAttr);
+            if (id) existing.set(id, el);
         });
-        executorChips.innerHTML = html;
+        items.forEach((item) => {
+            const id = String(item.id);
+            const statusClass = getStatusClass(item);
+            const title = getTitle(item);
+            let chip = existing.get(id);
+            if (chip) {
+                chip.className = `${chipClass} ${statusClass}`;
+                chip.title = title;
+                existing.delete(id);
+            } else {
+                chip = document.createElement('div');
+                chip.className = `${chipClass} ${statusClass}`;
+                chip.setAttribute(chipIdAttr, item.id);
+                chip.title = title;
+                chip.textContent = item.id;
+                chipsEl.appendChild(chip);
+            }
+        });
+        existing.forEach((el) => el.remove());
+    }
+
+    function renderExecutors(executors, stats) {
+        renderChips('executorChips', executors || [], stats || {}, {
+            chipClass: 'executor-chip',
+            chipIdAttr: 'data-executor-id',
+            getStatusClass: (e) => (e.status === 'busy' ? 'executor-busy' : e.status === 'failed' ? 'executor-failed' : 'executor-idle'),
+            getTitle: (e) => `Executor ${e.id}${e.taskId ? ': ' + e.taskId : ''}`,
+        });
     }
 
     function renderValidators(validators, stats) {
-        const validatorGrid = document.getElementById('validatorGrid');
-        const validatorTotal = document.getElementById('validatorTotal');
-        const validatorBusy = document.getElementById('validatorBusy');
-        const validatorIdle = document.getElementById('validatorIdle');
-        if (!validatorGrid || !validatorTotal || !validatorBusy || !validatorIdle) return;
-        if (!validators || validators.length === 0) {
-            validatorGrid.innerHTML = '';
-            validatorTotal.textContent = validatorBusy.textContent = validatorIdle.textContent = '0';
-            return;
-        }
-        validatorTotal.textContent = stats.total || validators.length;
-        validatorBusy.textContent = stats.busy || 0;
-        validatorIdle.textContent = stats.idle || 0;
-        let html = '';
-        validators.forEach(v => {
-            const statusClass = v.status === 'busy' ? 'validator-busy' : v.status === 'failed' ? 'validator-failed' : 'validator-idle';
-            const taskText = v.taskId ? `Task: ${v.taskId}` : '';
-            html += `<div class="validator-item ${statusClass}"><div class="validator-id">Validator ${v.id}</div><div class="validator-status status-${v.status}">${v.status.toUpperCase()}</div><div class="validator-task">${taskText}</div></div>`;
+        renderChips('validatorChips', validators || [], stats || {}, {
+            chipClass: 'validator-chip',
+            chipIdAttr: 'data-validator-id',
+            getStatusClass: (v) => (v.status === 'busy' ? 'validator-busy' : v.status === 'failed' ? 'validator-failed' : 'validator-idle'),
+            getTitle: (v) => `Validator ${v.id}${v.taskId ? ': ' + v.taskId : ''}`,
         });
-        validatorGrid.innerHTML = html;
     }
 
     async function runExecution() {
@@ -348,15 +357,74 @@
         }
     }
 
+    function debounce(fn, ms) {
+        let t;
+        return function (...args) {
+            clearTimeout(t);
+            t = setTimeout(() => fn.apply(this, args), ms);
+        };
+    }
+
+    function handleTimetableResize() {
+        const diagramContent = document.getElementById('diagramArea');
+        if (!diagramContent) return;
+        const timetableWrapper = diagramContent.querySelector('.timetable-wrapper');
+        if (!timetableWrapper) return;
+        const { cellSize: fixedCellSize, rightAreaWidth } = calculateFixedCellSize(timetableWrapper);
+        const rightArea = diagramContent.querySelector('.timetable-right');
+        if (rightArea) {
+            rightArea.style.width = rightArea.style.minWidth = rightArea.style.maxWidth = `${rightAreaWidth}px`;
+        }
+        const leftHeader = diagramContent.querySelector('.timetable-left-header');
+        const leftGrid = diagramContent.querySelector('.timetable-left-grid');
+        const rightHeader = diagramContent.querySelector('.timetable-right-header');
+        const rightGrid = diagramContent.querySelector('.timetable-right-grid');
+        const gap = 1;
+        if (leftHeader && leftGrid) {
+            const actualCols = parseInt(leftGrid.getAttribute('data-cols'), 10) || 10;
+            const actualRows = parseInt(leftGrid.getAttribute('data-rows'), 10) || 4;
+            const w = actualCols * fixedCellSize + gap * (actualCols - 1);
+            const h = actualRows * fixedCellSize + gap * (actualRows - 1);
+            leftHeader.style.gridTemplateColumns = leftGrid.style.gridTemplateColumns = `repeat(${actualCols}, ${fixedCellSize}px)`;
+            leftGrid.style.gridTemplateRows = `repeat(${actualRows}, ${fixedCellSize}px)`;
+            leftGrid.style.width = leftGrid.style.minWidth = leftHeader.style.width = leftHeader.style.minWidth = `${w}px`;
+            leftGrid.style.height = leftGrid.style.minHeight = `${h}px`;
+        }
+        if (rightHeader && rightGrid) {
+            const rightCols = parseInt(rightGrid.getAttribute('data-cols'), 10) || 3;
+            const rightRows = parseInt(rightGrid.getAttribute('data-rows'), 10) || 4;
+            const w = rightCols * fixedCellSize + gap * (rightCols - 1);
+            const h = rightRows * fixedCellSize + gap * (rightRows - 1);
+            rightHeader.style.gridTemplateColumns = rightGrid.style.gridTemplateColumns = `repeat(${rightCols}, ${fixedCellSize}px)`;
+            rightGrid.style.gridTemplateRows = `repeat(${rightRows}, ${fixedCellSize}px)`;
+            rightGrid.style.width = rightGrid.style.minWidth = rightHeader.style.width = rightHeader.style.minWidth = `${w}px`;
+            rightGrid.style.height = rightGrid.style.minHeight = `${h}px`;
+        }
+        const layout = state.timetableLayout;
+        if (layout?.treeData?.length && typeof TaskTree !== 'undefined' && TaskTree.renderMonitorTasksTree) {
+            TaskTree.renderMonitorTasksTree(layout.treeData, layout.layout);
+        }
+    }
+
+    function setTimetableLayout(data) {
+        if (!data?.layout) return;
+        state.timetableLayout = data.layout;
+        state.chainCache = buildChainCacheFromLayout(data.layout);
+        renderNodeDiagramFromCache();
+    }
+
     function init() {
         if (generateTimetableBtn) generateTimetableBtn.addEventListener('click', generateTimetable);
         if (executionBtn) executionBtn.addEventListener('click', runExecution);
         if (stopExecutionBtn) stopExecutionBtn.addEventListener('click', stopExecution);
+        const resizeDebounce = (window.MAARS?.constants?.RESIZE_DEBOUNCE_MS) ?? 150;
+        window.addEventListener('resize', debounce(handleTimetableResize, resizeDebounce));
     }
 
     window.MAARS.monitor = {
         init,
         state,
+        setTimetableLayout,
         buildChainCacheFromLayout,
         renderTimetableDiagram,
         renderNodeDiagramFromCache,

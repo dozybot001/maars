@@ -159,19 +159,36 @@ async def list_plan_ids() -> list:
     return [pid for pid, _ in result]
 
 
+def _ai_mode_to_flags(ai_mode: str) -> tuple:
+    """Convert aiMode to (useMock, executorAgentMode) for backward compatibility."""
+    if ai_mode == "mock":
+        return True, False
+    if ai_mode == "llm-agent":
+        return False, True
+    return False, False  # llm or default
+
+
 def _resolve_api_config(raw: dict) -> dict:
-    """Resolve presets+current to effective config. useMock is top-level only."""
+    """Resolve presets+current to effective config. aiMode: mock|llm|llm-agent."""
     if not raw:
         return {}
+    ai_mode = raw.get("aiMode") or raw.get("ai_mode")
+    if not ai_mode and ("useMock" in raw or "use_mock" in raw):
+        use_mock = raw.get("useMock", raw.get("use_mock", True))
+        exec_agent = raw.get("executorAgentMode", raw.get("executor_agent_mode", False))
+        ai_mode = "mock" if use_mock else ("llm-agent" if exec_agent else "llm")
+    ai_mode = ai_mode or "mock"
+    use_mock, exec_agent = _ai_mode_to_flags(ai_mode)
+
     presets = raw.get("presets")
     current = raw.get("current")
     if isinstance(presets, dict) and current and current in presets:
         cfg = dict(presets[current])
         cfg.pop("label", None)
-        cfg.pop("useMock", None)
     else:
-        cfg = {k: v for k, v in raw.items() if k not in ("presets", "current")}
-    cfg["useMock"] = raw.get("useMock", raw.get("use_mock", True))
+        cfg = {k: v for k, v in raw.items() if k not in ("presets", "current", "aiMode", "ai_mode")}
+    cfg["useMock"] = use_mock
+    cfg["executorAgentMode"] = exec_agent
     return cfg
 
 

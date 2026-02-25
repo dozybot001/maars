@@ -1,133 +1,31 @@
 /**
- * Executor AI Thinking area - rendering and scroll logic.
- * Receives data via appendChunk(), handles throttled render and scroll state.
- * Right panel (executor output) displays final extracted output per task.
+ * Executor AI Thinking area - uses createThinkingArea factory.
+ * Right panel (executor output) displays final extracted output per task; output block click opens modal.
  */
 (function () {
     'use strict';
 
     const state = window.MAARS.state || {};
-    state.executorThinkingBlocks = state.executorThinkingBlocks || [];
-    state.executorThinkingUserScrolled = state.executorThinkingUserScrolled || false;
-    state.executorThinkingBlockUserScrolled = state.executorThinkingBlockUserScrolled || {};
-    state.executorLastUpdatedBlockKey = state.executorLastUpdatedBlockKey || '';
     state.executorOutputs = state.executorOutputs || {};
+    state.executorOutputUserScrolled = state.executorOutputUserScrolled ?? false;
+    state.executorOutputBlockUserScrolled = state.executorOutputBlockUserScrolled || {};
+    state.executorOutputLastUpdatedKey = state.executorOutputLastUpdatedKey || '';
     window.MAARS.state = state;
 
-    const RENDER_THROTTLE_MS = 120;
-    const RENDER_THROTTLE_LARGE_MS = 250;
-    const LARGE_CONTENT_CHARS = 6000;
-
-    let _renderScheduled = null;
-
-    function render(skipHighlight) {
-        const el = document.getElementById('executorThinkingContent');
-        const area = document.getElementById('executorThinkingArea');
-        if (!el) return;
-        const blocks = state.executorThinkingBlocks;
-        let html = '';
-        for (const block of blocks) {
-            const headerText = block.taskId != null ? `Task ${block.taskId} | ${block.operation || ''}` : 'Thinking';
-            const raw = block.content || '';
-            let blockHtml = raw ? (typeof marked !== 'undefined' ? marked.parse(raw) : raw) : '';
-            if (blockHtml && typeof DOMPurify !== 'undefined') blockHtml = DOMPurify.sanitize(blockHtml);
-            const safeHeader = (headerText || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            html += `<div class="executor-thinking-block" data-block-key="${(block.key || '').replace(/"/g, '&quot;')}"><div class="executor-thinking-block-header">${safeHeader}</div><div class="executor-thinking-block-body">${blockHtml}</div></div>`;
-        }
-        const wasNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-        const savedScrollTops = {};
-        el.querySelectorAll('.executor-thinking-block').forEach((blockEl) => {
-            const key = blockEl.getAttribute('data-block-key') || '';
-            const body = blockEl.querySelector('.executor-thinking-block-body');
-            if (body) savedScrollTops[key] = body.scrollTop;
-        });
-        try {
-            el.innerHTML = html || '';
-            if (!skipHighlight && typeof hljs !== 'undefined') {
-                const codeBlocks = el.querySelectorAll('pre code');
-                if (codeBlocks.length > 0 && codeBlocks.length <= 15) {
-                    codeBlocks.forEach((node) => { try { hljs.highlightElement(node); } catch (_) {} });
-                }
-            }
-        } catch (_) {
-            el.textContent = blocks.map(b => b.content || '').join('\n\n');
-        }
-        if (!state.executorThinkingUserScrolled && wasNearBottom) {
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
-            });
-        }
-        state.executorThinkingBlockUserScrolled = state.executorThinkingBlockUserScrolled || {};
-        const lastKey = state.executorLastUpdatedBlockKey || '';
-        el.querySelectorAll('.executor-thinking-block').forEach((blockEl) => {
-            const key = blockEl.getAttribute('data-block-key') || '';
-            const body = blockEl.querySelector('.executor-thinking-block-body');
-            if (!body) return;
-            const shouldAutoScroll = key === lastKey && !state.executorThinkingBlockUserScrolled[key];
-            if (shouldAutoScroll) {
-                requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
-            } else if (savedScrollTops[key] != null) {
-                body.scrollTop = savedScrollTops[key];
-            }
-            body.addEventListener('scroll', function onBlockScroll() {
-                const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
-                if (!nearBottom) state.executorThinkingBlockUserScrolled[key] = true;
-                else state.executorThinkingBlockUserScrolled[key] = false;
-            }, { passive: true });
-        });
-        if (area && blocks.length) area.classList.add('has-content');
-    }
-
-    function scheduleRender() {
-        if (_renderScheduled) return;
-        const totalChars = state.executorThinkingBlocks.reduce((s, b) => s + (b.content || '').length, 0);
-        const throttle = totalChars > LARGE_CONTENT_CHARS ? RENDER_THROTTLE_LARGE_MS : RENDER_THROTTLE_MS;
-        _renderScheduled = setTimeout(() => {
-            _renderScheduled = null;
-            render(true);
-        }, throttle);
-    }
-
-    function applyHighlight() {
-        const el = document.getElementById('executorThinkingContent');
-        if (!el || typeof hljs === 'undefined') return;
-        requestIdleCallback(() => {
-            el.querySelectorAll('pre code').forEach((node) => {
-                try { hljs.highlightElement(node); } catch (_) {}
-            });
-        }, { timeout: 500 });
-    }
-
-    function clear() {
-        state.executorThinkingBlocks = [];
-        state.executorThinkingUserScrolled = false;
-        state.executorThinkingBlockUserScrolled = {};
-        state.executorLastUpdatedBlockKey = '';
-        state.executorOutputs = {};
-        const el = document.getElementById('executorThinkingContent');
-        const area = document.getElementById('executorThinkingArea');
-        if (el) el.innerHTML = '';
-        if (area) area.classList.remove('has-content');
-        renderOutput();
-    }
-
-    function appendChunk(chunk, taskId, operation) {
-        const key = (taskId != null && operation != null) ? `${String(taskId)}::${String(operation)}` : '_default';
-        let block = state.executorThinkingBlocks.find(b => b.key === key);
-        if (!block) {
-            block = { key, taskId, operation, content: '' };
-            state.executorThinkingBlocks.push(block);
-        }
-        block.content += chunk;
-        state.executorLastUpdatedBlockKey = key;
-        scheduleRender();
-    }
-
-    function setTaskOutput(taskId, output) {
-        if (!taskId) return;
-        state.executorOutputs[taskId] = output;
-        renderOutput();
-    }
+    const escapeHtml = (window.MAARS?.utils?.escapeHtml) || ((s) => (s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')));
+    const thinking = window.MAARS.createThinkingArea({
+        prefix: 'executor',
+        contentElId: 'executorThinkingContent',
+        areaElId: 'executorThinkingArea',
+        blockClass: 'executor-thinking-block',
+        onClear: () => {
+            state.executorOutputs = {};
+            state.executorOutputUserScrolled = false;
+            state.executorOutputBlockUserScrolled = {};
+            state.executorOutputLastUpdatedKey = '';
+            renderOutput();
+        },
+    });
 
     function renderOutput() {
         const el = document.getElementById('executorOutputContent');
@@ -135,6 +33,13 @@
         if (!el || !area) return;
         const outputs = state.executorOutputs;
         const keys = Object.keys(outputs).sort();
+        const wasNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        const savedScrollTops = {};
+        el.querySelectorAll('.executor-output-block').forEach((blockEl) => {
+            const key = blockEl.getAttribute('data-task-id') || '';
+            const body = blockEl.querySelector('.executor-output-block-body');
+            if (body) savedScrollTops[key] = body.scrollTop;
+        });
         if (keys.length === 0) {
             el.innerHTML = '';
             area.classList.remove('has-content');
@@ -151,8 +56,8 @@
                 content = (raw || '') ? (typeof marked !== 'undefined' ? marked.parse(String(raw)) : String(raw)) : '';
             }
             if (content && typeof DOMPurify !== 'undefined') content = DOMPurify.sanitize(content);
-            const safeTaskId = (taskId || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            html += `<div class="executor-output-block" data-task-id="${safeTaskId}"><div class="executor-output-block-header">Task ${safeTaskId}</div><div class="executor-output-block-body">${content}</div></div>`;
+            const safeTaskId = escapeHtml(taskId || '');
+            html += `<div class="executor-output-block" data-task-id="${safeTaskId}"><div class="executor-output-block-header">Task ${safeTaskId}<button type="button" class="executor-output-block-expand" aria-label="Expand">⤢</button></div><div class="executor-output-block-body">${content}</div></div>`;
         }
         try {
             el.innerHTML = html || '';
@@ -164,48 +69,135 @@
                 }, { timeout: 100 });
             }
         } catch (_) {
-            el.textContent = keys.map(k => `Task ${k}: ${outputs[k]}`).join('\n\n');
+            el.textContent = keys.map((k) => `Task ${k}: ${outputs[k]}`).join('\n\n');
         }
         area.classList.add('has-content');
+        if (!state.executorOutputUserScrolled && wasNearBottom) {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+            });
+        }
+        state.executorOutputBlockUserScrolled = state.executorOutputBlockUserScrolled || {};
+        const lastKey = state.executorOutputLastUpdatedKey || '';
+        el.querySelectorAll('.executor-output-block').forEach((blockEl) => {
+            const key = blockEl.getAttribute('data-task-id') || '';
+            const body = blockEl.querySelector('.executor-output-block-body');
+            if (!body) return;
+            const shouldAutoScroll = key === lastKey && !state.executorOutputBlockUserScrolled[key];
+            if (shouldAutoScroll) {
+                requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
+            } else if (savedScrollTops[key] != null) {
+                body.scrollTop = savedScrollTops[key];
+            }
+            body.addEventListener('scroll', function onBlockScroll() {
+                const nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
+                if (!nearBottom) state.executorOutputBlockUserScrolled[key] = true;
+                else state.executorOutputBlockUserScrolled[key] = false;
+            }, { passive: true });
+        });
     }
 
-    function initScrollTracking() {
-        const el = document.getElementById('executorThinkingContent');
+    function initOutputScrollTracking() {
+        const el = document.getElementById('executorOutputContent');
         if (!el) return;
         el.addEventListener('scroll', () => {
             const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-            if (!nearBottom) state.executorThinkingUserScrolled = true;
-            else state.executorThinkingUserScrolled = false;
+            if (!nearBottom) state.executorOutputUserScrolled = true;
+            else state.executorOutputUserScrolled = false;
         }, { passive: true });
     }
 
-    function initBlockFocus() {
-        const area = document.getElementById('executorThinkingArea');
-        if (!area) return;
-        area.addEventListener('click', (e) => {
-            const block = e.target.closest('.executor-thinking-block');
-            const allBlocks = area.querySelectorAll('.executor-thinking-block');
-            const wasFocused = block && block.classList.contains('is-focused');
-            allBlocks.forEach((b) => b.classList.remove('is-focused'));
-            if (block && !wasFocused) block.classList.add('is-focused');
-        });
+    function setTaskOutput(taskId, output) {
+        if (!taskId) return;
+        state.executorOutputs[taskId] = output;
+        state.executorOutputLastUpdatedKey = String(taskId);
+        renderOutput();
+    }
+
+    let _outputModalOpen = false;
+    function openOutputModal(taskId, contentHtml) {
+        const modal = document.getElementById('executorOutputModal');
+        const titleEl = document.getElementById('executorOutputModalTitle');
+        const bodyEl = document.getElementById('executorOutputModalBody');
+        const closeBtn = document.getElementById('executorOutputModalClose');
+        const backdrop = modal?.querySelector('.executor-output-modal-backdrop');
+        if (!modal || !bodyEl) return;
+        if (_outputModalOpen) return;
+        _outputModalOpen = true;
+        titleEl.textContent = taskId ? `Task ${taskId}` : 'Task Output';
+        bodyEl.innerHTML = contentHtml || '';
+        if (typeof hljs !== 'undefined') {
+            requestAnimationFrame(() => {
+                bodyEl.querySelectorAll('pre code').forEach((node) => {
+                    try { hljs.highlightElement(node); } catch (_) {}
+                });
+            });
+        }
+        modal.classList.add('is-open');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        function closeModal() {
+            _outputModalOpen = false;
+            modal.classList.remove('is-open');
+            modal.setAttribute('aria-hidden', 'true');
+            document.body.style.overflow = '';
+        }
+        closeBtn?.addEventListener('click', closeModal, { once: true });
+        backdrop?.addEventListener('click', closeModal, { once: true });
+        document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeModal(); }, { once: true });
+    }
+
+    function applyOutputHighlight() {
+        const el = document.getElementById('executorOutputContent');
+        if (!el || typeof hljs === 'undefined') return;
+        requestIdleCallback(() => {
+            el.querySelectorAll('pre code').forEach((node) => {
+                try { hljs.highlightElement(node); } catch (_) {}
+            });
+        }, { timeout: 500 });
     }
 
     function initOutputBlockFocus() {
         const area = document.getElementById('executorOutputArea');
         if (!area) return;
         area.addEventListener('click', (e) => {
+            if (e.target.closest('.executor-output-block-expand')) return;
             const block = e.target.closest('.executor-output-block');
+            if (!block) return;
             const allBlocks = area.querySelectorAll('.executor-output-block');
-            const wasFocused = block && block.classList.contains('is-focused');
+            const wasFocused = block.classList.contains('is-focused');
             allBlocks.forEach((b) => b.classList.remove('is-focused'));
-            if (block && !wasFocused) block.classList.add('is-focused');
+            if (!wasFocused) block.classList.add('is-focused');
         });
     }
 
-    initScrollTracking();
-    initBlockFocus();
-    initOutputBlockFocus();
+    function initOutputBlockClick() {
+        const area = document.getElementById('executorOutputArea');
+        if (!area) return;
+        area.addEventListener('click', (e) => {
+            const expandBtn = e.target.closest('.executor-output-block-expand');
+            if (!expandBtn) return;
+            e.stopPropagation();
+            const block = expandBtn.closest('.executor-output-block');
+            if (!block) return;
+            const bodyEl = block.querySelector('.executor-output-block-body');
+            const taskId = block.getAttribute('data-task-id') || '';
+            const contentHtml = bodyEl ? bodyEl.innerHTML : '';
+            openOutputModal(taskId, contentHtml);
+        });
+    }
 
-    window.MAARS.executorThinking = { clear, appendChunk, render, applyHighlight, setTaskOutput, renderOutput };
+    initOutputBlockFocus();
+    initOutputBlockClick();
+    initOutputScrollTracking();
+
+    window.MAARS.executorThinking = {
+        clear: thinking.clear,
+        appendChunk: thinking.appendChunk,
+        render: thinking.render,
+        applyHighlight: thinking.applyHighlight,
+        applyOutputHighlight,
+        setTaskOutput,
+        renderOutput,
+    };
 })();

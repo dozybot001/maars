@@ -83,7 +83,7 @@
     margin: 0;
     border-radius: 0;
     box-sizing: border-box;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: var(--state-transition), transform 0.2s ease;
 }
 
 .task-container:hover {
@@ -315,7 +315,7 @@
     cursor: pointer;
     font-weight: 500;
     box-sizing: border-box;
-    transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+    transition: var(--state-transition);
     position: relative;
     overflow: hidden;
     flex-shrink: 0;
@@ -521,7 +521,7 @@
     font-size: 11px;
     border-radius: var(--tree-task-radius);
     box-sizing: border-box;
-    transition: var(--button-transition);
+    transition: var(--state-transition);
     border: 1.5px solid var(--border-color);
     position: relative;
     overflow: hidden;

@@ -37,8 +37,10 @@
         { key: 'validate', label: 'Validate' },
     ];
 
-    let _configState = { useMock: true, current: '', presets: {} };
+    let _configState = { aiMode: 'mock', current: '', presets: {} };
     let _activePresetKey = '';
+
+    const MODE_LABELS = { mock: 'Mock', llm: 'LLM', 'llm-agent': 'LLM + Agent' };
 
     function _generateKey(label) {
         const base = (label || 'preset').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'preset';
@@ -53,50 +55,66 @@
         return str.length > len ? str.slice(0, len) + '…' : str;
     }
 
-    function _escapeHtml(s) {
-        if (!s) return '';
-        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
+    const _escapeHtml = (() => {
+        const u = window.MAARS?.utils;
+        return (s) => (u?.escapeHtml ? u.escapeHtml(s) : (s ? String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''));
+    })();
+    const _escapeHtmlAttr = (() => {
+        const u = window.MAARS?.utils;
+        return (s) => (u?.escapeHtmlAttr ? u.escapeHtmlAttr(s) : (s ? String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''));
+    })();
 
-    function _renderPresetCards() {
-        const container = document.getElementById('presetCards');
+    function _renderPresetMenuItems() {
+        const container = document.getElementById('apiPresetMenuList');
         if (!container) return;
         const keys = Object.keys(_configState.presets);
         let html = '';
         keys.forEach(key => {
             const p = _configState.presets[key];
             const label = _escapeHtml(p.label || key);
-            const isCurrent = key === _configState.current;
-            const isActive = key === _activePresetKey;
+            const isActive = _configState.current === key;
             const meta = _escapeHtml(p.model || _truncate(p.baseUrl || '', 18)) || '—';
-            html += `<button type="button" class="api-preset-item${isActive ? ' active' : ''}${isCurrent ? ' current' : ''}" data-key="${key}">
-                <span class="api-preset-name">${label}</span>
-                <span class="api-preset-meta">${meta}</span>
+            html += `<button type="button" class="api-menu-item${isActive ? ' active' : ''}" data-item="preset:${key}">
+                <span class="api-menu-item-name">${label}</span>
+                <span class="api-menu-item-meta">${meta}</span>
             </button>`;
         });
-        html += '<button type="button" class="api-preset-add" id="presetAddBtn">+ 新建</button>';
         container.innerHTML = html;
+    }
 
-        container.querySelectorAll('.api-preset-item').forEach(card => {
-            card.addEventListener('click', () => {
-                _readFormIntoState();
-                _activePresetKey = card.dataset.key;
-                _configState.current = card.dataset.key;
-                _populatePresetForm();
-                _renderPresetCards();
-                _updateEditPanelVisibility();
-            });
+    function _syncModeActive() {
+        document.querySelectorAll('#apiModeMenuList .api-menu-item').forEach(el => {
+            el.classList.toggle('active', el.dataset.item === _configState.aiMode);
         });
-        document.getElementById('presetAddBtn')?.addEventListener('click', () => {
-            _readFormIntoState();
-            const key = _generateKey('new');
-            _configState.presets[key] = { label: 'New Preset', baseUrl: '', apiKey: '', model: '' };
-            _activePresetKey = key;
-            _configState.current = key;
+    }
+
+    function _selectItem(itemId) {
+        _readFormIntoState();
+        const isPreset = itemId.startsWith('preset:');
+        const presetKey = isPreset ? itemId.slice(7) : '';
+        if (isPreset) {
+            _activePresetKey = presetKey;
+            _configState.current = presetKey;
             _populatePresetForm();
-            _renderPresetCards();
             _updateEditPanelVisibility();
-        });
+            document.querySelectorAll('#apiPresetMenuList .api-menu-item').forEach(el => {
+                el.classList.toggle('active', el.dataset.item === itemId);
+            });
+            document.getElementById('apiPanelMode')?.classList.remove('active');
+            document.getElementById('presetEditPanel')?.classList.add('active');
+        } else {
+            _configState.aiMode = itemId;
+            _syncModeActive();
+            document.getElementById('apiPanelMode')?.classList.add('active');
+            document.getElementById('presetEditPanel')?.classList.remove('active');
+            const titleEl = document.getElementById('apiModePanelTitle');
+            if (titleEl) titleEl.textContent = MODE_LABELS[itemId] + ' 配置';
+        }
+        _renderPresetMenuItems();
+    }
+
+    function _renderAllMenuItems() {
+        _renderPresetMenuItems();
     }
 
     function _updateEditPanelVisibility() {
@@ -120,15 +138,15 @@
                 <span class="api-phase-label">${_escapeHtml(label)}</span>
                 <div class="api-phase-field">
                     <label>URL</label>
-                    <input type="text" class="phase-input" data-phase="${key}" data-field="baseUrl" placeholder="继承" value="${_escapeHtml(ph.baseUrl || '')}" />
+                    <input type="text" class="phase-input" data-phase="${key}" data-field="baseUrl" placeholder="继承" value="${_escapeHtmlAttr(ph.baseUrl || '')}" />
                 </div>
                 <div class="api-phase-field">
                     <label>Key</label>
-                    <input type="password" class="phase-input" data-phase="${key}" data-field="apiKey" placeholder="继承" value="${_escapeHtml(ph.apiKey || '')}" autocomplete="off" />
+                    <input type="password" class="phase-input" data-phase="${key}" data-field="apiKey" placeholder="继承" value="${_escapeHtmlAttr(ph.apiKey || '')}" autocomplete="off" />
                 </div>
                 <div class="api-phase-field">
                     <label>Model</label>
-                    <input type="text" class="phase-input" data-phase="${key}" data-field="model" placeholder="继承" value="${_escapeHtml(ph.model || '')}" />
+                    <input type="text" class="phase-input" data-phase="${key}" data-field="model" placeholder="继承" value="${_escapeHtmlAttr(ph.model || '')}" />
                 </div>
             </div>`;
         });
@@ -141,18 +159,12 @@
         document.getElementById('presetBaseUrl').value = p.baseUrl || '';
         document.getElementById('presetApiKey').value = p.apiKey || '';
         document.getElementById('presetModel').value = p.model || '';
-        const useMock = _configState.useMock !== false;
-        document.querySelectorAll('.api-mode-seg').forEach(el => {
-            el.classList.toggle('selected', (el.dataset.mode === 'mock') === useMock);
-        });
         _renderPhaseCards();
         const deleteBtn = document.getElementById('presetDeleteBtn');
         if (deleteBtn) deleteBtn.style.display = Object.keys(_configState.presets).length > 1 ? '' : 'none';
     }
 
     function _readFormIntoState() {
-        const mockSelected = document.querySelector('.api-mode-seg[data-mode="mock"].selected');
-        _configState.useMock = !!mockSelected;
         if (!_activePresetKey || !_configState.presets[_activePresetKey]) return;
         const p = _configState.presets[_activePresetKey];
         const newLabel = document.getElementById('presetLabel').value.trim();
@@ -176,13 +188,17 @@
 
     function _loadConfig(raw) {
         raw = raw || {};
-        const useMock = raw.useMock !== false && raw.use_mock !== false;
+        let aiMode = raw.aiMode || raw.ai_mode;
+        if (!aiMode && ('useMock' in raw || 'use_mock' in raw)) {
+            aiMode = raw.useMock !== false && raw.use_mock !== false ? 'mock'
+                : (raw.executorAgentMode || raw.executor_agent_mode ? 'llm-agent' : 'llm');
+        }
+        aiMode = aiMode || 'mock';
+
         let presets = {};
         let current = '';
-
         if (raw.presets && typeof raw.presets === 'object' && Object.keys(raw.presets).length > 0) {
             presets = JSON.parse(JSON.stringify(raw.presets));
-            Object.keys(presets).forEach(k => { delete presets[k].useMock; });
             current = raw.current || Object.keys(presets)[0];
         } else if (raw.baseUrl || raw.apiKey || raw.model) {
             current = 'default';
@@ -191,7 +207,7 @@
             current = 'default';
             presets = { default: { label: 'Default', baseUrl: '', apiKey: '', model: '' } };
         }
-        _configState = { useMock, current, presets };
+        _configState = { aiMode, current, presets };
         _activePresetKey = current || Object.keys(presets)[0];
     }
 
@@ -199,32 +215,54 @@
         const modal = document.getElementById('apiConfigModal');
         const btn = document.getElementById('apiConfigBtn');
         const close = document.getElementById('apiConfigModalClose');
-        const form = document.getElementById('apiConfigForm');
         const deleteBtn = document.getElementById('presetDeleteBtn');
+        const sidebar = document.querySelector('.api-sidebar-menu');
 
-        document.getElementById('apiModeMock')?.addEventListener('click', (e) => {
-            e.preventDefault();
-            document.querySelectorAll('.api-mode-seg').forEach(el => el.classList.toggle('selected', el.dataset.mode === 'mock'));
-            _configState.useMock = true;
+        sidebar?.addEventListener('click', (e) => {
+            const item = e.target.closest('.api-menu-item');
+            if (item?.dataset?.item) {
+                e.preventDefault();
+                _selectItem(item.dataset.item);
+            }
         });
-        document.getElementById('apiModeLlm')?.addEventListener('click', (e) => {
+
+        document.getElementById('presetAddBtn')?.addEventListener('click', (e) => {
             e.preventDefault();
-            document.querySelectorAll('.api-mode-seg').forEach(el => el.classList.toggle('selected', el.dataset.mode === 'llm'));
-            _configState.useMock = false;
+            _readFormIntoState();
+            const key = _generateKey('new');
+            _configState.presets[key] = { label: 'New Preset', baseUrl: '', apiKey: '', model: '' };
+            _configState.current = key;
+            _selectItem('preset:' + key);
         });
 
         btn?.addEventListener('click', async () => {
+            let raw;
             try {
-                const raw = await cfg.fetchApiConfig();
-                _loadConfig(raw);
+                raw = await cfg.fetchApiConfig();
             } catch (e) {
                 console.error('Failed to load config:', e);
-                _loadConfig({});
+                alert('无法读取配置：请确保后端已启动（如 uvicorn main:asgi_app），并刷新页面重试。');
+                return;
             }
-            _renderPresetCards();
-            _populatePresetForm();
-            _updateEditPanelVisibility();
-            modal.style.display = 'block';
+            _loadConfig(raw);
+            _renderAllMenuItems();
+            _syncModeActive();
+            const keys = Object.keys(_configState.presets);
+            const current = _configState.current && keys.includes(_configState.current)
+                ? _configState.current
+                : keys[0];
+            if (current) {
+                _activePresetKey = current;
+                _configState.current = current;
+                _populatePresetForm();
+                _updateEditPanelVisibility();
+                document.querySelectorAll('#apiPresetMenuList .api-menu-item').forEach(el => {
+                    el.classList.toggle('active', el.dataset.item === 'preset:' + current);
+                });
+            }
+            document.getElementById('presetEditPanel')?.classList.add('active');
+            document.getElementById('apiPanelMode')?.classList.remove('active');
+            modal.style.display = 'flex';
             document.body.style.overflow = 'hidden';
         });
 
@@ -235,17 +273,13 @@
         close?.addEventListener('click', closeModal);
         window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
-        form?.addEventListener('submit', async (e) => {
-            e.preventDefault();
+        document.getElementById('apiGlobalSaveBtn')?.addEventListener('click', async () => {
             _readFormIntoState();
-            const presetsOut = JSON.parse(JSON.stringify(_configState.presets));
-            Object.keys(presetsOut).forEach(k => { delete presetsOut[k].useMock; });
-            const out = { useMock: _configState.useMock, current: _configState.current, presets: presetsOut };
             try {
-                await cfg.saveApiConfig(out);
+                await cfg.saveApiConfig(_configState);
                 closeModal();
             } catch (err) {
-                console.error('Failed to save config:', err);
+                console.error('Save config:', err);
                 alert('保存失败: ' + (err.message || 'Unknown error'));
             }
         });
@@ -256,10 +290,7 @@
             delete _configState.presets[_activePresetKey];
             const remaining = Object.keys(_configState.presets);
             _configState.current = remaining[0];
-            _activePresetKey = remaining[0];
-            _renderPresetCards();
-            _populatePresetForm();
-            _updateEditPanelVisibility();
+            _selectItem('preset:' + remaining[0]);
         });
     }
 

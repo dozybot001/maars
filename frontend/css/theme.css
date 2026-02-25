@@ -47,15 +47,19 @@
     --status-undone: #ffffff;
     --status-doing: #fff3cd;
     --status-doing-hover: #ffe69c;
+    --status-doing-active: #ffd966;
     --status-doing-accent: #b38600;
     --status-validating: #b3d9ff;
     --status-validating-hover: #99ccff;
+    --status-validating-active: #7eb8ff;
     --status-validating-accent: #1976d2;
     --status-done: #d4edda;
     --status-done-hover: #c3e6cb;
+    --status-done-active: #b2dfb8;
     --status-done-accent: #2e7d32;
     --status-failed: #ffcccc;
     --status-failed-hover: #ffb3b3;
+    --status-failed-active: #ff9999;
     --status-failed-border: #ff6666;
     --status-failed-text: #ff6666;
 
@@ -85,13 +89,15 @@
     --accent-text-on-primary: #ffffff;
 
     /* ========== API Config - selected / hover (grayscale) ========== */
-    --api-select-bg: #e9ecef;
     --api-select-bg-hover: #dee2e6;
+    --api-select-bg-active: #ced4da;
+    --api-select-bg-selected: #adb5bd;
     --api-select-text: #495057;
 
     /* ========== Failure (unified) ========== */
     --failure-bg: #ffcccc;
     --failure-bg-hover: #ffb3b3;
+    --failure-bg-active: #ff9999;
     --failure-border: #ff6666;
     --failure-text: #ff6666;
 
@@ -120,7 +126,10 @@
     --shadow-2xl: 0 4px 20px rgba(0, 0, 0, 0.1);
     --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.05);
     --shadow-modal: 0 4px 8px rgba(0, 0, 0, 0.15);
+    --shadow-modal-dialog: 0 24px 48px -12px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.03);
     --shadow-overlay: rgba(0, 0, 0, 0.4);
+    --modal-radius: 12px;
+    --modal-backdrop-blur: 8px;
     --shadow-glow-doing: 0 0 6px rgba(230, 184, 0, 0.7);
     --shadow-glow-failure: 0 0 6px rgba(255, 102, 102, 0.7);
 }
@@ -164,15 +173,19 @@
     --status-undone: #2d3748;
     --status-doing: #5c4a00;
     --status-doing-hover: #7a6200;
+    --status-doing-active: #988000;
     --status-doing-accent: #e6b800;
     --status-validating: #1e3a5f;
     --status-validating-hover: #2a4a7a;
+    --status-validating-active: #365a94;
     --status-validating-accent: #64b5f6;
     --status-done: #1b3d1f;
     --status-done-hover: #2e5c33;
+    --status-done-active: #417b47;
     --status-done-accent: #81c784;
     --status-failed: #5c2a2a;
     --status-failed-hover: #7a3838;
+    --status-failed-active: #8f4545;
     --status-failed-border: #ff6666;
     --status-failed-text: #ff9999;
 
@@ -202,12 +215,14 @@
     --accent-primary-border: #64748b;
     --accent-text-on-primary: #0f172a;
 
-    --api-select-bg: #2d3748;
     --api-select-bg-hover: #4a5568;
+    --api-select-bg-active: #5a6578;
+    --api-select-bg-selected: #3d4758;
     --api-select-text: #cbd5e0;
 
     --failure-bg: #5c2a2a;
     --failure-bg-hover: #7a3838;
+    --failure-bg-active: #8f4545;
     --failure-border: #ff6666;
     --failure-text: #ff9999;
 
@@ -228,6 +243,7 @@
     --shadow-2xl: 0 4px 20px rgba(0, 0, 0, 0.5);
     --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-modal: 0 4px 8px rgba(0, 0, 0, 0.6);
+    --shadow-modal-dialog: 0 24px 48px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04);
     --shadow-overlay: rgba(0, 0, 0, 0.6);
     --shadow-glow-doing: 0 0 6px rgba(230, 184, 0, 0.5);
     --shadow-glow-failure: 0 0 6px rgba(255, 102, 102, 0.5);
@@ -276,15 +292,19 @@
     --status-undone: #1a1a1a;
     --status-doing: #3d3000;
     --status-doing-hover: #524000;
+    --status-doing-active: #6b5500;
     --status-doing-accent: #e6b800;
     --status-validating: #0f2847;
     --status-validating-hover: #1a3a5c;
+    --status-validating-active: #254a71;
     --status-validating-accent: #60a5fa;
     --status-done: #0f2e14;
     --status-done-hover: #1a4020;
+    --status-done-active: #25522a;
     --status-done-accent: #4ade80;
     --status-failed: #3d1a1a;
     --status-failed-hover: #522222;
+    --status-failed-active: #6d2a2a;
     --status-failed-border: #f87171;
     --status-failed-text: #fca5a5;
 
@@ -310,12 +330,14 @@
     --accent-primary-border: #525252;
     --accent-text-on-primary: #fafafa;
 
-    --api-select-bg: #262626;
     --api-select-bg-hover: #404040;
+    --api-select-bg-active: #525252;
+    --api-select-bg-selected: #363636;
     --api-select-text: #a3a3a3;
 
     --failure-bg: #3d1a1a;
     --failure-bg-hover: #522222;
+    --failure-bg-active: #6d2a2a;
     --failure-border: #f87171;
     --failure-text: #fca5a5;
 
@@ -336,6 +358,7 @@
     --shadow-2xl: 0 4px 20px rgba(0, 0, 0, 0.7);
     --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.5);
     --shadow-modal: 0 4px 8px rgba(0, 0, 0, 0.8);
+    --shadow-modal-dialog: 0 24px 48px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.03);
     --shadow-overlay: rgba(0, 0, 0, 0.8);
     --shadow-glow-doing: 0 0 6px rgba(230, 184, 0, 0.5);
     --shadow-glow-failure: 0 0 6px rgba(248, 113, 113, 0.5);

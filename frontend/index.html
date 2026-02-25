@@ -41,22 +41,38 @@
                     <h2 class="api-modal-title">API 配置</h2>
                     <button type="button" class="api-modal-close" id="apiConfigModalClose" aria-label="关闭">×</button>
                 </header>
-                <form id="apiConfigForm" class="api-config-form">
+                <div id="apiConfigForm" class="api-config-form">
                     <div class="api-config-body">
                         <aside class="api-config-sidebar">
-                            <div class="api-mode-block">
-                                <span class="api-block-label">AI 模式</span>
-                                <div class="api-mode-segmented" role="group">
-                                    <button type="button" class="api-mode-seg" data-mode="mock" id="apiModeMock">Mock</button>
-                                    <button type="button" class="api-mode-seg" data-mode="llm" id="apiModeLlm">LLM</button>
+                            <nav class="api-sidebar-menu" role="navigation">
+                                <div class="api-menu-section">
+                                    <span class="api-section-title">AI Mode</span>
+                                    <div class="api-menu-list" id="apiModeMenuList">
+                                        <button type="button" class="api-menu-item" data-item="mock">Mock</button>
+                                        <button type="button" class="api-menu-item" data-item="llm">LLM</button>
+                                        <button type="button" class="api-menu-item" data-item="llm-agent">LLM + Agent</button>
+                                    </div>
+                                </div>
+                                <div class="api-menu-section">
+                                    <span class="api-section-title">Preset</span>
+                                    <div class="api-menu-list" id="apiPresetMenuList">
+                                        <!-- preset items rendered by JS -->
+                                    </div>
+                                    <button type="button" class="api-menu-add" id="presetAddBtn">+ 新建</button>
+                                </div>
+                            </nav>
+                            <button type="button" class="api-btn-ghost api-save-btn" id="apiGlobalSaveBtn">保存</button>
+                        </aside>
+                        <main class="api-config-main" id="apiConfigMain">
+                            <div class="api-panel api-panel-mode" id="apiPanelMode" data-panel="mode">
+                                <div class="api-edit-card">
+                                    <h3 class="api-edit-title" id="apiModePanelTitle">配置</h3>
+                                    <div class="api-mode-placeholder">
+                                        <p class="api-placeholder-text">此模式的配置区域尚未设计，敬请期待。</p>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="api-presets-block">
-                                <span class="api-block-label">预设</span>
-                                <div class="api-presets-list" id="presetCards"></div>
-                            </div>
-                        </aside>
-                        <main class="api-config-main" id="presetEditPanel">
+                            <div class="api-panel api-panel-preset active" id="presetEditPanel" data-panel="preset">
                             <div class="api-edit-card">
                                 <h3 class="api-edit-title" id="presetEditTitle">选择预设</h3>
                                 <div class="api-edit-fields">
@@ -82,13 +98,13 @@
                                     <div class="api-phase-grid" id="phaseCards"></div>
                                 </div>
                                 <div class="api-edit-actions">
-                                    <button type="submit" class="api-btn-ghost">保存</button>
-                                    <button type="button" id="presetDeleteBtn" class="api-btn-ghost">删除</button>
+                                    <button type="button" id="presetDeleteBtn" class="api-btn-ghost">删除预设</button>
                                 </div>
+                            </div>
                             </div>
                         </main>
                     </div>
-                </form>
+                </div>
             </div>
         </div>
         
@@ -183,37 +199,67 @@
             <h2>Validators</h2>
             <div class="validator-content">
                 <div class="validator-stats">
-                    <div class="stat-item">
-                        <span class="stat-label">Total:</span>
-                        <span class="stat-value" id="validatorTotal">0</span>
+                    <div class="validator-stats-items">
+                        <div class="stat-item">
+                            <span class="stat-label">Total:</span>
+                            <span class="stat-value" id="validatorTotal">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Busy:</span>
+                            <span class="stat-value stat-busy" id="validatorBusy">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Idle:</span>
+                            <span class="stat-value stat-idle" id="validatorIdle">0</span>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Busy:</span>
-                        <span class="stat-value stat-busy" id="validatorBusy">0</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Idle:</span>
-                        <span class="stat-value stat-idle" id="validatorIdle">0</span>
+                    <div class="validator-chips" id="validatorChips">
+                        <!-- Populated by renderValidators -->
                     </div>
                 </div>
-                <div class="validator-grid" id="validatorGrid">
-                    <!-- Populated by validator-states-update on connect -->
+                <div class="validator-thinking-output-row">
+                    <div class="validator-thinking-area" id="validatorThinkingArea">
+                        <div class="validator-thinking-label">AI Thinking</div>
+                        <div class="validator-thinking-content markdown-body" id="validatorThinkingContent"></div>
+                        <div class="validator-thinking-placeholder" id="validatorThinkingPlaceholder">Thinking will appear here when validating...</div>
+                    </div>
+                    <div class="validator-placeholder-area" id="validatorPlaceholderArea">
+                        <div class="validator-placeholder-label">—</div>
+                        <div class="validator-placeholder-content" id="validatorPlaceholderContent"></div>
+                        <div class="validator-placeholder-text">Reserved for future use</div>
+                    </div>
                 </div>
             </div>
         </section>
+    </div>
+
+    <!-- Executor Task Output 全屏模态框 -->
+    <div id="executorOutputModal" class="executor-output-modal" aria-hidden="true">
+        <div class="executor-output-modal-backdrop"></div>
+        <div class="executor-output-modal-dialog">
+            <div class="executor-output-modal-header">
+                <span class="executor-output-modal-title" id="executorOutputModalTitle">Task Output</span>
+                <button type="button" class="executor-output-modal-close" id="executorOutputModalClose" aria-label="关闭">×</button>
+            </div>
+            <div class="executor-output-modal-body markdown-body" id="executorOutputModalBody"></div>
+        </div>
     </div>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="js/utils.js"></script>
     <script src="task-tree.js"></script>
     <script src="js/config.js"></script>
+    <script src="js/constants.js"></script>
     <script src="js/theme.js"></script>
     <script src="js/api.js"></script>
     <script src="js/planner.js"></script>
+    <script src="js/thinking-area.js"></script>
     <script src="js/planner-thinking.js"></script>
     <script src="js/executor-thinking.js"></script>
+    <script src="js/validator-thinking.js"></script>
     <script src="js/monitor.js"></script>
     <script src="js/websocket.js"></script>
     <script src="app.js"></script>

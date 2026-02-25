@@ -161,6 +161,7 @@
 
 | 版本 | 发布日期 | 摘要 |
 |------|----------|------|
+| [v2.5.0](releases/RELEASE_v2.5.0.md) | 2026-02-25 | Validator 流式思考、thinking-area 工厂、按钮设计规范 |
 | [v2.4.1](releases/RELEASE_v2.4.1.md) | 2026-02-25 | Release Note 撰写规范与发布流程 |
 | [v2.4.0](releases/RELEASE_v2.4.0.md) | 2026-02-25 | Executor 流式思考输出、AI Thinking 与 Task Output 双栏 UI |
 

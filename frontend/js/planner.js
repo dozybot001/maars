@@ -24,10 +24,15 @@
             alert('Please enter an idea first.');
             return;
         }
-        const socket = window.MAARS?.state?.socket;
+        let socket = window.MAARS?.state?.socket;
         if (!socket || !socket.connected) {
-            alert('WebSocket not connected. Please wait and try again.');
-            return;
+            window.MAARS.ws?.init();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            socket = window.MAARS?.state?.socket;
+            if (!socket || !socket.connected) {
+                alert('WebSocket not connected. Please wait and try again.');
+                return;
+            }
         }
 
         try {

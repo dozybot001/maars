@@ -16,6 +16,7 @@
             const planId = await cfg.resolvePlanId();
             const response = await fetch(`${cfg.API_BASE_URL}/execution?planId=${encodeURIComponent(planId)}`);
             const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Failed to load execution');
             return data.execution || null;
         } catch (error) {
             console.error('Error loading execution:', error);

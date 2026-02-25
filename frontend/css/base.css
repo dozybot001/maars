@@ -25,13 +25,19 @@
     /* Scrollbar */
     --scrollbar-width: 10px;
 
-    /* Button */
+    /* Button - unified design system */
+    --btn-radius: 8px;
+    --btn-transition: all 0.2s ease;
+    --btn-hover-bg: var(--interactive-hover);
+    --btn-active-bg: var(--interactive-active);
+    --btn-hover-border: var(--interactive-border-hover);
     --button-padding-y: 10px;
     --button-padding-x: 20px;
     --button-font-size: 14px;
     --button-font-weight: 500;
-    --button-border-radius: var(--border-radius);
-    --button-transition: all 0.2s ease;
+
+    /* State transition - unified for chips, task nodes, cells, thinking blocks, etc. */
+    --state-transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
 }
 
 /* Unified scrollbar (all scrollable areas) */

@@ -5,7 +5,9 @@
     'use strict';
     window.MAARS = window.MAARS || {};
 
-    const API_BASE_URL = (typeof window !== 'undefined' && window.location) ? `${window.location.origin}/api` : 'http://localhost:3001/api';
+    const _base = (typeof window !== 'undefined' && window.location && /^https?:/.test(window.location.origin))
+        ? '' : 'http://localhost:3001';
+    const API_BASE_URL = _base + '/api';
     const WS_URL = (typeof window !== 'undefined' && window.location) ? window.location.origin : 'http://localhost:3001';
     const PLAN_ID_KEY = 'maars-plan-id';
     const THEME_STORAGE_KEY = 'maars-theme';
@@ -17,7 +19,6 @@
         } catch (_) { return 'test'; }
     }
 
-    /** Resolve plan ID for API calls: use stored if valid (plan_xxx), else fetch latest from backend. */
     async function resolvePlanId() {
         const stored = getCurrentPlanId();
         if (stored && stored.startsWith('plan_')) return stored;
@@ -38,11 +39,10 @@
     }
 
     async function fetchApiConfig() {
-        try {
-            const res = await fetch(`${API_BASE_URL}/config`);
-            const data = await res.json();
-            return data.config || {};
-        } catch (_) { return {}; }
+        const res = await fetch(`${API_BASE_URL}/config`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`Config ${res.status}`);
+        const data = await res.json();
+        return data.config != null ? data.config : {};
     }
 
     async function saveApiConfig(cfg) {
@@ -51,7 +51,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(cfg || {})
         });
-        if (!res.ok) throw new Error('Failed to save config');
+        if (!res.ok) throw new Error('Save failed');
         return await res.json();
     }
 

@@ -9,6 +9,7 @@
     const monitor = window.MAARS?.monitor;
     const plannerThinking = window.MAARS?.plannerThinking;
     const executorThinking = window.MAARS?.executorThinking;
+    const validatorThinking = window.MAARS?.validatorThinking;
     if (!cfg || !planner || !monitor) return;
 
     const state = window.MAARS.state || {};
@@ -20,7 +21,7 @@
 
     function init() {
         if (state.socket && state.socket.connected) return;
-        state.socket = io(cfg.WS_URL);
+        state.socket = io(cfg.WS_URL, { reconnection: true, reconnectionAttempts: 10, reconnectionDelay: 1000 });
 
         state.socket.on('connect', () => console.log('WebSocket connected'));
         state.socket.on('disconnect', () => console.log('WebSocket disconnected'));
@@ -49,11 +50,7 @@
 
         state.socket.on('plan-error', () => planner.resetPlanUI());
 
-        state.socket.on('timetable-layout', (data) => {
-            monitor.state.timetableLayout = data.layout;
-            monitor.state.chainCache = monitor.buildChainCacheFromLayout(data.layout);
-            monitor.renderNodeDiagramFromCache();
-        });
+        state.socket.on('timetable-layout', (data) => { monitor.setTimetableLayout(data); });
 
         state.socket.on('task-states-update', (data) => {
             if (data.tasks && Array.isArray(data.tasks)) {
@@ -89,12 +86,7 @@
                                     const arr = Array.isArray(d) ? d : [d];
                                     const updated = arr.map(t => t.task_id === taskState.task_id ? { ...t, status: taskState.status } : t);
                                     cell.setAttribute('data-task-data', JSON.stringify(Array.isArray(d) ? updated : updated[0]));
-                                    const status = arr.length === 1 ? taskState.status : (() => {
-                                        const hasError = updated.some(t => t.status === 'execution-failed' || t.status === 'validation-failed');
-                                        const allDone = updated.every(t => t.status === 'done');
-                                        const allUndone = updated.every(t => !t.status || t.status === 'undone');
-                                        return hasError ? 'execution-failed' : allDone ? 'done' : allUndone ? 'undone' : 'doing';
-                                    })();
+                                    const status = arr.length === 1 ? taskState.status : (typeof TaskTree !== 'undefined' && TaskTree.aggregateStatus ? TaskTree.aggregateStatus(updated) : taskState.status);
                                     if (status && status !== 'undone') cell.classList.add(`task-status-${status}`);
                                 } catch (_) {
                                     if (taskState.status && taskState.status !== 'undone') cell.classList.add(`task-status-${taskState.status}`);
@@ -114,6 +106,7 @@
 
         state.socket.on('execution-start', () => {
             if (executorThinking) executorThinking.clear();
+            if (validatorThinking) validatorThinking.clear();
         });
 
         state.socket.on('executor-thinking', (data) => {
@@ -124,6 +117,11 @@
         state.socket.on('executor-output', (data) => {
             if (!executorThinking || !data.taskId) return;
             executorThinking.setTaskOutput(data.taskId, data.output);
+        });
+
+        state.socket.on('validator-thinking', (data) => {
+            if (!data.chunk || !validatorThinking) return;
+            validatorThinking.appendChunk(data.chunk, data.taskId, data.operation);
         });
 
         state.socket.on('executor-states-update', (data) => {
@@ -145,7 +143,11 @@
 
         state.socket.on('execution-complete', (data) => {
             console.log(`Execution complete: ${data.completed}/${data.total} tasks completed`);
-            if (executorThinking) executorThinking.applyHighlight();
+            if (executorThinking) {
+                executorThinking.applyHighlight();
+                executorThinking.applyOutputHighlight();
+            }
+            if (validatorThinking) validatorThinking.applyHighlight();
             if (stopExecutionBtn) stopExecutionBtn.style.display = 'none';
             if (executionBtn) {
                 executionBtn.disabled = false;
