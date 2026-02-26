@@ -3,7 +3,8 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from workers import executor_manager, validator_manager
+from executor import executor_manager
+from validator import validator_manager
 
 from ..schemas import TaskIdRequest
 

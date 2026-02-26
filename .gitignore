@@ -20,6 +20,9 @@ backend/db/api_config.json
 # Atomic write leftovers (crash recovery)
 *.tmp
 
+# Download temp files
+*.qkdownloading
+
 # Test & coverage
 .pytest_cache/
 .mypy_cache/

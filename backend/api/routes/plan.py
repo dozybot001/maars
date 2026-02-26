@@ -12,7 +12,7 @@ from db import (
     get_plan,
     save_plan,
 )
-from layout import compute_decomposition_layout
+from planner.layout import compute_decomposition_layout
 from planner.index import run_plan
 
 from ..schemas import PlanRunRequest

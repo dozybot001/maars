@@ -6,9 +6,9 @@ Builds layout from execution, generates execution from plan.
 import json
 from typing import Any, Dict, List
 
-from layout import compute_monitor_layout
+from monitor.layout import compute_monitor_layout
 from monitor.timetable import build_task_layout
-from tasks.task_cache import build_tree_data
+from monitor.tasks.task_cache import build_tree_data
 
 from .from_plan import build_execution_from_plan
 

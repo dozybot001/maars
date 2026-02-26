@@ -34,7 +34,7 @@ python -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001 --loop asyncio --http
 
 - 继承：原子任务继承祖先的跨子树依赖
 - 下沉：非原子依赖目标替换为其原子后代
-- Monitor 依赖树布局（stage-based：stage 行 + 等价任务合并，详见 [STAGE_LAYOUT_RULES](backend/layout/STAGE_LAYOUT_RULES.md)）+ 网格布局
+- Monitor 依赖树布局（stage-based：stage 行 + 等价任务合并，详见 [STAGE_LAYOUT_RULES](backend/monitor/layout/STAGE_LAYOUT_RULES.md)）+ 网格布局
 
 ### Execution（执行）
 
@@ -47,11 +47,11 @@ maars/
 ├── backend/
 │   ├── main.py          # FastAPI + Socket.io 入口
 │   ├── api/             # 路由、schemas、state（按领域拆分）
+│   ├── shared/          # 公共：graph 等
 │   ├── planner/         # AI 规划（atomicity/decompose/format）
 │   ├── monitor/         # execution 生成、依赖解析、网格布局
-│   ├── layout/          # 分解树/执行图布局（tree_layout + stage_layout）
-│   ├── workers/         # executor、validator、runner
-│   ├── tasks/           # 任务阶段计算（拓扑排序、传递规约）
+│   ├── executor/        # 执行：runner、execution
+│   ├── validator/       # 验证：validator_manager
 │   ├── db/              # 文件存储：db/{plan_id}/plan.json, execution.json
 │   └── test/            # Mock AI 响应、mock_stream
 └── frontend/
@@ -74,7 +74,6 @@ maars/
 ## 文档
 
 - [前端脚本与模块依赖](docs/FRONTEND_SCRIPTS.md)
-- [Release Note 标准](docs/RELEASE_NOTE_STANDARD.md) | [版本发布](docs/releases/) | 最新：[v3.0.0](docs/releases/RELEASE_v3.0.0.md)
-- [后端结构](backend/README.md) | [Layout](backend/layout/README.md) | [Planner](backend/planner/README.md) | [Workers](backend/workers/README.md) | [Monitor](backend/monitor/README.md) | [Test](backend/test/README.md)
-- [执行图布局规则](backend/layout/STAGE_LAYOUT_RULES.md)
-- [Executor 改进规划](backend/workers/EXECUTOR_IMPROVEMENTS.md) | 待开发：[Planner 改进](backend/planner/PLANNER_IMPROVEMENTS.md)
+- [Release Note 标准](docs/RELEASE_NOTE_STANDARD.md) | [版本发布](docs/releases/) | 最新：[v3.1.0](docs/releases/RELEASE_v3.1.0.md)
+- [后端结构](backend/README.md)（含各模块 README 链接）
+- [执行图布局规则](backend/monitor/layout/STAGE_LAYOUT_RULES.md) | [Executor 改进规划](backend/executor/EXECUTOR_IMPROVEMENTS.md)

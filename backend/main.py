@@ -15,7 +15,8 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from api import PlanRunState, register_routes
-from workers import ExecutorRunner, executor_manager, validator_manager
+from executor import ExecutorRunner, executor_manager
+from validator import validator_manager
 
 # Socket.io
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")

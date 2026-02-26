@@ -98,7 +98,7 @@ def build_execution_from_plan(plan: Dict) -> Dict:
 
     resolved = _resolve_deps_for_atomic(all_tasks, atomic_tasks)
 
-    from tasks.task_stages import compute_task_stages
+    from monitor.tasks.task_stages import compute_task_stages
     staged = compute_task_stages(resolved)
     flat = []
     for stage_list in staged:
