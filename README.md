@@ -4,13 +4,15 @@ Multi-Agent Automated Research System（多智能体自动研究系统）
 
 ## 快速开始
 
+**前置**：已安装 [Python 3.10+](https://www.python.org/downloads/) 并勾选 “Add Python to PATH”。
+
 ```bash
 cd backend
-pip install -r requirements.txt
-python3 -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001 --loop asyncio --http h11
+python -m pip install -r requirements.txt
+python -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001 --loop asyncio --http h11
 ```
 
-访问 **http://localhost:3001**
+在浏览器中访问 **http://localhost:3001** 或 **http://127.0.0.1:3001**
 
 点击 **Load Example Idea** 可加载示例 idea：`Compare Python vs JavaScript for backend development and summarize pros/cons.`
 
@@ -36,7 +38,7 @@ python3 -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001 --loop asyncio --htt
 
 ### Execution（执行）
 
-Executor 池并行执行就绪任务，Validator 池验证输出，实时状态推送。
+Executor 池并行执行就绪任务，Validator 池验证输出，实时状态推送。LLM + Agent 模式下，Executor 使用多轮工具调用（ReadArtifact、ReadFile、WriteFile、Finish、ListSkills、LoadSkill），每个任务在独立沙箱中运行。
 
 ## 项目结构
 
@@ -63,18 +65,16 @@ maars/
 
 ## 配置 LLM API
 
-默认使用 Mock AI（无需真实 API）。切换为 LLM 模式：
+点击右上角 **API 配置** 进行设置：
 
-1. 点击右上角 **API 配置**
-2. 填写 Base URL、API Key、Model（支持 OpenAI 兼容接口）
-3. 关闭 Mock AI，保存
-
-支持按阶段（atomicity check/decompose/format/quality assess/execute/validate）独立配置。
+- **AI Mode**：Mock（模拟数据）/ LLM（Planner+单次 Executor）/ LLM + Agent（Planner+多轮 Agent Executor）
+- **Preset**：Base URL、API Key、Model（支持 OpenAI 兼容接口），支持按阶段独立配置
+- **模式参数**：各 AI Mode 可调参数（如 Mock 通过率、Planner/Executor Temperature、Agent 最大轮数）
 
 ## 文档
 
 - [前端脚本与模块依赖](docs/FRONTEND_SCRIPTS.md)
-- [Release Note 标准](docs/RELEASE_NOTE_STANDARD.md) | [版本发布](docs/releases/)
+- [Release Note 标准](docs/RELEASE_NOTE_STANDARD.md) | [版本发布](docs/releases/) | 最新：[v3.0.0](docs/releases/RELEASE_v3.0.0.md)
 - [后端结构](backend/README.md) | [Layout](backend/layout/README.md) | [Planner](backend/planner/README.md) | [Workers](backend/workers/README.md) | [Monitor](backend/monitor/README.md) | [Test](backend/test/README.md)
 - [执行图布局规则](backend/layout/STAGE_LAYOUT_RULES.md)
-- 待开发：[Planner 改进](backend/planner/PLANNER_IMPROVEMENTS.md) | [Executor 改进](backend/workers/EXECUTOR_IMPROVEMENTS.md)
+- [Executor 改进规划](backend/workers/EXECUTOR_IMPROVEMENTS.md) | 待开发：[Planner 改进](backend/planner/PLANNER_IMPROVEMENTS.md)

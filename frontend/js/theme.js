@@ -42,6 +42,40 @@
 
     const MODE_LABELS = { mock: 'Mock', llm: 'LLM', 'llm-agent': 'LLM + Agent' };
 
+    const MODE_DESCRIPTIONS = {
+        mock: {
+            title: 'Mock 配置',
+            desc: '使用模拟数据，无需 API 密钥。Planner、Executor、Validator 均返回预设结果，适合快速测试流程与 UI。',
+        },
+        llm: {
+            title: 'LLM 配置',
+            desc: 'Planner 使用 LLM 分解任务，Executor 单次 LLM 生成输出，Validator 校验。请在左侧 Preset 中选择或新建 API 配置。',
+            presetNote: true,
+        },
+        'llm-agent': {
+            title: 'LLM + Agent 配置',
+            desc: 'Planner 使用 LLM 分解任务，Executor 使用多轮 Agent 循环与工具调用（ReadArtifact、ReadFile、WriteFile、Finish、ListSkills、LoadSkill），每个任务在独立沙箱中运行。',
+            presetNote: true,
+        },
+    };
+
+    const MODE_PARAMS = {
+        mock: [
+            { key: 'executionPassProbability', label: '执行通过率', type: 'number', min: 0, max: 1, step: 0.05, default: 0.95, section: 'Mock 参数' },
+            { key: 'validationPassProbability', label: '验证通过率', type: 'number', min: 0, max: 1, step: 0.05, default: 0.95, section: 'Mock 参数' },
+            { key: 'maxFailures', label: '最大重试次数', type: 'number', min: 1, max: 10, default: 3, section: 'Mock 参数' },
+        ],
+        llm: [
+            { key: 'plannerTemperature', label: 'Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'LLM (Planner)', tip: 'Planner 各阶段 LLM 调用的温度' },
+            { key: 'executorLlmTemperature', label: 'Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Executor LLM', tip: 'Executor 单次 LLM 调用的温度' },
+        ],
+        'llm-agent': [
+            { key: 'plannerTemperature', label: 'Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'LLM (Planner)', tip: 'Planner 各阶段 LLM 调用的温度' },
+            { key: 'executorLlmTemperature', label: 'Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Executor LLM', tip: 'Executor 内 LLM 调用的温度' },
+            { key: 'executorAgentMaxTurns', label: '最大轮数', type: 'number', min: 1, max: 30, default: 15, section: 'Executor Agent', tip: 'Agent 循环最大轮数' },
+        ],
+    };
+
     function _generateKey(label) {
         const base = (label || 'preset').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'preset';
         let key = base;
@@ -67,13 +101,12 @@
     function _renderPresetMenuItems() {
         const container = document.getElementById('apiPresetMenuList');
         if (!container) return;
-        const keys = Object.keys(_configState.presets);
         let html = '';
-        keys.forEach(key => {
-            const p = _configState.presets[key];
-            const label = _escapeHtml(p.label || key);
+        Object.keys(_configState.presets).forEach(key => {
+            const preset = _configState.presets[key];
+            const label = _escapeHtml(preset.label || key);
             const isActive = _configState.current === key;
-            const meta = _escapeHtml(p.model || _truncate(p.baseUrl || '', 18)) || '—';
+            const meta = _escapeHtml(preset.model || _truncate(preset.baseUrl || '', 18)) || '—';
             html += `<button type="button" class="api-menu-item${isActive ? ' active' : ''}" data-item="preset:${key}">
                 <span class="api-menu-item-name">${label}</span>
                 <span class="api-menu-item-meta">${meta}</span>
@@ -85,6 +118,105 @@
     function _syncModeActive() {
         document.querySelectorAll('#apiModeMenuList .api-menu-item').forEach(el => {
             el.classList.toggle('active', el.dataset.item === _configState.aiMode);
+        });
+    }
+
+    const _LEGACY_KEY_MAP = {
+        'llm': { temperature: 'executorLlmTemperature' },
+        'llm-agent': { temperature: 'executorLlmTemperature', maxTurns: 'executorAgentMaxTurns' },
+    };
+
+    function _getModeConfig(mode) {
+        _configState.modeConfig = _configState.modeConfig || {};
+        let cfg = { ...(_configState.modeConfig[mode] || {}) };
+        const defaults = {};
+        (MODE_PARAMS[mode] || []).forEach(p => { defaults[p.key] = p.default; });
+        const legacy = _LEGACY_KEY_MAP[mode] || {};
+        Object.keys(legacy).forEach(oldKey => {
+            if (cfg[oldKey] !== undefined && cfg[legacy[oldKey]] === undefined) {
+                cfg[legacy[oldKey]] = cfg[oldKey];
+            }
+        });
+        cfg = { ...defaults, ...cfg };
+        _configState.modeConfig[mode] = cfg;
+        return cfg;
+    }
+
+    function _renderModePanel() {
+        const container = document.getElementById('apiModeContent');
+        const titleEl = document.getElementById('apiModePanelTitle');
+        if (!container) return;
+        const mode = _configState.aiMode || 'mock';
+        const meta = MODE_DESCRIPTIONS[mode] || MODE_DESCRIPTIONS.mock;
+        if (titleEl) titleEl.textContent = meta.title;
+
+        const params = MODE_PARAMS[mode] || [];
+        const cfg = _getModeConfig(mode);
+
+        let html = `<div class="api-mode-desc">${_escapeHtml(meta.desc)}</div>`;
+        if (params.length > 0) {
+            const bySection = {};
+            const sectionOrder = [];
+            params.forEach(param => {
+                const sec = param.section || '';
+                if (!bySection[sec]) {
+                    bySection[sec] = [];
+                    if (sec) sectionOrder.push(sec);
+                }
+                bySection[sec].push(param);
+            });
+            sectionOrder.forEach(sec => {
+                html += `<div class="api-mode-section"><h4 class="api-mode-section-title">${_escapeHtml(sec)}</h4><div class="api-mode-params">`;
+                bySection[sec].forEach(param => {
+                    const val = cfg[param.key] !== undefined ? cfg[param.key] : param.default;
+                    const attrs = `data-mode="${_escapeHtmlAttr(mode)}" data-key="${_escapeHtmlAttr(param.key)}"`;
+                    const step = param.step !== undefined ? ` step="${param.step}"` : '';
+                    const min = param.min !== undefined ? ` min="${param.min}"` : '';
+                    const max = param.max !== undefined ? ` max="${param.max}"` : '';
+                    const tipAttr = param.tip ? ` title="${_escapeHtmlAttr(param.tip)}"` : '';
+                    html += `<div class="api-field api-mode-field"${tipAttr}>
+                        <label for="mode-${param.key}">${_escapeHtml(param.label)}</label>
+                        <input type="${param.type}" id="mode-${param.key}" ${attrs}${min}${max}${step} value="${_escapeHtmlAttr(String(val))}" />
+                        ${param.tip ? `<span class="api-mode-param-tip">${_escapeHtml(param.tip)}</span>` : ''}
+                    </div>`;
+                });
+                html += '</div></div>';
+            });
+        }
+        if (meta.presetNote) {
+            const currentKey = _configState.current;
+            const preset = currentKey ? _configState.presets[currentKey] : null;
+            const presetLabel = preset ? (preset.label || currentKey) : '—';
+            const presetModel = preset ? (preset.model || '') : '';
+            html += `<div class="api-mode-preset-info">
+                <span class="api-mode-preset-label">当前预设</span>
+                <div class="api-mode-preset-value">
+                    <strong>${_escapeHtml(presetLabel)}</strong>
+                    ${presetModel ? `<span class="api-mode-preset-model">${_escapeHtml(presetModel)}</span>` : ''}
+                </div>
+                <p class="api-mode-preset-hint">在左侧 Preset 中切换或编辑 API 配置</p>
+                ${currentKey ? `<button type="button" class="api-btn-ghost api-mode-edit-preset" data-preset="${_escapeHtmlAttr(currentKey)}">编辑此预设</button>` : ''}
+            </div>`;
+        }
+        container.innerHTML = html;
+    }
+
+    function _readModeFormIntoState() {
+        _configState.modeConfig = _configState.modeConfig || {};
+        document.querySelectorAll('.api-mode-field input').forEach(inp => {
+            const mode = inp.dataset.mode;
+            const key = inp.dataset.key;
+            if (!mode || !key) return;
+            if (!_configState.modeConfig[mode]) _configState.modeConfig[mode] = {};
+            const param = (MODE_PARAMS[mode] || []).find(x => x.key === key);
+            const defaultVal = param ? param.default : 0;
+            const raw = inp.value.trim();
+            if (param?.type === 'number') {
+                const num = parseFloat(raw);
+                _configState.modeConfig[mode][key] = isNaN(num) ? defaultVal : num;
+            } else {
+                _configState.modeConfig[mode][key] = raw || defaultVal;
+            }
         });
     }
 
@@ -107,13 +239,8 @@
             _syncModeActive();
             document.getElementById('apiPanelMode')?.classList.add('active');
             document.getElementById('presetEditPanel')?.classList.remove('active');
-            const titleEl = document.getElementById('apiModePanelTitle');
-            if (titleEl) titleEl.textContent = MODE_LABELS[itemId] + ' 配置';
+            _renderModePanel();
         }
-        _renderPresetMenuItems();
-    }
-
-    function _renderAllMenuItems() {
         _renderPresetMenuItems();
     }
 
@@ -129,24 +256,24 @@
     function _renderPhaseCards() {
         const container = document.getElementById('phaseCards');
         if (!container) return;
-        const p = _configState.presets[_activePresetKey] || {};
-        const phases = p.phases || {};
+        const preset = _configState.presets[_activePresetKey] || {};
+        const phases = preset.phases || {};
         let html = '';
         PHASES.forEach(({ key, label }) => {
-            const ph = phases[key] || {};
+            const phaseCfg = phases[key] || {};
             html += `<div class="api-phase-card" data-phase="${key}">
                 <span class="api-phase-label">${_escapeHtml(label)}</span>
                 <div class="api-phase-field">
                     <label>URL</label>
-                    <input type="text" class="phase-input" data-phase="${key}" data-field="baseUrl" placeholder="继承" value="${_escapeHtmlAttr(ph.baseUrl || '')}" />
+                    <input type="text" class="phase-input" data-phase="${key}" data-field="baseUrl" placeholder="继承" value="${_escapeHtmlAttr(phaseCfg.baseUrl || '')}" />
                 </div>
                 <div class="api-phase-field">
                     <label>Key</label>
-                    <input type="password" class="phase-input" data-phase="${key}" data-field="apiKey" placeholder="继承" value="${_escapeHtmlAttr(ph.apiKey || '')}" autocomplete="off" />
+                    <input type="password" class="phase-input" data-phase="${key}" data-field="apiKey" placeholder="继承" value="${_escapeHtmlAttr(phaseCfg.apiKey || '')}" autocomplete="off" />
                 </div>
                 <div class="api-phase-field">
                     <label>Model</label>
-                    <input type="text" class="phase-input" data-phase="${key}" data-field="model" placeholder="继承" value="${_escapeHtmlAttr(ph.model || '')}" />
+                    <input type="text" class="phase-input" data-phase="${key}" data-field="model" placeholder="继承" value="${_escapeHtmlAttr(phaseCfg.model || '')}" />
                 </div>
             </div>`;
         });
@@ -154,11 +281,11 @@
     }
 
     function _populatePresetForm() {
-        const p = _configState.presets[_activePresetKey] || {};
-        document.getElementById('presetLabel').value = p.label || '';
-        document.getElementById('presetBaseUrl').value = p.baseUrl || '';
-        document.getElementById('presetApiKey').value = p.apiKey || '';
-        document.getElementById('presetModel').value = p.model || '';
+        const preset = _configState.presets[_activePresetKey] || {};
+        document.getElementById('presetLabel').value = preset.label || '';
+        document.getElementById('presetBaseUrl').value = preset.baseUrl || '';
+        document.getElementById('presetApiKey').value = preset.apiKey || '';
+        document.getElementById('presetModel').value = preset.model || '';
         _renderPhaseCards();
         const deleteBtn = document.getElementById('presetDeleteBtn');
         if (deleteBtn) deleteBtn.style.display = Object.keys(_configState.presets).length > 1 ? '' : 'none';
@@ -166,23 +293,22 @@
 
     function _readFormIntoState() {
         if (!_activePresetKey || !_configState.presets[_activePresetKey]) return;
-        const p = _configState.presets[_activePresetKey];
-        const newLabel = document.getElementById('presetLabel').value.trim();
-        p.label = newLabel || p.label || _activePresetKey;
-        p.baseUrl = document.getElementById('presetBaseUrl').value.trim();
-        p.apiKey = document.getElementById('presetApiKey').value.trim();
-        p.model = document.getElementById('presetModel').value.trim();
-        p.phases = p.phases || {};
+        const preset = _configState.presets[_activePresetKey];
+        preset.label = document.getElementById('presetLabel').value.trim() || preset.label || _activePresetKey;
+        preset.baseUrl = document.getElementById('presetBaseUrl').value.trim();
+        preset.apiKey = document.getElementById('presetApiKey').value.trim();
+        preset.model = document.getElementById('presetModel').value.trim();
+        preset.phases = preset.phases || {};
         document.querySelectorAll('.phase-input').forEach(inp => {
             const phase = inp.dataset.phase;
             const field = inp.dataset.field;
             const val = inp.value.trim();
-            if (!p.phases[phase]) p.phases[phase] = {};
-            if (val) p.phases[phase][field] = val;
-            else delete p.phases[phase][field];
+            if (!preset.phases[phase]) preset.phases[phase] = {};
+            if (val) preset.phases[phase][field] = val;
+            else delete preset.phases[phase][field];
         });
-        Object.keys(p.phases).forEach(k => {
-            if (Object.keys(p.phases[k]).length === 0) delete p.phases[k];
+        Object.keys(preset.phases).forEach(k => {
+            if (Object.keys(preset.phases[k]).length === 0) delete preset.phases[k];
         });
     }
 
@@ -207,7 +333,10 @@
             current = 'default';
             presets = { default: { label: 'Default', baseUrl: '', apiKey: '', model: '' } };
         }
-        _configState = { aiMode, current, presets };
+        const modeConfig = raw.modeConfig && typeof raw.modeConfig === 'object'
+            ? JSON.parse(JSON.stringify(raw.modeConfig))
+            : {};
+        _configState = { aiMode, current, presets, modeConfig };
         _activePresetKey = current || Object.keys(presets)[0];
     }
 
@@ -223,6 +352,14 @@
             if (item?.dataset?.item) {
                 e.preventDefault();
                 _selectItem(item.dataset.item);
+            }
+        });
+
+        document.getElementById('apiConfigMain')?.addEventListener('click', (e) => {
+            const editBtn = e.target.closest('.api-mode-edit-preset');
+            if (editBtn?.dataset?.preset) {
+                e.preventDefault();
+                _selectItem('preset:' + editBtn.dataset.preset);
             }
         });
 
@@ -245,7 +382,7 @@
                 return;
             }
             _loadConfig(raw);
-            _renderAllMenuItems();
+            _renderPresetMenuItems();
             _syncModeActive();
             const keys = Object.keys(_configState.presets);
             const current = _configState.current && keys.includes(_configState.current)
@@ -275,6 +412,7 @@
 
         document.getElementById('apiGlobalSaveBtn')?.addEventListener('click', async () => {
             _readFormIntoState();
+            _readModeFormIntoState();
             try {
                 await cfg.saveApiConfig(_configState);
                 closeModal();

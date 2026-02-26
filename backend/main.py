@@ -21,6 +21,13 @@ from workers import ExecutorRunner, executor_manager, validator_manager
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 app = FastAPI(title="MAARS Backend")
 
+
+@app.on_event("startup")
+async def _print_browser_url():
+    """Print the URL to open in browser (0.0.0.0 is not openable in browser)."""
+    import sys
+    print("INFO:     Open in browser: http://localhost:3001", file=sys.stderr, flush=True)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

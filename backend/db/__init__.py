@@ -53,6 +53,18 @@ def _get_task_dir(plan_id: str, task_id: str) -> Path:
     return _get_plan_dir(plan_id) / task_id
 
 
+def get_sandbox_dir(plan_id: str, task_id: str) -> Path:
+    """Return db/{plan_id}/{task_id}/sandbox/ for isolated task execution."""
+    return _get_task_dir(plan_id, task_id) / "sandbox"
+
+
+async def ensure_sandbox_dir(plan_id: str, task_id: str) -> Path:
+    """Create sandbox dir if not exists. Returns the sandbox path."""
+    sandbox = get_sandbox_dir(plan_id, task_id)
+    sandbox.mkdir(parents=True, exist_ok=True)
+    return sandbox
+
+
 async def get_task_artifact(plan_id: str, task_id: str):
     """Read artifact from db/{plan_id}/{task_id}/output.json. Returns dict or None."""
     _validate_plan_id(plan_id)
@@ -189,6 +201,14 @@ def _resolve_api_config(raw: dict) -> dict:
         cfg = {k: v for k, v in raw.items() if k not in ("presets", "current", "aiMode", "ai_mode")}
     cfg["useMock"] = use_mock
     cfg["executorAgentMode"] = exec_agent
+    mode_config = raw.get("modeConfig") or {}
+    cfg["modeConfig"] = mode_config
+    for m in ("llm", "llm-agent"):
+        pm = mode_config.get(m) or {}
+        t = pm.get("plannerTemperature")
+        if t is not None:
+            cfg["temperature"] = float(t)
+            break
     return cfg
 
 

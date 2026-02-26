@@ -2,6 +2,7 @@
 LLM-based task executor. Generates output from task description and input artifacts.
 Supports mock mode (useMock=True): returns simulated output without LLM calls.
 Supports streaming via on_thinking callback for real-time output display.
+When executorAgentMode=True, uses Agent loop with ReadArtifact, ReadFile, Finish tools.
 """
 
 import asyncio
@@ -11,7 +12,10 @@ from typing import Any, Callable, Dict, Optional
 import orjson
 import json_repair
 
+from db import ensure_sandbox_dir
 from planner.llm_client import chat_completion, merge_phase_config
+
+from .agent_tools import TOOLS, execute_tool
 
 # Mock 模式下 chunk 间延迟（秒），确保 WebSocket emit 完成后再发下一 chunk，避免 chip 先于 thinking 完成
 _MOCK_CHUNK_DELAY = 0.03
@@ -58,6 +62,7 @@ def _build_executor_messages(
     input_spec: Dict[str, Any],
     output_spec: Dict[str, Any],
     resolved_inputs: Dict[str, Any],
+    agent_mode: bool = False,
 ) -> tuple[list[dict], str]:
     """Build system + user messages and output_format for executor."""
     output_format = output_spec.get("format") or ""
@@ -71,6 +76,11 @@ Rules:
 2. Output must strictly conform to the specified format.
 3. For JSON: output valid JSON only, no extra text or markdown fences.
 4. For Markdown: output the document content directly."""
+    if agent_mode:
+        system_prompt += """
+
+You have tools: ReadArtifact (read dependency task output), ReadFile (read files; use 'sandbox/X' for this task's sandbox), WriteFile (write to sandbox only), ListSkills, LoadSkill, Finish (submit final output).
+Use ListSkills to discover skills, LoadSkill when relevant. When your output satisfies the output spec, you MUST call Finish with the result—do not output inline. For JSON format pass a valid JSON string; for Markdown pass the content string. All file I/O is scoped to the plan dir and this task's sandbox."""
 
     inputs_str = "No input artifacts."
     if resolved_inputs:
@@ -117,6 +127,26 @@ def _parse_executor_output(content: str, use_json_mode: bool) -> Any:
     return content
 
 
+MAX_AGENT_TURNS = 15
+
+
+def _get_executor_params(api_config: Dict[str, Any]) -> tuple[int, float]:
+    """Return (max_turns, temperature) from modeConfig or defaults."""
+    mode_cfg = api_config.get("modeConfig") or {}
+    agent_cfg = mode_cfg.get("llm-agent") or {}
+    llm_cfg = mode_cfg.get("llm") or {}
+    max_turns = agent_cfg.get("executorAgentMaxTurns") or agent_cfg.get("maxTurns") or MAX_AGENT_TURNS
+    max_turns = int(max_turns)
+    temperature = (
+        agent_cfg.get("executorLlmTemperature")
+        or llm_cfg.get("executorLlmTemperature")
+        or agent_cfg.get("temperature")
+        or llm_cfg.get("temperature")
+        or 0.3
+    )
+    return max_turns, float(temperature)
+
+
 async def _execute_task_agent(
     task_id: str,
     description: str,
@@ -128,14 +158,19 @@ async def _execute_task_agent(
     on_thinking: Optional[Callable[[str, Optional[str], Optional[str]], None]],
     plan_id: str,
 ) -> Any:
-    """ReAct-style Agent loop (no tools yet). Exits on stop; tool_calls fallback to content."""
+    """ReAct-style Agent loop with ReadArtifact, ReadFile, Finish tools. Runs in isolated sandbox."""
+    if plan_id and task_id:
+        await ensure_sandbox_dir(plan_id, task_id)
     messages, output_format = _build_executor_messages(
-        task_id, description, input_spec, output_spec, resolved_inputs
+        task_id, description, input_spec, output_spec, resolved_inputs, agent_mode=True
     )
     use_json_mode = _is_json_format(output_format)
     cfg = merge_phase_config(api_config, "execute")
+    max_turns, temperature = _get_executor_params(api_config)
+    turn = 0
 
-    while True:
+    while turn < max_turns:
+        turn += 1
         if abort_event and abort_event.is_set():
             raise asyncio.CancelledError("Execution aborted")
 
@@ -145,17 +180,15 @@ async def _execute_task_agent(
             on_chunk=None,
             abort_event=abort_event,
             stream=False,
-            temperature=0.3,
-            response_format={"type": "json_object"} if use_json_mode else None,
-            tools=None,
+            temperature=temperature,
+            response_format=None,  # tools mode: no response_format
+            tools=TOOLS,
         )
 
         content: str
         if isinstance(result, dict):
-            if result.get("finish_reason") == "tool_calls":
-                content = result.get("content") or ""
-            else:
-                content = result.get("content", result) if isinstance(result.get("content"), str) else str(result)
+            raw_content = result.get("content") or ""
+            content = raw_content if isinstance(raw_content, str) else str(raw_content)
         else:
             content = result or ""
 
@@ -165,10 +198,64 @@ async def _execute_task_agent(
                 await r
 
         if isinstance(result, dict) and result.get("finish_reason") == "tool_calls":
-            # No tools yet: fallback to content as final output
-            pass
-        # finish_reason == "stop" or tool_calls fallback: parse and return
+            tool_calls = result.get("tool_calls") or []
+            if not tool_calls:
+                content = content or "(no content)"
+                return _parse_executor_output(content, use_json_mode)
+
+            # Append assistant message with tool_calls
+            assistant_msg = {"role": "assistant", "content": content or None}
+            tool_calls_for_msg = [
+                {
+                    "id": tc.get("id", f"tc_{i}"),
+                    "type": tc.get("type", "function"),
+                    "function": tc.get("function", {}),
+                }
+                for i, tc in enumerate(tool_calls)
+            ]
+            tool_calls_for_msg = [tc for tc in tool_calls_for_msg if tc.get("function")]
+            if tool_calls_for_msg:
+                assistant_msg["tool_calls"] = tool_calls_for_msg
+            messages.append(assistant_msg)
+
+            finished_output = None
+            for tc in tool_calls:
+                fn = tc.get("function") or {}
+                name = fn.get("name") or ""
+                args = fn.get("arguments") or "{}"
+                try:
+                    out, tool_result = await execute_tool(name, args, plan_id, task_id)
+                except Exception as e:
+                    tool_result = f"Error: {e}"
+
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc.get("id", ""),
+                        "content": tool_result,
+                    }
+                )
+
+                if out is not None:
+                    finished_output = out
+                    break
+
+            if finished_output is not None:
+                return finished_output
+            continue
+
+        # finish_reason == "stop": parse content
         return _parse_executor_output(content, use_json_mode)
+
+    # max_turns reached: use last assistant content
+    last = ""
+    for m in reversed(messages):
+        if m.get("role") == "assistant" and m.get("content"):
+            last = m["content"]
+            break
+    if not last:
+        raise ValueError(f"Agent reached max turns ({max_turns}) without producing output")
+    return _parse_executor_output(last, use_json_mode)
 
 
 async def execute_task(
@@ -206,6 +293,7 @@ async def execute_task(
         )
 
     api_config = merge_phase_config(raw_cfg, "execute")
+    _, temperature = _get_executor_params(raw_cfg)
     messages, output_format = _build_executor_messages(
         task_id, description, input_spec, output_spec, resolved_inputs
     )
@@ -223,7 +311,7 @@ async def execute_task(
         on_chunk=_on_chunk if stream else None,
         abort_event=abort_event,
         stream=stream,
-        temperature=0.3,
+        temperature=temperature,
         response_format=response_format,
     )
     content = raw if isinstance(raw, str) else (raw.get("content") or "")

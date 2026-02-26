@@ -97,6 +97,17 @@ class ExecutorRunner:
     async def start_execution(self, api_config: Optional[Dict] = None) -> None:
         if api_config is not None:
             self.api_config = api_config
+            mock_cfg = (api_config.get("modeConfig") or {}).get("mock") or {}
+            if mock_cfg:
+                v = mock_cfg.get("executionPassProbability")
+                if v is not None:
+                    self.EXECUTION_PASS_PROBABILITY = float(v)
+                v = mock_cfg.get("validationPassProbability")
+                if v is not None:
+                    self.VALIDATION_PASS_PROBABILITY = float(v)
+                v = mock_cfg.get("maxFailures")
+                if v is not None:
+                    self.MAX_FAILURES = int(v)
         async with self._start_lock:
             if self.is_running:
                 raise ValueError("Execution is already running")
