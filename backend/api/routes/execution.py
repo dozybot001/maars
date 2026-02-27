@@ -7,7 +7,7 @@ from loguru import logger
 from fastapi.responses import JSONResponse
 
 from db import get_effective_api_config, get_execution, get_plan, save_execution
-from monitor import build_execution_from_plan
+from planner.visualization import build_execution_from_plan
 
 from .. import state as api_state
 from ..schemas import ExecutionRequest

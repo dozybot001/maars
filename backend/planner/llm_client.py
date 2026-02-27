@@ -1,30 +1,22 @@
 """
-OpenAI-compatible LLM client for planner.
-Uses openai SDK with tenacity retry.
-Supports tools (function calling) for Agent mode.
+LLM client for planner. Uses Google GenAI SDK (Gemini API only).
 """
 
 import asyncio
+import json
 from typing import Any, Callable, List, Optional, Union
 
-from openai import AsyncOpenAI
-from openai import APIConnectionError, APITimeoutError, RateLimitError
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
+from google import genai
+from google.genai import types
 
-DEFAULT_BASE_URL = "https://api.openai.com/v1"
-DEFAULT_MODEL = "gpt-4o"
+DEFAULT_MODEL = "gemini-2.5-flash"
 
 
 def merge_phase_config(api_config: dict, phase: str) -> dict:
     """
     Merge global api_config with phase-specific overrides.
     phase: atomicity | decompose | format | execute | validate
-    Returns dict with baseUrl, apiKey, model (camelCase for compatibility).
+    Returns dict with apiKey, model (camelCase for compatibility).
     """
     cfg = dict(api_config or {})
     phases = cfg.get("phases") or {}
@@ -45,98 +37,101 @@ def merge_phase_config(api_config: dict, phase: str) -> dict:
     return cfg
 
 
-def _create_client(api_config: dict) -> AsyncOpenAI:
-    base_url = (api_config.get("baseUrl") or DEFAULT_BASE_URL).rstrip("/")
-    api_key = api_config.get("apiKey") or "not-needed"
-    return AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=120.0)
+def _tools_to_gemini(tools: List[dict]) -> List[Any]:
+    """Convert OpenAI-style tools format to google-genai types.Tool."""
+    declarations = []
+    for t in tools or []:
+        fn = t.get("function") if isinstance(t, dict) else getattr(t, "function", None)
+        if not fn:
+            continue
+        fn = fn if isinstance(fn, dict) else {}
+        name = fn.get("name") or ""
+        desc = fn.get("description") or ""
+        params = fn.get("parameters") or {"type": "object", "properties": {}}
+        declarations.append(
+            types.FunctionDeclaration(
+                name=name,
+                description=desc,
+                parameters_json_schema=params,
+            )
+        )
+    if not declarations:
+        return []
+    return [types.Tool(function_declarations=declarations)]
 
 
-def _message_to_result(message, finish_reason: str) -> Union[str, dict]:
-    """Convert API message to result. Returns dict with tool_calls when finish_reason is tool_calls."""
-    if finish_reason == "tool_calls" and message.tool_calls:
-        tool_calls = [
-            {
-                "id": tc.id,
-                "type": getattr(tc, "type", "function"),
-                "function": {
-                    "name": tc.function.name,
-                    "arguments": tc.function.arguments or "",
-                },
-            }
-            for tc in message.tool_calls
-        ]
-        return {
-            "content": message.content or "",
-            "tool_calls": tool_calls,
-            "finish_reason": "tool_calls",
-        }
-    return message.content or ""
-
-
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
-    retry=retry_if_exception_type((APIConnectionError, APITimeoutError, RateLimitError)),
-)
-async def _chat_completion_impl(
-    client: AsyncOpenAI,
-    model: str,
-    messages: list[dict],
-    on_chunk: Optional[Callable[[str], None]],
-    abort_event: Optional[Any],
-    stream: bool,
-    temperature: Optional[float] = None,
-    response_format: Optional[dict] = None,
-    tools: Optional[List[dict]] = None,
-) -> Union[str, dict]:
-    """Inner implementation with retry.
-    When tools is provided: uses stream=False, no response_format; may return dict with tool_calls.
+def _messages_to_gemini_contents(messages: list[dict]) -> tuple[List[Any], Optional[str]]:
     """
-    extra = {"temperature": temperature} if temperature is not None else {}
-    if response_format:
-        extra["response_format"] = response_format
-    if tools:
-        extra["tools"] = tools
-        # Agent mode: tools incompatible with response_format; streaming with tool_calls is complex
-        extra.pop("response_format", None)
-        stream = False
+    Convert messages to Google contents. Returns (contents, system_instruction).
+    Supports gemini_model_content in assistant messages for native thought_signature.
+    """
+    contents: List[Any] = []
+    system_instruction: Optional[str] = None
+    id_to_name: dict = {}
 
-    if stream:
-        full_content = []
-        stream_obj = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            stream=True,
-            **extra,
-        )
-        try:
-            async for chunk in stream_obj:
-                if abort_event and abort_event.is_set():
-                    raise asyncio.CancelledError("Aborted")
-                delta = chunk.choices[0].delta if chunk.choices else None
-                content = (delta.content or "") if delta else ""
-                if content and on_chunk:
-                    r = on_chunk(content)
-                    if asyncio.iscoroutine(r):
-                        await r
-                full_content.append(content)
-        except (asyncio.CancelledError, GeneratorExit):
-            await stream_obj.close()
-            raise
-        return "".join(full_content)
-    else:
-        if abort_event and abort_event.is_set():
-            raise asyncio.CancelledError("Aborted")
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            stream=False,
-            **extra,
-        )
-        choice = resp.choices[0]
-        message = choice.message
-        finish_reason = getattr(choice, "finish_reason", None) or ""
-        return _message_to_result(message, finish_reason)
+    for m in messages:
+        role = (m.get("role") or "").lower()
+
+        if role == "system":
+            system_instruction = m.get("content") or ""
+            continue
+
+        if role == "user":
+            text = m.get("content") or ""
+            if text:
+                contents.append(types.Content(role="user", parts=[types.Part.from_text(text=text)]))
+            continue
+
+        if role == "assistant":
+            raw = m.get("gemini_model_content")
+            if raw is not None:
+                contents.append(raw)
+                continue
+            text = m.get("content") or ""
+            tool_calls = m.get("tool_calls") or []
+            for tc in tool_calls:
+                fn = tc.get("function") or {}
+                tid = tc.get("id") or ""
+                if tid:
+                    id_to_name[tid] = fn.get("name") or ""
+            if tool_calls:
+                parts = []
+                if text:
+                    parts.append(types.Part.from_text(text=text))
+                for tc in tool_calls:
+                    fn = tc.get("function") or {}
+                    name = fn.get("name") or ""
+                    args = fn.get("arguments") or "{}"
+                    try:
+                        args_dict = json.loads(args) if isinstance(args, str) else (args or {})
+                    except json.JSONDecodeError:
+                        args_dict = {}
+                    part = types.Part.from_function_call(name=name, args=args_dict)
+                    try:
+                        if tc.get("thought_signature") is not None:
+                            part.thought_signature = tc["thought_signature"]
+                    except Exception:
+                        pass
+                    parts.append(part)
+                if parts:
+                    contents.append(types.Content(role="model", parts=parts))
+            elif text:
+                contents.append(types.Content(role="model", parts=[types.Part.from_text(text=text)]))
+            continue
+
+        if role == "tool":
+            tool_call_id = m.get("tool_call_id") or ""
+            content = m.get("content") or ""
+            name = id_to_name.get(tool_call_id) or "tool"
+            contents.append(
+                types.Content(
+                    role="tool",
+                    parts=[types.Part.from_function_response(name=name, response={"result": content})],
+                )
+            )
+            continue
+
+    return contents, system_instruction
 
 
 async def chat_completion(
@@ -149,13 +144,93 @@ async def chat_completion(
     response_format: Optional[dict] = None,
     tools: Optional[List[dict]] = None,
 ) -> Union[str, dict]:
-    """Call OpenAI-compatible chat completions API.
-    When tools is provided: uses stream=False, omits response_format; may return dict with
-    content, tool_calls, finish_reason when model requests tool calls.
     """
-    model = api_config.get("model") or DEFAULT_MODEL
-    temp = temperature if temperature is not None else api_config.get("temperature")
-    client = _create_client(api_config)
-    return await _chat_completion_impl(
-        client, model, messages, on_chunk, abort_event, stream, temp, response_format, tools
-    )
+    Call Gemini chat completions API.
+    When tools provided: returns dict with content, tool_calls, finish_reason, gemini_model_content.
+    """
+    cfg = dict(api_config or {})
+    model = cfg.get("model") or DEFAULT_MODEL
+    temp = temperature if temperature is not None else cfg.get("temperature")
+    api_key = cfg.get("apiKey") or cfg.get("api_key") or ""
+
+    client = genai.Client(api_key=api_key)
+    contents, system_instruction = _messages_to_gemini_contents(messages)
+
+    config_kw: dict = {}
+    if system_instruction:
+        config_kw["system_instruction"] = system_instruction
+    if temp is not None:
+        config_kw["temperature"] = temp
+    if response_format and response_format.get("type") == "json_object":
+        config_kw["response_mime_type"] = "application/json"
+
+    if tools:
+        config_kw["tools"] = _tools_to_gemini(tools)
+        config_kw.pop("response_mime_type", None)
+        stream = False
+
+    config = types.GenerateContentConfig(**config_kw) if config_kw else None
+
+    try:
+        aclient = client.aio
+        try:
+            if abort_event and abort_event.is_set():
+                raise asyncio.CancelledError("Aborted")
+
+            if stream and not tools:
+                full_content = []
+                async for chunk in await aclient.models.generate_content_stream(
+                    model=model,
+                    contents=contents,
+                    config=config,
+                ):
+                    if abort_event and abort_event.is_set():
+                        raise asyncio.CancelledError("Aborted")
+                    text = chunk.text or ""
+                    if text and on_chunk:
+                        r = on_chunk(text)
+                        if asyncio.iscoroutine(r):
+                            await r
+                    full_content.append(text)
+                return "".join(full_content)
+
+            resp = await aclient.models.generate_content(
+                model=model,
+                contents=contents,
+                config=config,
+            )
+        finally:
+            await aclient.aclose()
+    except Exception as e:
+        raise RuntimeError(f"Gemini API error: {e}") from e
+
+    if abort_event and abort_event.is_set():
+        raise asyncio.CancelledError("Aborted")
+
+    function_calls = getattr(resp, "function_calls", None) or []
+    if function_calls and resp.candidates:
+        model_content = resp.candidates[0].content
+        tool_calls = []
+        for i, fc in enumerate(function_calls):
+            name = getattr(fc, "name", None) or ""
+            fn_call = getattr(fc, "function_call", None)
+            args = getattr(fn_call, "args", None) if fn_call else getattr(fc, "args", None)
+            if args is None and fn_call is not None:
+                args = fn_call
+            if hasattr(args, "args"):
+                args = getattr(args, "args", args)
+            args_str = json.dumps(args) if isinstance(args, dict) else (str(args) if args else "{}")
+            tool_calls.append({
+                "id": f"gc_{i}",
+                "type": "function",
+                "function": {"name": name, "arguments": args_str},
+            })
+
+        return {
+            "content": resp.text or "",
+            "tool_calls": tool_calls,
+            "finish_reason": "tool_calls",
+            "gemini_model_content": model_content,
+        }
+
+    return resp.text or ""

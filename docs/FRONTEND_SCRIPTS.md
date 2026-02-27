@@ -24,12 +24,11 @@ planner.js        # 规划器 UI，依赖 config, api
 thinking-area.js  # createThinkingArea 工厂，无依赖
     ↓
 planner-thinking.js   # 依赖 thinking-area, config
-executor-thinking.js  # 依赖 thinking-area, config
-validator-thinking.js # 依赖 thinking-area
+executor-thinking.js  # 依赖 thinking-area, config（Execute/Validate 合并）
     ↓
-monitor.js        # 时间表、executor/validator chips，依赖 config, api, utils
+monitor.js        # 时间表、Executor chips，依赖 config, api, utils
     ↓
-websocket.js      # Socket.io 事件分发，依赖 config, planner, monitor, plannerThinking, executorThinking, validatorThinking
+websocket.js      # Socket.io 事件分发，依赖 config, planner, monitor, plannerThinking, executorThinking
     ↓
 app.js            # 入口，组装各模块
 ```
@@ -47,11 +46,11 @@ app.js            # 入口，组装各模块
                       │
               thinking-area
                       │
-        ┌─────────────┼─────────────┐
-        │             │             │
-planner-thinking  executor-thinking  validator-thinking
-        │             │             │
-        └─────────────┴─────────────┘
+        ┌─────────────┴─────────────┐
+        │                           │
+planner-thinking            executor-thinking (Execute + Validate)
+        │                           │
+        └─────────────┬─────────────┘
                       │
                   monitor  ←── utils, task-tree
                       │
@@ -67,8 +66,7 @@ planner-thinking  executor-thinking  validator-thinking
 | utils | 无 | 必须最先加载（在 task-tree 之前） |
 | task-tree | utils | 弹窗中 escapeHtml 用于安全渲染 |
 | theme | config, utils | API 配置模态框 |
-| websocket | planner, monitor, plannerThinking, executorThinking, validatorThinking | 所有 thinking 模块必须在 websocket 之前加载 |
-| validator-thinking | thinking-area | 无其他依赖 |
+| websocket | planner, monitor, plannerThinking, executorThinking | 所有 thinking 模块必须在 websocket 之前加载 |
 
 ## window.MAARS.state 结构
 
@@ -86,5 +84,5 @@ planner-thinking  executor-thinking  validator-thinking
 
 ## 注意
 
-- thinking 模块必须在 websocket 之前；validator-thinking 必须在 executor-thinking 之后
+- thinking 模块必须在 websocket 之前
 - utils 必须在 task-tree 之前

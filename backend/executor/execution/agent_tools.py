@@ -1,21 +1,30 @@
 """
-Agent tools for Executor: ReadArtifact, ReadFile, Finish, ListSkills, LoadSkill.
+Agent tools for Executor: ReadArtifact, ReadFile, WriteFile, Finish, ListSkills, LoadSkill, ReadSkillFile, RunSkillScript.
 OpenAI function-calling format.
 """
 
+import asyncio
 import json
 import os
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import orjson
 import yaml
 
 from db import DB_DIR, _validate_plan_id, get_sandbox_dir, get_task_artifact
 
-# Skills root directory: MAARS_SKILLS_DIR env or default backend/skills/
-SKILLS_DIR = os.environ.get("MAARS_SKILLS_DIR")
-SKILLS_ROOT = Path(SKILLS_DIR).resolve() if SKILLS_DIR else Path(__file__).resolve().parent.parent.parent / "skills"
+# RunSkillScript: allowed extensions, timeout (seconds, configurable via env)
+_RUN_SCRIPT_ALLOWED_EXT = (".py", ".sh", ".js")
+_RUN_SCRIPT_TIMEOUT = int(os.environ.get("MAARS_RUN_SCRIPT_TIMEOUT", "120"))
+
+# Skills root: MAARS_EXECUTOR_SKILLS_DIR env or backend/executor/skills/
+_EXECUTOR_SKILLS_DIR = os.environ.get("MAARS_EXECUTOR_SKILLS_DIR")
+SKILLS_ROOT = (
+    Path(_EXECUTOR_SKILLS_DIR).resolve()
+    if _EXECUTOR_SKILLS_DIR
+    else Path(__file__).resolve().parent.parent / "skills"
+)
 
 
 def _get_plan_dir_path(plan_id: str) -> Path:
@@ -120,6 +129,53 @@ TOOLS = [
                     },
                 },
                 "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "ReadSkillFile",
+            "description": "Read a file from a skill's directory (scripts/, references/, assets/). Use after LoadSkill when you need to read a specific file from the skill.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skill": {
+                        "type": "string",
+                        "description": "Skill name (e.g. docx, pptx)",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Path relative to skill dir, e.g. scripts/office/unpack.py or references/example.md",
+                    },
+                },
+                "required": ["skill", "path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "RunSkillScript",
+            "description": "Execute a script from a skill. Use for docx/pptx/xlsx validation, conversion, etc. Script runs from skill dir. Use {{sandbox}}/filename in args for sandbox file paths (e.g. {{sandbox}}/output.docx).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skill": {
+                        "type": "string",
+                        "description": "Skill name (e.g. docx, pptx, xlsx)",
+                    },
+                    "script": {
+                        "type": "string",
+                        "description": "Path to script relative to skill dir, e.g. scripts/office/validate.py",
+                    },
+                    "args": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Command-line args. Use {{sandbox}}/file.docx for sandbox file paths.",
+                    },
+                },
+                "required": ["skill", "script"],
             },
         },
     },
@@ -266,6 +322,107 @@ def run_load_skill(name: str) -> str:
         return f"Error loading skill: {e}"
 
 
+def _get_skill_dir(skill_name: str) -> Tuple[Optional[Path], str]:
+    """Return (skill_dir, error_msg). error_msg non-empty on failure."""
+    if not skill_name or not isinstance(skill_name, str):
+        return None, "Error: skill name must be a non-empty string"
+    if ".." in skill_name or "/" in skill_name or "\\" in skill_name:
+        return None, "Error: invalid skill name"
+    skill_dir = (SKILLS_ROOT / skill_name.strip()).resolve()
+    try:
+        skill_dir.relative_to(SKILLS_ROOT.resolve())
+    except ValueError:
+        return None, "Error: invalid skill name"
+    if not skill_dir.exists() or not skill_dir.is_dir():
+        return None, f"Error: Skill '{skill_name}' not found"
+    return skill_dir, ""
+
+
+def run_read_skill_file(skill: str, path: str) -> str:
+    """Execute ReadSkillFile. Returns file content or error."""
+    try:
+        skill_dir, err = _get_skill_dir(skill)
+        if err:
+            return err
+        path = path.replace("\\", "/").strip()
+        if ".." in path or path.startswith("/"):
+            return "Error: path traversal not allowed"
+        full = (skill_dir / path).resolve()
+        try:
+            full.relative_to(skill_dir)
+        except ValueError:
+            return "Error: path traversal not allowed"
+        if not full.exists():
+            return f"Error: File not found: {path}"
+        if not full.is_file():
+            return f"Error: Not a file: {path}"
+        return full.read_text(encoding="utf-8", errors="replace")
+    except Exception as e:
+        return f"Error reading skill file: {e}"
+
+
+async def run_run_skill_script(
+    skill: str, script: str, args: List[str], plan_id: str, task_id: str
+) -> str:
+    """Execute RunSkillScript. Runs script from skill dir. {{sandbox}} in args replaced with sandbox path."""
+    try:
+        skill_dir, err = _get_skill_dir(skill)
+        if err:
+            return err
+        script = script.replace("\\", "/").strip()
+        if ".." in script or script.startswith("/"):
+            return "Error: script path traversal not allowed"
+        script_path = (skill_dir / script).resolve()
+        try:
+            script_path.relative_to(skill_dir)
+        except ValueError:
+            return "Error: script path traversal not allowed"
+        if not script_path.exists() or not script_path.is_file():
+            return f"Error: Script not found: {script}"
+        ext = script_path.suffix.lower()
+        if ext not in _RUN_SCRIPT_ALLOWED_EXT:
+            return f"Error: Script extension .{ext} not allowed (use .py, .sh, .js)"
+
+        sandbox_dir = get_sandbox_dir(plan_id, task_id)
+        sandbox_str = str(sandbox_dir.resolve())
+        resolved_args = [
+            a.replace("{{sandbox}}", sandbox_str) if isinstance(a, str) else str(a)
+            for a in (args or [])
+        ]
+
+        if ext == ".py":
+            cmd = ["python", str(script_path)] + resolved_args
+        elif ext == ".sh":
+            cmd = ["sh", str(script_path)] + resolved_args
+        elif ext == ".js":
+            cmd = ["node", str(script_path)] + resolved_args
+        else:
+            return f"Error: unsupported script type: {ext}"
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            cwd=str(skill_dir),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=_RUN_SCRIPT_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return f"Error: Script timed out after {_RUN_SCRIPT_TIMEOUT}s"
+
+        out = stdout.decode("utf-8", errors="replace")
+        err = stderr.decode("utf-8", errors="replace")
+        if proc.returncode != 0:
+            return f"Exit code {proc.returncode}\nstdout:\n{out}\nstderr:\n{err}"
+        return out + (f"\n{err}" if err else "")
+    except Exception as e:
+        return f"Error running script: {e}"
+
+
 def run_finish(output: str) -> Tuple[bool, Any]:
     """
     Execute Finish. Returns (True, parsed_output) on success; (False, error_msg) on parse failure.
@@ -322,6 +479,24 @@ async def execute_tool(
     if name == "LoadSkill":
         skill_name = args.get("name", "")
         result = run_load_skill(skill_name)
+        return None, result
+
+    if name == "ReadSkillFile":
+        skill = args.get("skill", "")
+        path = args.get("path", "")
+        result = run_read_skill_file(skill, path)
+        return None, result
+
+    if name == "RunSkillScript":
+        skill = args.get("skill", "")
+        script = args.get("script", "")
+        script_args = args.get("args") or []
+        if isinstance(script_args, str):
+            try:
+                script_args = json.loads(script_args) if script_args else []
+            except json.JSONDecodeError:
+                script_args = [script_args]
+        result = await run_run_skill_script(skill, script, script_args, plan_id, task_id)
         return None, result
 
     if name == "Finish":

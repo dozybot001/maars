@@ -1,16 +1,15 @@
 /**
  * MAARS WebSocket - Socket.io connection and event handlers.
- * Delegates rendering to planner-thinking, monitor, TaskTree.
+ * Delegates rendering to planner-thinking, plannerViews, TaskTree.
  */
 (function () {
     'use strict';
     const cfg = window.MAARS?.config;
     const planner = window.MAARS?.planner;
-    const monitor = window.MAARS?.monitor;
+    const plannerViews = window.MAARS?.plannerViews;
     const plannerThinking = window.MAARS?.plannerThinking;
     const executorThinking = window.MAARS?.executorThinking;
-    const validatorThinking = window.MAARS?.validatorThinking;
-    if (!cfg || !planner || !monitor) return;
+    if (!cfg || !planner || !plannerViews) return;
 
     const state = window.MAARS.state || {};
     state.socket = null;
@@ -32,8 +31,8 @@
         });
 
         state.socket.on('plan-thinking', (data) => {
-            if (!data.chunk || !plannerThinking) return;
-            plannerThinking.appendChunk(data.chunk, data.taskId, data.operation);
+            if (!plannerThinking) return;
+            plannerThinking.appendChunk(data.chunk || '', data.taskId, data.operation, data.scheduleInfo);
         });
 
         state.socket.on('plan-tree-update', (data) => {
@@ -46,32 +45,34 @@
             TaskTree.updatePlannerQualityBadge(data.qualityScore, data.qualityComment);
             planner.resetPlanUI();
             if (plannerThinking) plannerThinking.applyHighlight();
+            if (plannerViews?.generateExecutionLayout) plannerViews.generateExecutionLayout();
         });
 
         state.socket.on('plan-error', () => planner.resetPlanUI());
 
-        state.socket.on('timetable-layout', (data) => { monitor.setTimetableLayout(data); });
+        state.socket.on('execution-layout', (data) => { plannerViews.setExecutionLayout(data); });
 
         state.socket.on('task-states-update', (data) => {
             if (data.tasks && Array.isArray(data.tasks)) {
                 data.tasks.forEach(taskState => {
-                    const cacheNode = monitor.state.chainCache.find(node => node.task_id === taskState.task_id);
-                    const previousStatus = monitor.state.previousTaskStates.get(taskState.task_id);
+                    const cacheNode = plannerViews.state.chainCache.find(node => node.task_id === taskState.task_id);
+                    const previousStatus = plannerViews.state.previousTaskStates.get(taskState.task_id);
                     if (cacheNode) cacheNode.status = taskState.status;
                     if (previousStatus !== undefined && previousStatus !== taskState.status) {
                         if (taskState.status === 'doing' && (previousStatus === 'undone' || previousStatus === 'validating')) {
-                            setTimeout(() => monitor.animateConnectionLines(taskState.task_id, 'yellow', 'upstream'), 50);
+                            setTimeout(() => plannerViews.animateConnectionLines(taskState.task_id, 'yellow', 'upstream'), 50);
                         } else if (taskState.status === 'undone' && previousStatus === 'done') {
-                            setTimeout(() => monitor.animateConnectionLines(taskState.task_id, 'red', 'downstream'), 50);
+                            setTimeout(() => plannerViews.animateConnectionLines(taskState.task_id, 'red', 'downstream'), 50);
                         }
                     }
-                    monitor.state.previousTaskStates.set(taskState.task_id, taskState.status);
+                    plannerViews.state.previousTaskStates.set(taskState.task_id, taskState.status);
                 });
                 data.tasks.forEach(taskState => {
-                    const monitorSection = document.querySelector('.monitor-section');
-                    if (monitorSection) {
-                        const byId = monitorSection.querySelectorAll(`[data-task-id="${taskState.task_id}"]`);
-                        const byIds = monitorSection.querySelectorAll('[data-task-ids]');
+                    const areas = document.querySelectorAll('.planner-tree-area, .planner-execution-tree-area');
+                    areas.forEach((treeArea) => {
+                    if (treeArea) {
+                        const byId = treeArea.querySelectorAll(`[data-task-id="${taskState.task_id}"]`);
+                        const byIds = treeArea.querySelectorAll('[data-task-ids]');
                         const cells = Array.from(byId);
                         byIds.forEach(cell => {
                             const ids = (cell.getAttribute('data-task-ids') || '').split(',').map(s => s.trim());
@@ -100,18 +101,18 @@
                             });
                         });
                     }
+                    });
                 });
             }
         });
 
         state.socket.on('execution-start', () => {
             if (executorThinking) executorThinking.clear();
-            if (validatorThinking) validatorThinking.clear();
         });
 
         state.socket.on('executor-thinking', (data) => {
-            if (!data.chunk || !executorThinking) return;
-            executorThinking.appendChunk(data.chunk, data.taskId, data.operation);
+            if (!executorThinking) return;
+            executorThinking.appendChunk(data.chunk || '', data.taskId, data.operation, data.scheduleInfo);
         });
 
         state.socket.on('executor-output', (data) => {
@@ -119,17 +120,8 @@
             executorThinking.setTaskOutput(data.taskId, data.output);
         });
 
-        state.socket.on('validator-thinking', (data) => {
-            if (!data.chunk || !validatorThinking) return;
-            validatorThinking.appendChunk(data.chunk, data.taskId, data.operation);
-        });
-
         state.socket.on('executor-states-update', (data) => {
-            if (data.executors && data.stats) monitor.renderExecutors(data.executors, data.stats);
-        });
-
-        state.socket.on('validator-states-update', (data) => {
-            if (data.validators && data.stats) monitor.renderValidators(data.validators, data.stats);
+            plannerViews.renderExecutorStates(data);
         });
 
         state.socket.on('execution-error', (data) => {
@@ -138,7 +130,7 @@
                 console.error('Execution error:', data.error);
                 alert('Execution error: ' + data.error);
             }
-            monitor.resetExecutionButtons();
+            plannerViews.resetExecutionButtons();
         });
 
         state.socket.on('execution-complete', (data) => {
@@ -147,7 +139,6 @@
                 executorThinking.applyHighlight();
                 executorThinking.applyOutputHighlight();
             }
-            if (validatorThinking) validatorThinking.applyHighlight();
             if (stopExecutionBtn) stopExecutionBtn.style.display = 'none';
             if (executionBtn) {
                 executionBtn.disabled = false;

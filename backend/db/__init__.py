@@ -82,6 +82,25 @@ async def get_task_artifact(plan_id: str, task_id: str):
         return None
 
 
+async def list_plan_outputs(plan_id: str) -> dict:
+    """Load all task outputs for a plan. Returns {task_id: output_dict}."""
+    _validate_plan_id(plan_id)
+    plan_dir = _get_plan_dir(plan_id)
+    if not plan_dir.exists():
+        return {}
+    result = {}
+    for p in plan_dir.iterdir():
+        if not p.is_dir() or p.name.startswith("."):
+            continue
+        try:
+            artifact = await get_task_artifact(plan_id, p.name)
+            if artifact is not None:
+                result[p.name] = artifact
+        except ValueError:
+            continue
+    return result
+
+
 async def save_task_artifact(plan_id: str, task_id: str, value) -> dict:
     """Write artifact to db/{plan_id}/{task_id}/output.json. Atomic write. Accepts dict or str (wrapped as {"content": ...})."""
     _validate_plan_id(plan_id)
@@ -172,24 +191,19 @@ async def list_plan_ids() -> list:
 
 
 def _ai_mode_to_flags(ai_mode: str) -> tuple:
-    """Convert aiMode to (useMock, executorAgentMode) for backward compatibility."""
+    """Convert aiMode to (useMock, executorAgentMode). aiMode: mock|llm|agent."""
     if ai_mode == "mock":
         return True, False
-    if ai_mode == "llm-agent":
+    if ai_mode == "agent":
         return False, True
-    return False, False  # llm or default
+    return False, False  # llm
 
 
 def _resolve_api_config(raw: dict) -> dict:
-    """Resolve presets+current to effective config. aiMode: mock|llm|llm-agent."""
+    """Resolve presets+current to effective config. aiMode: mock|llm|agent."""
     if not raw:
         return {}
-    ai_mode = raw.get("aiMode") or raw.get("ai_mode")
-    if not ai_mode and ("useMock" in raw or "use_mock" in raw):
-        use_mock = raw.get("useMock", raw.get("use_mock", True))
-        exec_agent = raw.get("executorAgentMode", raw.get("executor_agent_mode", False))
-        ai_mode = "mock" if use_mock else ("llm-agent" if exec_agent else "llm")
-    ai_mode = ai_mode or "mock"
+    ai_mode = raw.get("aiMode") or "mock"
     use_mock, exec_agent = _ai_mode_to_flags(ai_mode)
 
     presets = raw.get("presets")
@@ -198,14 +212,15 @@ def _resolve_api_config(raw: dict) -> dict:
         cfg = dict(presets[current])
         cfg.pop("label", None)
     else:
-        cfg = {k: v for k, v in raw.items() if k not in ("presets", "current", "aiMode", "ai_mode")}
+        cfg = {k: v for k, v in raw.items() if k not in ("presets", "current", "aiMode")}
     cfg["useMock"] = use_mock
     cfg["executorAgentMode"] = exec_agent
+    cfg["plannerAgentMode"] = exec_agent  # Agent mode: both Planner and Executor are agents
     mode_config = raw.get("modeConfig") or {}
     cfg["modeConfig"] = mode_config
-    for m in ("llm", "llm-agent"):
+    for m in ("llm", "agent"):
         pm = mode_config.get(m) or {}
-        t = pm.get("plannerTemperature")
+        t = pm.get("plannerLlmTemperature")
         if t is not None:
             cfg["temperature"] = float(t)
             break

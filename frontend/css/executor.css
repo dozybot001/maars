@@ -1,5 +1,5 @@
 /**
- * Executor Section - stats + executor chips, AI thinking, task output
+ * Executor Section - Executor stats + chips, AI thinking (Execute/Validate), task output
  */
 
 .executor-section {
@@ -14,7 +14,7 @@
     box-shadow: var(--shadow-inset);
 }
 
-/* Executor: AI thinking + output side by side (30% / 70%) */
+/* Executor: task output 30% left + AI thinking 70% right */
 .executor-thinking-output-row {
     display: flex;
     gap: var(--gap);
@@ -22,10 +22,8 @@
     min-height: 400px;
 }
 
-.executor-thinking-output-row .executor-thinking-area,
-.executor-thinking-output-row .executor-output-area {
-    flex: 0 0 30%;
-    width: 30%;
+.executor-thinking-output-row .executor-output-area,
+.executor-thinking-output-row .executor-thinking-area {
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
     background: var(--bg-area-secondary);
@@ -38,18 +36,12 @@
 }
 
 .executor-thinking-output-row .executor-output-area {
-    flex: 1 1 70%;
-    width: 70%;
+    flex: 0 0 30%;
+    width: 30%;
 }
 
-.executor-thinking-label,
-.executor-output-label {
-    padding: 8px 12px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-muted);
-    background: var(--bg-area-tertiary);
-    border-bottom: 1px solid var(--border-color);
+.executor-thinking-output-row .executor-thinking-area {
+    flex: 1;
 }
 
 .executor-thinking-content,
@@ -160,7 +152,32 @@
 .executor-output-block:last-child {
     margin-bottom: 0;
 }
-.executor-thinking-block-header,
+
+/* Schedule message - simple text line, no border, no click */
+.executor-thinking-block--schedule {
+    height: auto;
+    min-height: 0;
+    margin-bottom: 4px;
+    padding: 4px 0;
+    background: transparent;
+    border: none;
+    cursor: default;
+}
+.executor-thinking-block--schedule .executor-thinking-block-schedule-text {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.executor-thinking-block-header {
+    flex-shrink: 0;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg-area-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
 .executor-output-block-header {
     flex-shrink: 0;
     padding: 6px 10px;
@@ -194,7 +211,7 @@
 .executor-thinking-placeholder,
 .executor-output-placeholder {
     position: absolute;
-    top: 36px;
+    top: 12px;
     left: 14px;
     right: 14px;
     padding: 12px 0;
@@ -217,6 +234,7 @@
     padding-bottom: var(--gap);
     border-bottom: 1px solid var(--border-color);
 }
+
 
 .executor-stats-items {
     display: flex;
@@ -255,6 +273,12 @@
     color: var(--executor-busy-text);
 }
 
+.executor-chip.executor-validating {
+    background: var(--executor-validating-bg);
+    border-color: var(--executor-validating-border);
+    color: var(--executor-validating-text);
+}
+
 .executor-chip.executor-failed {
     background: var(--failure-bg);
     border-color: var(--failure-border);
@@ -281,6 +305,10 @@
 
 .stat-value.stat-busy {
     color: var(--executor-busy-text);
+}
+
+.stat-value.stat-validating {
+    color: var(--executor-validating-text);
 }
 
 .stat-value.stat-idle {
@@ -321,7 +349,53 @@
     line-height: 1.6;
     color: var(--text-secondary);
 }
-.executor-output-modal-body.markdown-body pre,
+/* Markdown styles for executor output modal (mirror executor-output-content) */
+.executor-output-modal-body.markdown-body h1,
+.executor-output-modal-body.markdown-body h2,
+.executor-output-modal-body.markdown-body h3 {
+    margin: 0.8em 0 0.4em;
+    font-size: 1.1em;
+    font-weight: 600;
+    color: var(--text-color);
+}
+.executor-output-modal-body.markdown-body h1:first-child,
+.executor-output-modal-body.markdown-body h2:first-child,
+.executor-output-modal-body.markdown-body h3:first-child { margin-top: 0; }
+.executor-output-modal-body.markdown-body p { margin: 0.4em 0; }
+.executor-output-modal-body.markdown-body ul,
+.executor-output-modal-body.markdown-body ol { margin: 0.4em 0; padding-left: 1.4em; }
+.executor-output-modal-body.markdown-body li { margin: 0.2em 0; }
 .executor-output-modal-body.markdown-body code {
-    font-size: 12px;
+    padding: 0.15em 0.35em;
+    font-size: 0.9em;
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg-area-tertiary);
+    border-radius: 4px;
+}
+.executor-output-modal-body.markdown-body pre {
+    margin: 0.6em 0;
+    padding: 10px 12px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg-area-tertiary);
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.executor-output-modal-body.markdown-body pre code { padding: 0; background: none; }
+.executor-output-modal-body.markdown-body blockquote {
+    margin: 0.4em 0;
+    padding-left: 12px;
+    border-left: 3px solid var(--border-color);
+    color: var(--text-muted);
+}
+.executor-output-modal-body.markdown-body strong { font-weight: 600; }
+.executor-output-modal-body.markdown-body em { font-style: italic; }
+.executor-output-modal-body.markdown-body hr {
+    margin: 0.8em 0;
+    border: none;
+    border-top: 1px solid var(--border-color);
 }

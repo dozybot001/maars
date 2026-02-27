@@ -21,9 +21,8 @@
     --bg-color: #f5f7fa;
     --bg-white: #ffffff;
     --bg-section-planner: #fefefe;
-    --bg-section-monitor: #fafbfc;
+    --bg-section-planner-views: #fafbfc;
     --bg-section-executor: #fefefe;
-    --bg-section-validator: #fefefe;
     --bg-area-primary: #ffffff;
     --bg-area-secondary: #f8f9fa;
     --bg-area-tertiary: #f1f3f5;
@@ -63,19 +62,16 @@
     --status-failed-border: #ff6666;
     --status-failed-text: #ff6666;
 
-    /* ========== Status - Executor/Validator ========== */
+    /* ========== Status - Executor ========== */
     --executor-idle-bg: #e8f5e9;
     --executor-idle-border: #4caf50;
     --executor-idle-text: #4caf50;
     --executor-busy-bg: #fff3e0;
     --executor-busy-border: #ff9800;
     --executor-busy-text: #ff9800;
-    --validator-idle-bg: #e3f2fd;
-    --validator-idle-border: #2196f3;
-    --validator-idle-text: #2196f3;
-    --validator-busy-bg: #fff3e0;
-    --validator-busy-border: #ff9800;
-    --validator-busy-text: #ff9800;
+    --executor-validating-bg: #e3f2fd;
+    --executor-validating-border: #2196f3;
+    --executor-validating-text: #2196f3;
 
     /* ========== Interactive ========== */
     --interactive-hover: #f7fafc;
@@ -105,11 +101,6 @@
     --scrollbar-track: #f1f3f5;
     --scrollbar-thumb: #cbd5e0;
     --scrollbar-thumb-hover: #a0aec0;
-
-    /* ========== Timetable cells (task brighter than empty) ========== */
-    --timetable-cell-bg: #ffffff;
-    --timetable-cell-empty-bg: #f1f3f5;
-    --timetable-cell-hover-bg: #f7fafc;
 
     /* ========== Tree ========== */
     --tree-line-stroke: #b0b8c4;
@@ -150,9 +141,8 @@
     --bg-color: #0f0f1a;
     --bg-white: #1a1a2e;
     --bg-section-planner: #16162a;
-    --bg-section-monitor: #16162a;
+    --bg-section-planner-views: #16162a;
     --bg-section-executor: #16162a;
-    --bg-section-validator: #16162a;
     --bg-area-primary: #1e1e35;
     --bg-area-secondary: #252540;
     --bg-area-tertiary: #2d2d4a;
@@ -195,20 +185,13 @@
     --executor-busy-bg: #5c3a00;
     --executor-busy-border: #ffb74d;
     --executor-busy-text: #ffb74d;
-    --validator-idle-bg: #1e3a5f;
-    --validator-idle-border: #64b5f6;
-    --validator-idle-text: #64b5f6;
-    --validator-busy-bg: #5c3a00;
-    --validator-busy-border: #ffb74d;
-    --validator-busy-text: #ffb74d;
+    --executor-validating-bg: #1e3a5f;
+    --executor-validating-border: #64b5f6;
+    --executor-validating-text: #64b5f6;
 
     --interactive-hover: #252540;
     --interactive-active: #2d2d4a;
     --interactive-border-hover: #4a5568;
-
-    --timetable-cell-bg: #252540;
-    --timetable-cell-empty-bg: #1e1e35;
-    --timetable-cell-hover-bg: #2d2d4a;
 
     --accent-primary: #94a3b8;
     --accent-primary-soft: #1e293b;
@@ -265,9 +248,8 @@
     --bg-color: #050505;
     --bg-white: #0a0a0a;
     --bg-section-planner: #0a0a0a;
-    --bg-section-monitor: #0a0a0a;
+    --bg-section-planner-views: #0a0a0a;
     --bg-section-executor: #0a0a0a;
-    --bg-section-validator: #0a0a0a;
     --bg-area-primary: #0f0f0f;
     --bg-area-secondary: #141414;
     --bg-area-tertiary: #1a1a1a;
@@ -284,10 +266,6 @@
     --border-color: #262626;
     --border-color-hover: #404040;
     --border-disabled: #404040;
-
-    --timetable-cell-bg: #141414;
-    --timetable-cell-empty-bg: #0f0f0f;
-    --timetable-cell-hover-bg: #1a1a1a;
 
     --status-undone: #1a1a1a;
     --status-doing: #3d3000;
@@ -314,12 +292,9 @@
     --executor-busy-bg: #3d2a00;
     --executor-busy-border: #fbbf24;
     --executor-busy-text: #fbbf24;
-    --validator-idle-bg: #0f2847;
-    --validator-idle-border: #60a5fa;
-    --validator-idle-text: #60a5fa;
-    --validator-busy-bg: #3d2a00;
-    --validator-busy-border: #fbbf24;
-    --validator-busy-text: #fbbf24;
+    --executor-validating-bg: #0f2847;
+    --executor-validating-border: #60a5fa;
+    --executor-validating-text: #60a5fa;
 
     --interactive-hover: #141414;
     --interactive-active: #1a1a1a;

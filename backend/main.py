@@ -16,7 +16,6 @@ from fastapi.staticfiles import StaticFiles
 
 from api import PlanRunState, register_routes
 from executor import ExecutorRunner, executor_manager
-from validator import validator_manager
 
 # Socket.io
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
@@ -44,7 +43,7 @@ plan_run_state.lock = asyncio.Lock()
 # Executor runner instance
 executor_runner = ExecutorRunner(sio)
 
-# Register API routes (db, plan, execution, monitor, config, workers)
+# Register API routes (db, plan, plans, execution, config, executors)
 register_routes(app, sio, executor_runner, plan_run_state)
 
 
@@ -91,11 +90,10 @@ if FRONTEND_DIR.exists():
 async def connect(sid, environ, auth):
     logger.info("Client connected: %s", sid)
     executors = executor_manager["get_all_executors"]()
-    executor_stats = executor_manager["get_executor_stats"]()
-    await sio.emit("executor-states-update", {"executors": executors, "stats": executor_stats}, to=sid)
-    validators = validator_manager["get_all_validators"]()
-    validator_stats = validator_manager["get_validator_stats"]()
-    await sio.emit("validator-states-update", {"validators": validators, "stats": validator_stats}, to=sid)
+    exec_stats = executor_manager["get_executor_stats"]()
+    await sio.emit("executor-states-update", {
+        "executors": executors, "stats": exec_stats,
+    }, to=sid)
 
 
 @sio.event

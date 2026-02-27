@@ -13,7 +13,5 @@
         RENDER_THROTTLE_LARGE_MS: 250,
         /** Char count above which RENDER_THROTTLE_LARGE_MS is used */
         LARGE_CONTENT_CHARS: 6000,
-        /** Debounce (ms) for timetable resize handler */
-        RESIZE_DEBOUNCE_MS: 150,
     };
 })();

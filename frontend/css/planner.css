@@ -31,7 +31,7 @@
     color: var(--text-muted);
 }
 
-/* Planner: AI thinking + task tree side by side (30% / 70%) */
+/* Planner: visualization (tree) 30% left + thinking 70% right */
 .planner-content {
     width: 100%;
 }
@@ -44,8 +44,8 @@
 }
 
 .planner-thinking-tree-row .planner-thinking-area {
-    flex: 0 0 30%;
-    width: 30%;
+    flex: 1;
+    min-width: 0;
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
     background: var(--bg-area-secondary);
@@ -55,15 +55,6 @@
     position: relative;
     min-width: 0;
     height: 400px;
-}
-
-.planner-thinking-label {
-    padding: 8px 12px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-muted);
-    background: var(--bg-area-tertiary);
-    border-bottom: 1px solid var(--border-color);
 }
 
 .planner-thinking-content {
@@ -153,6 +144,23 @@
 .planner-thinking-block:last-child {
     margin-bottom: 0;
 }
+
+/* Schedule message - simple text line, no border, no click */
+.planner-thinking-block--schedule {
+    height: auto;
+    min-height: 0;
+    margin-bottom: 4px;
+    padding: 4px 0;
+    background: transparent;
+    border: none;
+    cursor: default;
+}
+.planner-thinking-block--schedule .planner-thinking-block-schedule-text {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+}
+
 .planner-thinking-block-header {
     flex-shrink: 0;
     padding: 6px 10px;
@@ -179,7 +187,7 @@
 
 .planner-thinking-placeholder {
     position: absolute;
-    top: 36px;
+    top: 12px;
     left: 14px;
     right: 14px;
     padding: 12px 0;

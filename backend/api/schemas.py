@@ -11,7 +11,8 @@ class PlanRunRequest(BaseModel):
     skip_quality_assessment: bool = Field(default=False, alias="skipQualityAssessment")
 
 
-class MonitorTimetableRequest(BaseModel):
+class PlanLayoutRequest(BaseModel):
+    """Request for plan execution layout (execution graph)."""
     model_config = ConfigDict(populate_by_name=True)
     execution: dict = Field(..., description="Execution data with tasks")
     plan_id: str = Field(default="test", alias="planId")

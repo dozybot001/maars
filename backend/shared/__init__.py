@@ -1,4 +1,4 @@
-"""Shared utilities for planner, monitor, executor, validator."""
+"""Shared utilities for planner, executor."""
 
 from .graph import build_dependency_graph, natural_task_id_key
 

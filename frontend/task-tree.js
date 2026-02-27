@@ -1,13 +1,13 @@
 /**
  * Task tree rendering module.
- * Uses pre-computed layout from backend (Sugiyama algorithm).
+ * Uses pre-computed layout from backend (decomposition: level-order by task_id; execution: stage-based).
  */
 (function () {
     'use strict';
 
     const AREA = {
-        planner: '.planner-tree-area',
-        monitor: '.monitor-tasks-tree-area',
+        decomposition: '.planner-tree-area',
+        execution: '.planner-execution-tree-area',
     };
 
     let plannerTreeData = [];
@@ -96,7 +96,7 @@
 
         const tasks = (treeData || []).filter(t => t?.task_id);
 
-        if (areaSelector === AREA.planner) {
+        if (areaSelector === AREA.decomposition) {
             plannerTreeData = treeData || [];
             plannerLayout = layout || null;
         }
@@ -139,7 +139,7 @@
             } else {
                 path.setAttribute('data-to-task', toVal);
             }
-            path.setAttribute('class', 'connection-line' + (areaSelector === AREA.monitor && edge.adjacent === false ? ' connection-line-cross-layer' : ''));
+            path.setAttribute('class', 'connection-line' + (areaSelector === AREA.execution && edge.adjacent === false ? ' connection-line-cross-layer' : ''));
             svg.appendChild(path);
         });
 
@@ -162,16 +162,16 @@
             const ids = pos.ids;
             const isMerged = ids && ids.length >= 2;
             let el;
-            if (isMerged && areaSelector === AREA.monitor) {
+            if (isMerged && areaSelector === AREA.execution) {
                 el = createMergedTaskNodeEl(ids, taskById);
             } else {
                 const task = taskById.get(taskId);
                 if (!task) continue;
                 el = createTaskNodeEl(task);
-                if (areaSelector === AREA.planner && leafIds.has(taskId)) {
+                if (areaSelector === AREA.decomposition && leafIds.has(taskId)) {
                     el.classList.add('tree-task-leaf');
                 }
-                if (areaSelector === AREA.monitor && task.status && task.status !== 'undone') {
+                if (areaSelector === AREA.execution && task.status && task.status !== 'undone') {
                     el.classList.add('task-status-' + task.status);
                 }
             }
@@ -185,7 +185,7 @@
     }
 
     function clear(areaSelector) {
-        if (areaSelector === AREA.planner) {
+        if (areaSelector === AREA.decomposition) {
             plannerTreeData = [];
             plannerLayout = null;
         }
@@ -199,7 +199,7 @@
 
     function renderPlannerTree(treeData, layout) {
         if (!Array.isArray(treeData)) return;
-        renderFull(treeData, layout, AREA.planner);
+        renderFull(treeData, layout, AREA.decomposition);
     }
 
     // Popover
@@ -309,7 +309,7 @@
 
         popoverEl.querySelector('.task-detail-popover-close').addEventListener('click', hideTaskPopover);
         popoverOutsideClickHandler = (e) => {
-            if (popoverEl && !popoverEl.contains(e.target) && !e.target.closest('.tree-task') && !e.target.closest('.timetable-cell')) hideTaskPopover();
+            if (popoverEl && !popoverEl.contains(e.target) && !e.target.closest('.tree-task')) hideTaskPopover();
         };
         popoverKeydownHandler = (e) => { if (e.key === 'Escape') hideTaskPopover(); };
         document.addEventListener('click', popoverOutsideClickHandler);
@@ -334,7 +334,7 @@
 
     function initClickHandlers() {
         document.addEventListener('click', (e) => {
-            const node = e.target.closest('.tree-task, .timetable-cell:not(.timetable-cell-empty)');
+            const node = e.target.closest('.tree-task');
             if (!node) return;
             const data = node.getAttribute('data-task-data');
             if (!data) return;
@@ -352,7 +352,7 @@
             badge.style.display = 'none';
             return;
         }
-        badge.textContent = `质量: ${score}`;
+        badge.textContent = `Quality: ${score}`;
         badge.title = comment || '';
         badge.style.display = '';
         badge.classList.remove('quality-high', 'quality-mid', 'quality-low');
@@ -365,8 +365,9 @@
         AREA,
         aggregateStatus,
         renderPlannerTree,
-        renderMonitorTasksTree: (data, layout) => renderFull(data, layout, AREA.monitor),
-        clearPlannerTree: () => { clear(AREA.planner); updatePlannerQualityBadge(null); },
+        renderExecutionTree: (data, layout) => renderFull(data, layout, AREA.execution),
+        clearPlannerTree: () => { clear(AREA.decomposition); updatePlannerQualityBadge(null); },
+        clearExecutionTree: () => clear(AREA.execution),
         initClickHandlers,
         showTaskPopover,
         hideTaskPopover,

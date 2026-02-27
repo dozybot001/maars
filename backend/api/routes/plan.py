@@ -1,4 +1,4 @@
-"""Plan API - get, tree, run, stop."""
+"""Plan API - get, tree, run, stop, layout (execution graph)."""
 
 import asyncio
 import time
@@ -10,12 +10,14 @@ from fastapi.responses import JSONResponse
 from db import (
     get_effective_api_config,
     get_plan,
+    list_plan_outputs,
     save_plan,
 )
+from planner.visualization import build_layout_from_execution
 from planner.layout import compute_decomposition_layout
 from planner.index import run_plan
 
-from ..schemas import PlanRunRequest
+from ..schemas import PlanLayoutRequest, PlanRunRequest
 from .. import state as api_state
 
 router = APIRouter()
@@ -26,10 +28,30 @@ def _tree_update_payload(plan):
     return {"treeData": plan["tasks"], "layout": compute_decomposition_layout(plan["tasks"])}
 
 
+@router.post("/layout")
+async def set_plan_layout(body: PlanLayoutRequest):
+    """Set execution layout for plan execution graph."""
+    execution = body.execution
+    plan_id = body.plan_id
+    layout = build_layout_from_execution(execution)
+    try:
+        api_state.executor_runner.set_layout(layout, plan_id=plan_id, execution=execution)
+    except ValueError as e:
+        return JSONResponse(status_code=409, content={"error": str(e)})
+    return {"layout": layout}
+
+
 @router.get("")
 async def get_plan_route(plan_id: str = Query("test", alias="planId")):
     plan = await get_plan(plan_id)
     return {"plan": plan}
+
+
+@router.get("/outputs")
+async def get_plan_outputs(plan_id: str = Query("test", alias="planId")):
+    """Load all task outputs for a plan. Used when restoring recent task."""
+    outputs = await list_plan_outputs(plan_id)
+    return {"outputs": outputs}
 
 
 @router.get("/tree")
@@ -67,7 +89,7 @@ async def _run_plan_inner(body: PlanRunRequest):
             raise ValueError("Idea is required for plan generation.")
 
         api_config = await get_effective_api_config()
-        use_mock = api_config.get("useMock", api_config.get("use_mock", True))
+        use_mock = api_config.get("useMock", True)
 
         plan_id = f"plan_{int(time.time() * 1000)}"
         plan = {
@@ -88,7 +110,7 @@ async def _run_plan_inner(body: PlanRunRequest):
             if plan["tasks"]:
                 asyncio.create_task(api_state.sio.emit("plan-tree-update", _tree_update_payload(plan)))
 
-        def on_thinking(chunk, task_id=None, operation=None):
+        def on_thinking(chunk, task_id=None, operation=None, schedule_info=None):
             if abort_event and abort_event.is_set():
                 return
             payload = {"chunk": chunk}
@@ -96,6 +118,8 @@ async def _run_plan_inner(body: PlanRunRequest):
                 payload["taskId"] = task_id
             if operation is not None:
                 payload["operation"] = operation
+            if schedule_info is not None:
+                payload["scheduleInfo"] = schedule_info
             asyncio.create_task(api_state.sio.emit("plan-thinking", payload))
 
         result = await run_plan(

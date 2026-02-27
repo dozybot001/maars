@@ -11,11 +11,13 @@ from typing import Any, Dict, List, Optional
 
 from shared.graph import natural_task_id_key
 
-DEFAULT_NODE_W = 36
-DEFAULT_NODE_H = 28
-DEFAULT_NODE_SEP = 12   # 兄弟节点横向间距（固定槽位）
-DEFAULT_RANK_SEP = 48   # 父子层级纵向间距
-DEFAULT_PADDING = 24
+from .constants import (
+    DEFAULT_NODE_H,
+    DEFAULT_NODE_SEP,
+    DEFAULT_NODE_W,
+    DEFAULT_PADDING,
+    DEFAULT_RANK_SEP,
+)
 
 
 def _build_tree(tasks: List[Dict]) -> Dict[str, List[str]]:

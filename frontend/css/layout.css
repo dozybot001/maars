@@ -59,15 +59,55 @@ h2 {
     letter-spacing: 0.2px;
 }
 
+/* Section collapse toggle */
+.section-header {
+    cursor: pointer;
+    user-select: none;
+    margin-bottom: var(--gap);
+}
+.section-header h2 {
+    margin-bottom: 0;
+    padding-bottom: var(--padding);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.section-header:hover {
+    color: var(--text-secondary);
+}
+.section-chevron {
+    display: inline-flex;
+    align-items: center;
+    opacity: 0.5;
+    transition: transform 0.2s ease;
+}
+.section-chevron svg {
+    display: block;
+}
+.section-header[aria-expanded="false"] .section-chevron {
+    transform: rotate(-90deg);
+}
+.planner-section.collapsed .planner-content,
+.executor-section.collapsed .executor-content {
+    display: none;
+}
+.planner-section.collapsed .section-header,
+.executor-section.collapsed .section-header {
+    margin-bottom: 0;
+}
+.planner-section.collapsed .section-header h2,
+.executor-section.collapsed .section-header h2 {
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
 section {
     margin-bottom: 50px;
 }
 
 /* Unified section styling */
 .planner-section,
-.monitor-section,
-.executor-section,
-.validator-section {
+.executor-section {
     padding: var(--padding);
     border: 1px solid var(--border-color);
     border-radius: 10px;

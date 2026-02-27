@@ -1,6 +1,6 @@
 /**
- * Executor AI Thinking area - uses createThinkingArea factory.
- * Right panel (executor output) displays final extracted output per task; output block click opens modal.
+ * Executor AI Thinking - Execute + Validate blocks (Validate 为 Executor 内步骤).
+ * Uses createThinkingArea factory. Right panel: task output per task; block click opens modal.
  */
 (function () {
     'use strict';
@@ -57,7 +57,7 @@
             }
             if (content && typeof DOMPurify !== 'undefined') content = DOMPurify.sanitize(content);
             const safeTaskId = escapeHtml(taskId || '');
-            html += `<div class="executor-output-block" data-task-id="${safeTaskId}"><div class="executor-output-block-header">Task ${safeTaskId}<button type="button" class="executor-output-block-expand" aria-label="Expand">⤢</button></div><div class="executor-output-block-body">${content}</div></div>`;
+            html += `<div class="executor-output-block" data-task-id="${safeTaskId}"><div class="executor-output-block-header">Task ${safeTaskId}<button type="button" class="executor-output-block-expand" aria-label="Expand" title="Expand">⤢</button></div><div class="executor-output-block-body">${content}</div></div>`;
         }
         try {
             el.innerHTML = html || '';
@@ -115,7 +115,7 @@
     }
 
     let _outputModalOpen = false;
-    function openOutputModal(taskId, contentHtml) {
+    function openOutputModal(taskId, contentHtml, scrollTop) {
         const modal = document.getElementById('executorOutputModal');
         const titleEl = document.getElementById('executorOutputModalTitle');
         const bodyEl = document.getElementById('executorOutputModalBody');
@@ -124,8 +124,10 @@
         if (!modal || !bodyEl) return;
         if (_outputModalOpen) return;
         _outputModalOpen = true;
+        modal.setAttribute('data-current-task-id', taskId || '');
         titleEl.textContent = taskId ? `Task ${taskId}` : 'Task Output';
         bodyEl.innerHTML = contentHtml || '';
+        bodyEl.scrollTop = scrollTop || 0;
         if (typeof hljs !== 'undefined') {
             requestAnimationFrame(() => {
                 bodyEl.querySelectorAll('pre code').forEach((node) => {
@@ -157,6 +159,27 @@
         }, { timeout: 500 });
     }
 
+    function getDownloadContent(taskId) {
+        const raw = state.executorOutputs[taskId];
+        if (raw == null) return { text: '', ext: 'txt' };
+        if (typeof raw === 'string') return { text: raw, ext: 'md' };
+        if (typeof raw === 'object' && raw !== null && 'content' in raw && typeof raw.content === 'string') {
+            return { text: raw.content, ext: 'md' };
+        }
+        return { text: JSON.stringify(raw, null, 2), ext: 'json' };
+    }
+
+    function downloadTaskOutput(taskId) {
+        const { text, ext } = getDownloadContent(taskId);
+        const filename = `task-${(taskId || 'output').replace(/[^a-zA-Z0-9_-]/g, '_')}.${ext}`;
+        const blob = new Blob([text], { type: ext === 'json' ? 'application/json' : 'text/markdown' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
     function initOutputBlockFocus() {
         const area = document.getElementById('executorOutputArea');
         if (!area) return;
@@ -183,13 +206,26 @@
             const bodyEl = block.querySelector('.executor-output-block-body');
             const taskId = block.getAttribute('data-task-id') || '';
             const contentHtml = bodyEl ? bodyEl.innerHTML : '';
-            openOutputModal(taskId, contentHtml);
+            const scrollTop = bodyEl ? bodyEl.scrollTop : 0;
+            openOutputModal(taskId, contentHtml, scrollTop);
+        });
+    }
+
+    function initOutputModalDownload() {
+        const downloadBtn = document.getElementById('executorOutputModalDownload');
+        const modal = document.getElementById('executorOutputModal');
+        if (!downloadBtn || !modal) return;
+        downloadBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const tid = modal.getAttribute('data-current-task-id') || '';
+            downloadTaskOutput(tid);
         });
     }
 
     initOutputBlockFocus();
     initOutputBlockClick();
     initOutputScrollTracking();
+    initOutputModalDownload();
 
     window.MAARS.executorThinking = {
         clear: thinking.clear,

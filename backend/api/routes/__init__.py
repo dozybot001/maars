@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 
-from . import config, db, execution, monitor, plan, plans, validation, workers
+from . import config, db, execution, executors, plan, plans, validation
 from ..state import PlanRunState, init_api_state
 
 
@@ -14,7 +14,6 @@ def register_routes(app: FastAPI, sio, executor_runner, plan_run_state: PlanRunS
     app.include_router(plan.router, prefix="/api/plan", tags=["plan"])
     app.include_router(plans.router, prefix="/api/plans", tags=["plans"])
     app.include_router(execution.router, prefix="/api/execution", tags=["execution"])
-    app.include_router(monitor.router, prefix="/api/monitor", tags=["monitor"])
     app.include_router(validation.router, prefix="/api/validation", tags=["validation"])
     app.include_router(config.router, prefix="/api/config", tags=["config"])
-    app.include_router(workers.router, prefix="/api", tags=["workers"])
+    app.include_router(executors.router, prefix="/api", tags=["executors"])

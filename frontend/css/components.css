@@ -76,6 +76,7 @@ button:disabled:not([class]),
 /* Variant: close (×) */
 .api-modal-close,
 .executor-output-modal-close,
+.executor-output-modal-download,
 .task-detail-popover-close,
 .btn-close {
     width: 32px; height: 32px;
@@ -99,15 +100,21 @@ button:disabled:not([class]),
     color: var(--text-muted);
 }
 
+.executor-output-modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 /* close + expand shared hover/active */
 .api-modal-close:hover, .executor-output-modal-close:hover,
-.task-detail-popover-close:hover, .btn-close:hover,
+.executor-output-modal-download:hover, .task-detail-popover-close:hover, .btn-close:hover,
 .executor-output-block-expand:hover, .btn-expand:hover {
     color: var(--text-color);
     background: var(--btn-hover-bg);
 }
 .api-modal-close:active, .executor-output-modal-close:active,
-.task-detail-popover-close:active, .btn-close:active,
+.executor-output-modal-download:active, .task-detail-popover-close:active, .btn-close:active,
 .executor-output-block-expand:active, .btn-expand:active {
     color: var(--text-color);
     background: var(--btn-active-bg);

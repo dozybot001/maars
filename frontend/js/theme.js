@@ -33,46 +33,49 @@
         { key: 'decompose', label: 'Decompose' },
         { key: 'format', label: 'Format' },
         { key: 'quality', label: 'Quality Assess' },
-        { key: 'execute', label: 'Execute' },
-        { key: 'validate', label: 'Validate' },
+        { key: 'execute', label: 'Executor Execute' },
+        { key: 'validate', label: 'Executor Validate' },
     ];
 
     let _configState = { aiMode: 'mock', current: '', presets: {} };
     let _activePresetKey = '';
 
-    const MODE_LABELS = { mock: 'Mock', llm: 'LLM', 'llm-agent': 'LLM + Agent' };
+    const MODE_LABELS = { mock: 'Mock', llm: 'LLM', agent: 'Agent' };
 
     const MODE_DESCRIPTIONS = {
         mock: {
-            title: 'Mock 配置',
-            desc: '使用模拟数据，无需 API 密钥。Planner、Executor、Validator 均返回预设结果，适合快速测试流程与 UI。',
+            title: 'Mock config',
+            desc: 'Use mock data, no API key required. Planner and Executor return preset results for quick flow and UI testing.',
         },
         llm: {
-            title: 'LLM 配置',
-            desc: 'Planner 使用 LLM 分解任务，Executor 单次 LLM 生成输出，Validator 校验。请在左侧 Preset 中选择或新建 API 配置。',
+            title: 'LLM config',
+            desc: 'Planner and Executor both use LLM calls (single-turn). Planner decomposes tasks; Executor generates output once and validates. Select or create API config in Preset on the left.',
             presetNote: true,
         },
-        'llm-agent': {
-            title: 'LLM + Agent 配置',
-            desc: 'Planner 使用 LLM 分解任务，Executor 使用多轮 Agent 循环与工具调用（ReadArtifact、ReadFile、WriteFile、Finish、ListSkills、LoadSkill），每个任务在独立沙箱中运行。',
+        agent: {
+            title: 'Agent config',
+            desc: 'Planner and Executor both use Agent mode (ReAct-style with tools). Planner: CheckAtomicity, Decompose, FormatTask, AddTasks, etc. Executor: ReadArtifact, ReadFile, WriteFile, Finish, ListSkills, LoadSkill. Each task runs in an isolated sandbox.',
             presetNote: true,
         },
     };
 
     const MODE_PARAMS = {
         mock: [
-            { key: 'executionPassProbability', label: '执行通过率', type: 'number', min: 0, max: 1, step: 0.05, default: 0.95, section: 'Mock 参数' },
-            { key: 'validationPassProbability', label: '验证通过率', type: 'number', min: 0, max: 1, step: 0.05, default: 0.95, section: 'Mock 参数' },
-            { key: 'maxFailures', label: '最大重试次数', type: 'number', min: 1, max: 10, default: 3, section: 'Mock 参数' },
+            { key: 'executionPassProbability', label: 'Execution pass rate', type: 'number', min: 0, max: 1, step: 0.05, default: 0.95, section: 'Mock', tip: 'Random pass probability for mock execution' },
+            { key: 'validationPassProbability', label: 'Validation pass rate', type: 'number', min: 0, max: 1, step: 0.05, default: 0.95, section: 'Mock', tip: 'Random pass probability for mock validation' },
+            { key: 'maxFailures', label: 'Max retries', type: 'number', min: 1, max: 10, default: 3, section: 'Mock', tip: 'Max retries after task failure' },
         ],
         llm: [
-            { key: 'plannerTemperature', label: 'Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'LLM (Planner)', tip: 'Planner 各阶段 LLM 调用的温度' },
-            { key: 'executorLlmTemperature', label: 'Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Executor LLM', tip: 'Executor 单次 LLM 调用的温度' },
+            { key: 'plannerLlmTemperature', label: 'Planner Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Planner', tip: 'Temperature for Planner LLM calls (atomicity/decompose/format)' },
+            { key: 'executorLlmTemperature', label: 'Executor Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Executor', tip: 'Temperature for Executor single LLM output' },
+            { key: 'maxFailures', label: 'Max retries', type: 'number', min: 1, max: 10, default: 3, section: 'Executor', tip: 'Max retries after execution/validation failure' },
         ],
-        'llm-agent': [
-            { key: 'plannerTemperature', label: 'Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'LLM (Planner)', tip: 'Planner 各阶段 LLM 调用的温度' },
-            { key: 'executorLlmTemperature', label: 'Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Executor LLM', tip: 'Executor 内 LLM 调用的温度' },
-            { key: 'executorAgentMaxTurns', label: '最大轮数', type: 'number', min: 1, max: 30, default: 15, section: 'Executor Agent', tip: 'Agent 循环最大轮数' },
+        agent: [
+            { key: 'plannerAgentMaxTurns', label: 'Planner max turns', type: 'number', min: 1, max: 50, default: 30, section: 'Planner Agent', tip: 'Max turns for Planner Agent loop' },
+            { key: 'plannerLlmTemperature', label: 'Planner Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Planner Agent', tip: 'Temperature for Planner Agent LLM' },
+            { key: 'executorLlmTemperature', label: 'Executor Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Executor Agent', tip: 'Temperature for Executor Agent LLM' },
+            { key: 'executorAgentMaxTurns', label: 'Executor max turns', type: 'number', min: 1, max: 30, default: 15, section: 'Executor Agent', tip: 'Max turns for Executor Agent loop (incl. tool calls)' },
+            { key: 'maxFailures', label: 'Max retries', type: 'number', min: 1, max: 10, default: 3, section: 'Executor Agent', tip: 'Max retries after execution/validation failure' },
         ],
     };
 
@@ -121,23 +124,11 @@
         });
     }
 
-    const _LEGACY_KEY_MAP = {
-        'llm': { temperature: 'executorLlmTemperature' },
-        'llm-agent': { temperature: 'executorLlmTemperature', maxTurns: 'executorAgentMaxTurns' },
-    };
-
     function _getModeConfig(mode) {
         _configState.modeConfig = _configState.modeConfig || {};
-        let cfg = { ...(_configState.modeConfig[mode] || {}) };
         const defaults = {};
         (MODE_PARAMS[mode] || []).forEach(p => { defaults[p.key] = p.default; });
-        const legacy = _LEGACY_KEY_MAP[mode] || {};
-        Object.keys(legacy).forEach(oldKey => {
-            if (cfg[oldKey] !== undefined && cfg[legacy[oldKey]] === undefined) {
-                cfg[legacy[oldKey]] = cfg[oldKey];
-            }
-        });
-        cfg = { ...defaults, ...cfg };
+        const cfg = { ...defaults, ...(_configState.modeConfig[mode] || {}) };
         _configState.modeConfig[mode] = cfg;
         return cfg;
     }
@@ -170,15 +161,26 @@
                 bySection[sec].forEach(param => {
                     const val = cfg[param.key] !== undefined ? cfg[param.key] : param.default;
                     const attrs = `data-mode="${_escapeHtmlAttr(mode)}" data-key="${_escapeHtmlAttr(param.key)}"`;
-                    const step = param.step !== undefined ? ` step="${param.step}"` : '';
-                    const min = param.min !== undefined ? ` min="${param.min}"` : '';
-                    const max = param.max !== undefined ? ` max="${param.max}"` : '';
                     const tipAttr = param.tip ? ` title="${_escapeHtmlAttr(param.tip)}"` : '';
-                    html += `<div class="api-field api-mode-field"${tipAttr}>
-                        <label for="mode-${param.key}">${_escapeHtml(param.label)}</label>
-                        <input type="${param.type}" id="mode-${param.key}" ${attrs}${min}${max}${step} value="${_escapeHtmlAttr(String(val))}" />
-                        ${param.tip ? `<span class="api-mode-param-tip">${_escapeHtml(param.tip)}</span>` : ''}
-                    </div>`;
+                    if (param.type === 'checkbox') {
+                        const checked = val === true || val === 'true' || val === 1;
+                        html += `<div class="api-field api-mode-field api-mode-field-checkbox"${tipAttr}>
+                            <label for="mode-${param.key}">
+                                <input type="checkbox" id="mode-${param.key}" ${attrs} ${checked ? 'checked' : ''} />
+                                ${_escapeHtml(param.label)}
+                            </label>
+                            ${param.tip ? `<span class="api-mode-param-tip">${_escapeHtml(param.tip)}</span>` : ''}
+                        </div>`;
+                    } else {
+                        const step = param.step !== undefined ? ` step="${param.step}"` : '';
+                        const min = param.min !== undefined ? ` min="${param.min}"` : '';
+                        const max = param.max !== undefined ? ` max="${param.max}"` : '';
+                        html += `<div class="api-field api-mode-field"${tipAttr}>
+                            <label for="mode-${param.key}">${_escapeHtml(param.label)}</label>
+                            <input type="${param.type}" id="mode-${param.key}" ${attrs}${min}${max}${step} value="${_escapeHtmlAttr(String(val))}" />
+                            ${param.tip ? `<span class="api-mode-param-tip">${_escapeHtml(param.tip)}</span>` : ''}
+                        </div>`;
+                    }
                 });
                 html += '</div></div>';
             });
@@ -189,13 +191,13 @@
             const presetLabel = preset ? (preset.label || currentKey) : '—';
             const presetModel = preset ? (preset.model || '') : '';
             html += `<div class="api-mode-preset-info">
-                <span class="api-mode-preset-label">当前预设</span>
+                <span class="api-mode-preset-label">Current preset</span>
                 <div class="api-mode-preset-value">
                     <strong>${_escapeHtml(presetLabel)}</strong>
                     ${presetModel ? `<span class="api-mode-preset-model">${_escapeHtml(presetModel)}</span>` : ''}
                 </div>
-                <p class="api-mode-preset-hint">在左侧 Preset 中切换或编辑 API 配置</p>
-                ${currentKey ? `<button type="button" class="api-btn-ghost api-mode-edit-preset" data-preset="${_escapeHtmlAttr(currentKey)}">编辑此预设</button>` : ''}
+                <p class="api-mode-preset-hint">Switch or edit API config in Preset on the left</p>
+                ${currentKey ? `<button type="button" class="api-btn-ghost api-mode-edit-preset" data-preset="${_escapeHtmlAttr(currentKey)}">Edit this preset</button>` : ''}
             </div>`;
         }
         container.innerHTML = html;
@@ -210,12 +212,16 @@
             if (!_configState.modeConfig[mode]) _configState.modeConfig[mode] = {};
             const param = (MODE_PARAMS[mode] || []).find(x => x.key === key);
             const defaultVal = param ? param.default : 0;
-            const raw = inp.value.trim();
-            if (param?.type === 'number') {
-                const num = parseFloat(raw);
-                _configState.modeConfig[mode][key] = isNaN(num) ? defaultVal : num;
+            if (param?.type === 'checkbox') {
+                _configState.modeConfig[mode][key] = inp.checked;
             } else {
-                _configState.modeConfig[mode][key] = raw || defaultVal;
+                const raw = inp.value.trim();
+                if (param?.type === 'number') {
+                    const num = parseFloat(raw);
+                    _configState.modeConfig[mode][key] = isNaN(num) ? defaultVal : num;
+                } else {
+                    _configState.modeConfig[mode][key] = raw || defaultVal;
+                }
             }
         });
     }
@@ -248,8 +254,8 @@
         const titleEl = document.getElementById('presetEditTitle');
         if (titleEl) {
             titleEl.textContent = _activePresetKey
-                ? '编辑：' + (_configState.presets[_activePresetKey]?.label || _activePresetKey)
-                : '选择预设';
+                ? 'Edit: ' + (_configState.presets[_activePresetKey]?.label || _activePresetKey)
+                : 'Select preset';
         }
     }
 
@@ -265,15 +271,15 @@
                 <span class="api-phase-label">${_escapeHtml(label)}</span>
                 <div class="api-phase-field">
                     <label>URL</label>
-                    <input type="text" class="phase-input" data-phase="${key}" data-field="baseUrl" placeholder="继承" value="${_escapeHtmlAttr(phaseCfg.baseUrl || '')}" />
+                    <input type="text" class="phase-input" data-phase="${key}" data-field="baseUrl" placeholder="Inherit" value="${_escapeHtmlAttr(phaseCfg.baseUrl || '')}" />
                 </div>
                 <div class="api-phase-field">
                     <label>Key</label>
-                    <input type="password" class="phase-input" data-phase="${key}" data-field="apiKey" placeholder="继承" value="${_escapeHtmlAttr(phaseCfg.apiKey || '')}" autocomplete="off" />
+                    <input type="password" class="phase-input" data-phase="${key}" data-field="apiKey" placeholder="Inherit" value="${_escapeHtmlAttr(phaseCfg.apiKey || '')}" autocomplete="off" />
                 </div>
                 <div class="api-phase-field">
                     <label>Model</label>
-                    <input type="text" class="phase-input" data-phase="${key}" data-field="model" placeholder="继承" value="${_escapeHtmlAttr(phaseCfg.model || '')}" />
+                    <input type="text" class="phase-input" data-phase="${key}" data-field="model" placeholder="Inherit" value="${_escapeHtmlAttr(phaseCfg.model || '')}" />
                 </div>
             </div>`;
         });
@@ -314,12 +320,7 @@
 
     function _loadConfig(raw) {
         raw = raw || {};
-        let aiMode = raw.aiMode || raw.ai_mode;
-        if (!aiMode && ('useMock' in raw || 'use_mock' in raw)) {
-            aiMode = raw.useMock !== false && raw.use_mock !== false ? 'mock'
-                : (raw.executorAgentMode || raw.executor_agent_mode ? 'llm-agent' : 'llm');
-        }
-        aiMode = aiMode || 'mock';
+        const aiMode = raw.aiMode || 'mock';
 
         let presets = {};
         let current = '';
@@ -378,7 +379,7 @@
                 raw = await cfg.fetchApiConfig();
             } catch (e) {
                 console.error('Failed to load config:', e);
-                alert('无法读取配置：请确保后端已启动（如 uvicorn main:asgi_app），并刷新页面重试。');
+                alert('Failed to load config: ensure backend is running (e.g. uvicorn main:asgi_app) and refresh the page.');
                 return;
             }
             _loadConfig(raw);
@@ -418,7 +419,7 @@
                 closeModal();
             } catch (err) {
                 console.error('Save config:', err);
-                alert('保存失败: ' + (err.message || 'Unknown error'));
+                alert('Save failed: ' + (err.message || 'Unknown error'));
             }
         });
 

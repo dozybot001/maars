@@ -41,6 +41,14 @@
             planRunAbortController = new AbortController();
 
             TaskTree.clearPlannerTree();
+            TaskTree.clearExecutionTree();
+            if (window.MAARS?.executorThinking) window.MAARS.executorThinking.clear();
+            const pv = window.MAARS?.plannerViews;
+            if (pv?.state) {
+                pv.state.executionLayout = null;
+                pv.state.chainCache = [];
+                pv.state.previousTaskStates?.clear?.();
+            }
             const response = await fetch(`${cfg.API_BASE_URL}/plan/run`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

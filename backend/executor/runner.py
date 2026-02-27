@@ -1,7 +1,6 @@
 """
-Executor Runner - handles task execution and output validation via worker pools.
-Executor runs tasks; Validator checks task output against criteria (distinct from planner's atomicity check).
-Task status changes are persisted to execution.json in real-time.
+Executor Runner - orchestrates Executor pool.
+Each task: Execute → Validate (validation is fixed behavior). Task status persisted to execution.json in real-time.
 """
 
 import asyncio
@@ -12,11 +11,11 @@ from typing import Any, Dict, List, Optional, Set
 from loguru import logger
 
 from db import save_execution, save_task_artifact
-from . import executor_manager
+from .pools import executor_manager
 from .execution import resolve_artifacts, execute_task
-from validator import validator_manager
+from .validation import validate_task_output
 
-# Mock validator chunk delay (seconds), same as executor for consistent streaming UX
+# Mock validation chunk delay (seconds), same as executor for consistent streaming UX
 _MOCK_VALIDATOR_CHUNK_DELAY = 0.03
 
 # Configurable via env (Mock mode); defaults for tuning
@@ -55,7 +54,7 @@ class ExecutorRunner:
         self.EXECUTION_PASS_PROBABILITY = _RUNNER_EXECUTION_PASS_PROBABILITY
         self.VALIDATION_PASS_PROBABILITY = _RUNNER_VALIDATION_PASS_PROBABILITY
         self.MAX_FAILURES = _RUNNER_MAX_FAILURES
-        self.timetable_layout = None
+        self.execution_layout = None
         self.plan_id: Optional[str] = None
         self.api_config: Optional[Dict] = None
         self.abort_event: Optional[asyncio.Event] = None
@@ -98,7 +97,8 @@ class ExecutorRunner:
     async def start_execution(self, api_config: Optional[Dict] = None) -> None:
         if api_config is not None:
             self.api_config = api_config
-            mock_cfg = (api_config.get("modeConfig") or {}).get("mock") or {}
+            mode_cfg = api_config.get("modeConfig") or {}
+            mock_cfg = mode_cfg.get("mock") or {}
             if mock_cfg:
                 v = mock_cfg.get("executionPassProbability")
                 if v is not None:
@@ -106,26 +106,28 @@ class ExecutorRunner:
                 v = mock_cfg.get("validationPassProbability")
                 if v is not None:
                     self.VALIDATION_PASS_PROBABILITY = float(v)
-                v = mock_cfg.get("maxFailures")
-                if v is not None:
-                    self.MAX_FAILURES = int(v)
+            # maxFailures: 按当前模式读取（mock | llm | agent）
+            use_mock = api_config.get("useMock", True)
+            exec_agent = api_config.get("executorAgentMode", False)
+            runner_cfg = mock_cfg if use_mock else (mode_cfg.get("agent") if exec_agent else mode_cfg.get("llm") or {})
+            v = runner_cfg.get("maxFailures")
+            if v is not None:
+                self.MAX_FAILURES = int(v)
         async with self._start_lock:
             if self.is_running:
                 raise ValueError("Execution is already running")
             if not self.chain_cache:
                 raise ValueError("No execution map cache found. Please generate map first.")
-            if not self.timetable_layout:
-                raise ValueError("No timetable layout cache found. Please generate map first.")
+            if not self.execution_layout:
+                raise ValueError("No execution layout cache found. Please generate layout first.")
             self.is_running = True
         self.abort_event = asyncio.Event()
         self.abort_event.clear()
         try:
             executor_manager["initialize_executors"]()
-            validator_manager["initialize_validators"]()
             self._broadcast_executor_states()
-            self._broadcast_validator_states()
 
-            timetable_layout = self.timetable_layout
+            execution_layout = self.execution_layout
             for task in self.chain_cache:
                 task["status"] = "undone"
             if self.plan_id and self.chain_cache:
@@ -150,7 +152,7 @@ class ExecutorRunner:
                         self.reverse_dependency_index[dep_id].append(task["task_id"])
 
             self._emit("execution-start", {})
-            self._emit("timetable-layout", {"layout": timetable_layout})
+            self._emit("execution-layout", {"layout": execution_layout})
             self._broadcast_task_states()
             await self._execute_tasks()
         except Exception as e:
@@ -160,9 +162,7 @@ class ExecutorRunner:
         finally:
             self.is_running = False
             executor_manager["initialize_executors"]()
-            validator_manager["initialize_validators"]()
             self._broadcast_executor_states()
-            self._broadcast_validator_states()
 
     def _get_ready_tasks(self) -> List[Dict]:
         result = []
@@ -235,8 +235,11 @@ class ExecutorRunner:
             try:
                 resolved_inputs = await resolve_artifacts(task, self.task_map, self.plan_id or "")
 
-                async def _on_thinking(chunk: str, task_id: Optional[str] = None, operation: Optional[str] = None) -> None:
-                    await self._emit_await("executor-thinking", {"chunk": chunk, "taskId": task_id, "operation": operation or "Execute"})
+                async def _on_thinking(chunk: str, task_id: Optional[str] = None, operation: Optional[str] = None, schedule_info: Optional[dict] = None) -> None:
+                    payload: dict = {"chunk": chunk, "taskId": task_id, "operation": operation or "Execute"}
+                    if schedule_info is not None:
+                        payload["scheduleInfo"] = schedule_info
+                    await self._emit_await("executor-thinking", payload)
 
                 result = await execute_task(
                     task_id=task["task_id"],
@@ -281,65 +284,53 @@ class ExecutorRunner:
                     await self._rollback_task(task)
                     return
 
-            async with self._worker_lock:
-                executor_manager["release_executor_by_task_id"](task["task_id"])
+            # Executor stays assigned; validation is fixed behavior after execution
+            executor_manager["set_executor_status"](executor_id, "validating")
             self._broadcast_executor_states()
             self._update_task_status(task["task_id"], "validating")
 
-            validator_id = None
-            retry_count = 0
-            while validator_id is None and retry_count < 50:
-                async with self._worker_lock:
-                    validator_id = validator_manager["assign_task"](task["task_id"])
-                if validator_id is None:
-                    await asyncio.sleep(min(0.1 + retry_count * 0.02, 0.5))
-                    retry_count += 1
-                    if retry_count % 5 == 0:
-                        self._broadcast_validator_states()
-                else:
-                    break
-
-            if validator_id:
-                self._broadcast_validator_states()
-
-            # Mock validator thinking stream (simulates validation report)
-            validation_passed = random.random() < self.VALIDATION_PASS_PROBABILITY
+            # Validation: real checks when not mock; mock mode uses random for testing
             task_id = task["task_id"]
-            mock_report = (
-                f"# Validating Task {task_id}\n\n"
-                "Checking output against criteria...\n\n"
-                "- Criterion 1: Output format ✓\n"
-                "- Criterion 2: Content completeness ✓\n"
-                "- Criterion 3: Alignment with spec ✓\n\n"
-                f"**Result: {'PASS' if validation_passed else 'FAIL'}**\n\n"
-                "(Mock validation mode)"
-            )
-            for chunk in _chunk_string(mock_report, 20):
-                await self._emit_await("validator-thinking", {"chunk": chunk, "taskId": task_id, "operation": "Validate"})
+            output_spec = task.get("output") or {}
+            use_mock = (self.api_config or {}).get("useMock", True)
+            if use_mock:
+                validation_passed = random.random() < self.VALIDATION_PASS_PROBABILITY
+                report = (
+                    f"# Validating Task {task_id}\n\n"
+                    "Checking output against criteria...\n\n"
+                    "- Criterion 1: Output format ✓\n"
+                    "- Criterion 2: Content completeness ✓\n"
+                    "- Criterion 3: Alignment with spec ✓\n\n"
+                    f"**Result: {'PASS' if validation_passed else 'FAIL'}**\n\n"
+                    "(Mock validation mode)"
+                )
+            else:
+                validation_passed, report = validate_task_output(
+                    result, output_spec, task_id
+                )
+            for chunk in _chunk_string(report, 20):
+                await self._emit_await("executor-thinking", {"chunk": chunk, "taskId": task_id, "operation": "Validate"})
                 await asyncio.sleep(_MOCK_VALIDATOR_CHUNK_DELAY)
 
             await asyncio.sleep(0.1)
 
             if validation_passed:
-                if validator_id:
-                    async with self._worker_lock:
-                        validator_manager["release_validator_by_task_id"](task["task_id"])
-                    self._broadcast_validator_states()
+                async with self._worker_lock:
+                    executor_manager["release_executor_by_task_id"](task["task_id"])
+                self._broadcast_executor_states()
             else:
                 self._update_task_status(task["task_id"], "validation-failed")
-                if validator_id:
-                    validator_obj = validator_manager["get_validator_by_id"](validator_id)
-                    if validator_obj:
-                        validator_obj["status"] = "failed"
-                        self._broadcast_validator_states()
-                        await asyncio.sleep(0.5)
+                exec_obj = executor_manager["get_executor_by_id"](executor_id)
+                if exec_obj:
+                    exec_obj["status"] = "failed"
+                    self._broadcast_executor_states()
+                    await asyncio.sleep(0.5)
                 failure_count = self.task_failure_count.get(task["task_id"], 0)
                 self.task_failure_count[task["task_id"]] = failure_count + 1
                 await asyncio.sleep(1.0)
-                if validator_id:
-                    async with self._worker_lock:
-                        validator_manager["release_validator_by_task_id"](task["task_id"])
-                    self._broadcast_validator_states()
+                async with self._worker_lock:
+                    executor_manager["release_executor_by_task_id"](task["task_id"])
+                self._broadcast_executor_states()
                 if failure_count < self.MAX_FAILURES - 1:
                     self.running_tasks.discard(task["task_id"])
                     self.completed_tasks.discard(task["task_id"])
@@ -354,9 +345,7 @@ class ExecutorRunner:
         except Exception as e:
             async with self._worker_lock:
                 executor_manager["release_executor_by_task_id"](task["task_id"])
-                validator_manager["release_validator_by_task_id"](task["task_id"])
             self._broadcast_executor_states()
-            self._broadcast_validator_states()
             raise
 
         self.running_tasks.discard(task["task_id"])
@@ -403,9 +392,7 @@ class ExecutorRunner:
         logger.exception("Error executing task %s", task["task_id"])
         async with self._worker_lock:
             executor_manager["release_executor_by_task_id"](task["task_id"])
-            validator_manager["release_validator_by_task_id"](task["task_id"])
         self._broadcast_executor_states()
-        self._broadcast_validator_states()
         self.completed_tasks.add(task["task_id"])
         self.running_tasks.discard(task["task_id"])
         self.pending_tasks.discard(task["task_id"])
@@ -431,14 +418,12 @@ class ExecutorRunner:
         self._emit("task-states-update", {"tasks": task_states})
 
     def _broadcast_executor_states(self) -> None:
+        """Broadcast Executor state."""
         executors = executor_manager["get_all_executors"]()
-        stats = executor_manager["get_executor_stats"]()
-        self._emit("executor-states-update", {"executors": executors, "stats": stats})
-
-    def _broadcast_validator_states(self) -> None:
-        validators = validator_manager["get_all_validators"]()
-        stats = validator_manager["get_validator_stats"]()
-        self._emit("validator-states-update", {"validators": validators, "stats": stats})
+        exec_stats = executor_manager["get_executor_stats"]()
+        self._emit("executor-states-update", {
+            "executors": executors, "stats": exec_stats,
+        })
 
     async def _rollback_task(self, task: Dict) -> None:
         """Rollback task and all affected: upstream deps + downstream dependents.
@@ -475,10 +460,8 @@ class ExecutorRunner:
                     self.task_failure_count.pop(task_id, None)
                     self.task_tasks.pop(task_id, None)
                     executor_manager["release_executor_by_task_id"](task_id)
-                    validator_manager["release_validator_by_task_id"](task_id)
 
         self._broadcast_executor_states()
-        self._broadcast_validator_states()
 
         ready = [
             self.task_map[tid]
@@ -498,7 +481,7 @@ class ExecutorRunner:
     ) -> None:
         if self.is_running:
             raise ValueError("Cannot set layout while execution is running")
-        self.timetable_layout = layout
+        self.execution_layout = layout
         self.plan_id = plan_id
         self.chain_cache = []
         task_by_id = {}
@@ -506,24 +489,7 @@ class ExecutorRunner:
             for t in execution.get("tasks") or []:
                 if t.get("task_id"):
                     task_by_id[t["task_id"]] = t
-        grid = layout.get("grid", [])
-        isolated_tasks = layout.get("isolatedTasks", [])
-        for row in grid:
-            for cell in row or []:
-                if cell and cell.get("task_id"):
-                    tid = cell["task_id"]
-                    full = task_by_id.get(tid, {})
-                    status = full.get("status") or cell.get("status") or "undone"
-                    self.chain_cache.append({
-                        "task_id": tid,
-                        "dependencies": cell.get("dependencies") or [],
-                        "status": status,
-                        "description": full.get("description") or cell.get("description"),
-                        "input": full.get("input") or cell.get("input"),
-                        "output": full.get("output") or cell.get("output"),
-                        "validation": full.get("validation") or cell.get("validation"),
-                    })
-        for t in isolated_tasks or []:
+        for t in layout.get("treeData") or []:
             if t and t.get("task_id"):
                 tid = t["task_id"]
                 full = task_by_id.get(tid, {})
@@ -551,8 +517,6 @@ class ExecutorRunner:
         async with self._worker_lock:
             for task_id in task_ids:
                 executor_manager["release_executor_by_task_id"](task_id)
-                validator_manager["release_validator_by_task_id"](task_id)
         self.task_tasks.clear()
         self.running_tasks.clear()
         self._broadcast_executor_states()
-        self._broadcast_validator_states()

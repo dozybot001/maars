@@ -79,8 +79,8 @@ Rules:
     if agent_mode:
         system_prompt += """
 
-You have tools: ReadArtifact (read dependency task output), ReadFile (read files; use 'sandbox/X' for this task's sandbox), WriteFile (write to sandbox only), ListSkills, LoadSkill, Finish (submit final output).
-Use ListSkills to discover skills, LoadSkill when relevant. When your output satisfies the output spec, you MUST call Finish with the result—do not output inline. For JSON format pass a valid JSON string; for Markdown pass the content string. All file I/O is scoped to the plan dir and this task's sandbox."""
+You have tools: ReadArtifact (read dependency task output), ReadFile (read files; use 'sandbox/X' for this task's sandbox), WriteFile (write to sandbox only), ListSkills, LoadSkill, ReadSkillFile (read skill's scripts/references), RunSkillScript (execute skill scripts, use {{sandbox}}/file for sandbox paths), Finish (submit final output).
+Use ListSkills to discover skills, LoadSkill when relevant. ReadSkillFile and RunSkillScript let you use skill capabilities (e.g. docx validate, pptx convert). When your output satisfies the output spec, you MUST call Finish with the result—do not output inline. For JSON format pass a valid JSON string; for Markdown pass the content string. All file I/O is scoped to the plan dir and this task's sandbox."""
 
     inputs_str = "No input artifacts."
     if resolved_inputs:
@@ -133,15 +133,13 @@ MAX_AGENT_TURNS = 15
 def _get_executor_params(api_config: Dict[str, Any]) -> tuple[int, float]:
     """Return (max_turns, temperature) from modeConfig or defaults."""
     mode_cfg = api_config.get("modeConfig") or {}
-    agent_cfg = mode_cfg.get("llm-agent") or {}
+    agent_cfg = mode_cfg.get("agent") or {}
     llm_cfg = mode_cfg.get("llm") or {}
-    max_turns = agent_cfg.get("executorAgentMaxTurns") or agent_cfg.get("maxTurns") or MAX_AGENT_TURNS
+    max_turns = agent_cfg.get("executorAgentMaxTurns") or MAX_AGENT_TURNS
     max_turns = int(max_turns)
     temperature = (
         agent_cfg.get("executorLlmTemperature")
         or llm_cfg.get("executorLlmTemperature")
-        or agent_cfg.get("temperature")
-        or llm_cfg.get("temperature")
         or 0.3
     )
     return max_turns, float(temperature)
@@ -192,8 +190,9 @@ async def _execute_task_agent(
         else:
             content = result or ""
 
+        schedule_info = {"turn": turn, "max_turns": max_turns}
         if on_thinking and content:
-            r = on_thinking(content, task_id=task_id, operation="Execute")
+            r = on_thinking(content, task_id=task_id, operation="Execute", schedule_info=schedule_info)
             if asyncio.iscoroutine(r):
                 await r
 
@@ -203,19 +202,33 @@ async def _execute_task_agent(
                 content = content or "(no content)"
                 return _parse_executor_output(content, use_json_mode)
 
+            # Gemini 3: first functionCall must include thought_signature. For parallel calls,
+            # API returns it only in the first part - ensure first entry gets it.
+            sig_from_any = None
+            for tc in tool_calls:
+                s = tc.get("thought_signature") or tc.get("thoughtSignature")
+                if s is not None:
+                    sig_from_any = s
+                    break
+
             # Append assistant message with tool_calls
             assistant_msg = {"role": "assistant", "content": content or None}
-            tool_calls_for_msg = [
-                {
+            tool_calls_for_msg = []
+            for i, tc in enumerate(tool_calls):
+                entry = {
                     "id": tc.get("id", f"tc_{i}"),
                     "type": tc.get("type", "function"),
                     "function": tc.get("function", {}),
                 }
-                for i, tc in enumerate(tool_calls)
-            ]
+                sig = tc.get("thought_signature") or tc.get("thoughtSignature") or (sig_from_any if i == 0 else None)
+                if sig is not None:
+                    entry["thought_signature"] = sig
+                tool_calls_for_msg.append(entry)
             tool_calls_for_msg = [tc for tc in tool_calls_for_msg if tc.get("function")]
             if tool_calls_for_msg:
                 assistant_msg["tool_calls"] = tool_calls_for_msg
+            if result.get("gemini_model_content") is not None:
+                assistant_msg["gemini_model_content"] = result["gemini_model_content"]
             messages.append(assistant_msg)
 
             finished_output = None
@@ -223,6 +236,11 @@ async def _execute_task_agent(
                 fn = tc.get("function") or {}
                 name = fn.get("name") or ""
                 args = fn.get("arguments") or "{}"
+                if on_thinking:
+                    tool_schedule = {"turn": turn, "max_turns": max_turns, "tool_name": name, "tool_args": (args[:200] + "...") if len(args) > 200 else args}
+                    r = on_thinking("", task_id=task_id, operation="Execute", schedule_info=tool_schedule)
+                    if asyncio.iscoroutine(r):
+                        await r
                 try:
                     out, tool_result = await execute_tool(name, args, plan_id, task_id)
                 except Exception as e:
@@ -272,14 +290,14 @@ async def execute_task(
     """
     Execute task via LLM. Returns parsed output (dict for JSON, str for Markdown).
     When useMock=True in api_config, returns simulated output without LLM call.
-    When executorAgentMode=True, uses Agent loop (ReAct-style, no tools yet).
+    When executorAgentMode=True, uses Agent loop (ReAct-style with tools).
     """
     raw_cfg = api_config or {}
-    if raw_cfg.get("useMock") or raw_cfg.get("use_mock"):
+    if raw_cfg.get("useMock"):
         output_format = (output_spec or {}).get("format") or ""
         return await _mock_execute(output_format, task_id, on_thinking)
 
-    if raw_cfg.get("executorAgentMode") or raw_cfg.get("executor_agent_mode"):
+    if raw_cfg.get("executorAgentMode"):
         return await _execute_task_agent(
             task_id=task_id,
             description=description,

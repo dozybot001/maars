@@ -1,6 +1,6 @@
 # Planner
 
-递归分解 idea 为原子任务树。
+递归分解 idea 为原子任务树。含可视化区域（三个子视图：Decomposition Tree、Task Grid、Execution Graph）。
 
 ## 流程
 
@@ -19,5 +19,6 @@ task "0" → Atomicity → 非原子: Decompose → 递归
 |------|------|
 | index.py | run_plan 主流程 |
 | llm_client.py | OpenAI 兼容 API |
-| [layout/](layout/) | 分解树布局 |
+| [layout/](layout/) | Decomposition Tree 布局 |
 | [prompts/](prompts/) | LLM prompt 模板 |
+| [visualization/](visualization/) | 可视化区域：Task Grid、Execution Graph |

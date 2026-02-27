@@ -4,11 +4,11 @@
 
 ---
 
-## 1. 文档位置与命名
+## 1. 输出方式
 
-- **路径**：`docs/releases/RELEASE_v{版本号}.md`
-- **命名**：采用语义化版本 `v{major}.{minor}.{patch}`，如 `RELEASE_v1.2.0.md`
-- **归档**：所有历史 Release Note 保留在 `docs/releases/` 目录下
+- **不维护** `docs/releases/` 目录下的 Release 文件
+- **输出**：撰写完成后，以 Markdown 代码块（` ```markdown ... ``` `）形式输出，供用户复制到 GitHub Release、CHANGELOG 等
+- **版本号**：采用语义化版本 `v{major}.{minor}.{patch}`，如 `v1.2.0`
 
 ---
 
@@ -131,7 +131,7 @@
 
 ## 变更 (Changed)
 
-- **API**：`/api/plan/{id}` 响应中 `layout` 字段结构变更，详见 [STAGE_LAYOUT_RULES](backend/layout/STAGE_LAYOUT_RULES.md)
+- **API**：`/api/plan/{id}` 响应中 `layout` 字段结构变更，详见 [STAGE_LAYOUT_RULES](backend/planner/visualization/layout/STAGE_LAYOUT_RULES.md)
 
 ## 修复 (Fixed)
 
@@ -147,25 +147,13 @@
 2. **分类归类**：按 Added / Changed / Fixed / Deprecated / Security 分类
 3. **撰写初稿**：按模板撰写，遵循上述原则
 4. **评审**：由维护者或团队 Review
-5. **发布**：创建 `docs/releases/RELEASE_v{x.y.z}.md`，并在 README 或项目首页链接最新版本
+5. **输出**：以 Markdown 代码块形式输出 Release Note，供用户复制到 GitHub Release 等
 
 ---
 
 ## 7. 可选：CHANGELOG.md 集成
 
-若需维护单一 CHANGELOG，可在项目根目录维护 `CHANGELOG.md`，格式与 Release Note 一致，按版本倒序排列，每个版本下引用对应 `docs/releases/RELEASE_v{x.y.z}.md` 或直接内联摘要。
-
----
-
-## 8. 版本历史索引
-
-| 版本 | 发布日期 | 摘要 |
-|------|----------|------|
-| [v3.1.0](releases/RELEASE_v3.1.0.md) | 2026-02-26 | 后端按区域重构、文档补充 |
-| [v3.0.0](releases/RELEASE_v3.0.0.md) | 2026-02-26 | Executor Agent 化、沙箱隔离、AI Mode 参数配置 |
-| [v2.5.0](releases/RELEASE_v2.5.0.md) | 2026-02-25 | Validator 流式思考、thinking-area 工厂、按钮设计规范 |
-| [v2.4.1](releases/RELEASE_v2.4.1.md) | 2026-02-25 | Release Note 撰写规范与发布流程 |
-| [v2.4.0](releases/RELEASE_v2.4.0.md) | 2026-02-25 | Executor 流式思考输出、AI Thinking 与 Task Output 双栏 UI |
+若需维护单一 CHANGELOG，可在项目根目录维护 `CHANGELOG.md`，格式与 Release Note 一致，按版本倒序排列，每个版本下直接内联 Release Note 摘要。
 
 ---
 

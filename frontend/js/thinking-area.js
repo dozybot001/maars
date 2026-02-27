@@ -18,11 +18,17 @@
         const blockUserScrolledKey = `${prefix}ThinkingBlockUserScrolled`;
         const lastUpdatedKey = `${prefix}LastUpdatedBlockKey`;
 
+        const scheduleCounterKey = `${prefix}ScheduleCounter`;
+        const planCounterKey = `${prefix}PlanCounter`;
+        const planStreamingKey = `${prefix}PlanStreamingKey`;
         const state = window.MAARS.state || {};
         state[blocksKey] = state[blocksKey] || [];
         state[userScrolledKey] = state[userScrolledKey] ?? false;
         state[blockUserScrolledKey] = state[blockUserScrolledKey] || {};
         state[lastUpdatedKey] = state[lastUpdatedKey] || '';
+        state[scheduleCounterKey] = state[scheduleCounterKey] ?? 0;
+        state[planCounterKey] = state[planCounterKey] ?? 0;
+        state[planStreamingKey] = state[planStreamingKey] ?? '';
         window.MAARS.state = state;
 
         let _renderScheduled = null;
@@ -34,7 +40,24 @@
             const blocks = state[blocksKey];
             let html = '';
             for (const block of blocks) {
-                const headerText = block.taskId != null ? `Task ${block.taskId} | ${block.operation || ''}` : 'Thinking';
+                if (block.blockType === 'schedule') {
+                    const si = block.scheduleInfo || {};
+                    const parts = [];
+                    if (si.turn != null) parts.push(`Turn ${si.turn}${si.max_turns != null ? `/${si.max_turns}` : ''}`);
+                    if (si.tool_name) parts.push(si.tool_name + (si.tool_args ? '(...)' : ''));
+                    const scheduleText = parts.length ? parts.join(' | ') : 'Scheduling';
+                    const safeText = escapeHtml(scheduleText);
+                    html += `<div class="${blockClass} ${blockClass}--schedule" data-block-key="${(block.key || '').replace(/"/g, '&quot;')}"><div class="${blockClass}-schedule-text">${safeText}</div></div>`;
+                    continue;
+                }
+                let headerText = block.taskId != null ? `Task ${block.taskId} | ${block.operation || ''}` : (block.operation || 'Thinking');
+                const si = block.scheduleInfo;
+                if (si) {
+                    const parts = [];
+                    if (si.turn != null) parts.push(`Turn ${si.turn}${si.max_turns != null ? `/${si.max_turns}` : ''}`);
+                    if (si.tool_name) parts.push(si.tool_name + (si.tool_args ? '(...)' : ''));
+                    if (parts.length) headerText += ' | ' + parts.join(' | ');
+                }
                 const raw = block.content || '';
                 let blockHtml = raw ? (typeof marked !== 'undefined' ? marked.parse(raw) : raw) : '';
                 if (blockHtml && typeof DOMPurify !== 'undefined') blockHtml = DOMPurify.sanitize(blockHtml);
@@ -110,6 +133,9 @@
             state[userScrolledKey] = false;
             state[blockUserScrolledKey] = {};
             state[lastUpdatedKey] = '';
+            state[scheduleCounterKey] = 0;
+            state[planCounterKey] = 0;
+            state[planStreamingKey] = '';
             const el = document.getElementById(contentElId);
             const area = document.getElementById(areaElId);
             if (el) el.innerHTML = '';
@@ -117,14 +143,45 @@
             if (typeof onClear === 'function') onClear();
         }
 
-        function appendChunk(chunk, taskId, operation) {
+        function appendChunk(chunk, taskId, operation, scheduleInfo) {
+            if (!chunk && scheduleInfo != null) {
+                state[planStreamingKey] = '';
+                if (scheduleInfo.tool_name) {
+                    state[scheduleCounterKey] = (state[scheduleCounterKey] || 0) + 1;
+                    const key = `schedule_${state[scheduleCounterKey]}`;
+                    const block = { key, blockType: 'schedule', scheduleInfo };
+                    state[blocksKey].push(block);
+                    state[lastUpdatedKey] = key;
+                    scheduleRender();
+                }
+                return;
+            }
+            if (taskId == null && chunk) {
+                let block = state[planStreamingKey] ? state[blocksKey].find((b) => b.key === state[planStreamingKey]) : null;
+                if (block) {
+                    block.content += chunk;
+                    if (scheduleInfo != null) block.scheduleInfo = scheduleInfo;
+                    state[lastUpdatedKey] = block.key;
+                } else {
+                    state[planCounterKey] = (state[planCounterKey] || 0) + 1;
+                    const key = `plan_${state[planCounterKey]}`;
+                    block = { key, taskId: null, operation: operation || 'Plan', content: chunk, scheduleInfo: scheduleInfo || null };
+                    state[blocksKey].push(block);
+                    state[planStreamingKey] = key;
+                    state[lastUpdatedKey] = key;
+                }
+                scheduleRender();
+                return;
+            }
+            state[planStreamingKey] = '';
             const key = (taskId != null && operation != null) ? `${String(taskId)}::${String(operation)}` : '_default';
             let block = state[blocksKey].find((b) => b.key === key);
             if (!block) {
-                block = { key, taskId, operation, content: '' };
+                block = { key, taskId, operation, content: '', scheduleInfo: null };
                 state[blocksKey].push(block);
             }
-            block.content += chunk;
+            if (chunk) block.content += chunk;
+            if (scheduleInfo != null) block.scheduleInfo = scheduleInfo;
             state[lastUpdatedKey] = key;
             scheduleRender();
         }
@@ -142,12 +199,14 @@
         function initBlockFocus() {
             const area = document.getElementById(areaElId);
             if (!area) return;
+            const scheduleModifier = `${blockClass}--schedule`;
             area.addEventListener('click', (e) => {
                 const block = e.target.closest(`.${blockClass}`);
-                const allBlocks = area.querySelectorAll(`.${blockClass}`);
-                const wasFocused = block && block.classList.contains('is-focused');
+                if (!block || block.classList.contains(scheduleModifier)) return;
+                const allBlocks = area.querySelectorAll(`.${blockClass}:not(.${scheduleModifier})`);
+                const wasFocused = block.classList.contains('is-focused');
                 allBlocks.forEach((b) => b.classList.remove('is-focused'));
-                if (block && !wasFocused) block.classList.add('is-focused');
+                if (!wasFocused) block.classList.add('is-focused');
             });
         }
 
