@@ -69,20 +69,19 @@ maars/
 ├── backend/
 │   ├── main.py          # FastAPI + Socket.io 入口
 │   ├── api/             # 路由、schemas、state
-│   ├── planner/        # 规划：atomicity → decompose → format，含 visualization
-│   ├── executor/       # 执行：runner、execution、validation
-│   ├── shared/         # 公共：graph 等
-│   ├── db/             # 文件存储：db/{plan_id}/
-│   └── test/           # Mock AI
-└── frontend/           # 静态页面、任务树、WebSocket
+│   ├── plan/            # 规划：atomicity → decompose → format，含 visualization
+│   ├── execution/       # 执行：runner、execution、validation
+│   ├── db/              # 文件存储：db/{plan_id}/、settings.json
+│   └── test/            # Mock AI
+└── frontend/            # 静态页面、任务树、WebSocket
 ```
 
 ## 配置
 
-点击右上角 **API 配置**：AI Mode（Mock/LLM/Agent）、Preset（Base URL、API Key、Model）、模式参数（Temperature、最大轮数等）。
+按 **Alt+Shift+S** 打开 **Settings**：Theme、DB Operation（Restore/Clear）、AI Mode（Mock/LLM/Agent）、Preset（Base URL、API Key、Model）、模式参数（Temperature、最大轮数等）。
 
 ## 文档
 
 - [前端脚本与模块依赖](docs/FRONTEND_SCRIPTS.md)
 - [Release Note 标准](docs/RELEASE_NOTE_STANDARD.md)
-- [执行图布局规则](backend/planner/visualization/layout/STAGE_LAYOUT_RULES.md)
+- [执行图布局规则](backend/plan/visualization/EXECUTION_LAYOUT_RULES.md)

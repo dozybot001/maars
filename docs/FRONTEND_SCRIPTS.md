@@ -26,9 +26,9 @@ thinking-area.js  # createThinkingArea 工厂，无依赖
 planner-thinking.js   # 依赖 thinking-area, config
 executor-thinking.js  # 依赖 thinking-area, config（Execute/Validate 合并）
     ↓
-monitor.js        # 时间表、Executor chips，依赖 config, api, utils
+planner-views.js  # 执行图、Worker chips、布局，依赖 config, api
     ↓
-websocket.js      # Socket.io 事件分发，依赖 config, planner, monitor, plannerThinking, executorThinking
+websocket.js      # Socket.io 事件分发，依赖 config, planner, plannerViews, plannerThinking, executorThinking
     ↓
 app.js            # 入口，组装各模块
 ```
@@ -52,7 +52,7 @@ planner-thinking            executor-thinking (Execute + Validate)
         │                           │
         └─────────────┬─────────────┘
                       │
-                  monitor  ←── utils, task-tree
+              planner-views  ←── utils, task-tree
                       │
                  websocket
                       │
@@ -66,19 +66,17 @@ planner-thinking            executor-thinking (Execute + Validate)
 | utils | 无 | 必须最先加载（在 task-tree 之前） |
 | task-tree | utils | 弹窗中 escapeHtml 用于安全渲染 |
 | theme | config, utils | API 配置模态框 |
-| websocket | planner, monitor, plannerThinking, executorThinking | 所有 thinking 模块必须在 websocket 之前加载 |
+| websocket | planner, plannerViews, plannerThinking, executorThinking | 所有 thinking 模块必须在 websocket 之前加载 |
 
-## window.MAARS.state 结构
-
-各模块应仅读写自身命名空间，避免隐式依赖：
+## window.MAARS 结构
 
 | 命名空间 | 模块 | 说明 |
 |----------|------|------|
-| `socket` | websocket | Socket.io 实例 |
-| `timetableLayout` | monitor | 时间表布局 |
-| `chainCache` | monitor | 执行链缓存 |
-| `previousTaskStates` | monitor | 任务状态变更追踪 |
-| `executorOutputs` | executor-thinking | 任务输出 |
+| `state.socket` | websocket | Socket.io 实例 |
+| `plannerViews.state.executionLayout` | planner-views | 执行图布局 |
+| `plannerViews.state.chainCache` | planner-views | 执行链缓存 |
+| `plannerViews.state.previousTaskStates` | planner-views | 任务状态变更追踪 |
+| `executorThinking` (setTaskOutput) | executor-thinking | 任务输出 |
 | `*ThinkingBlocks` | thinking-area | 各 thinking 区域块 |
 | `*ThinkingUserScrolled` | thinking-area | 用户滚动状态 |
 

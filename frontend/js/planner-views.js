@@ -1,6 +1,6 @@
 /**
  * MAARS planner views - execution tree (执行图), executor chips.
- * Planner has 2 sub-views: decomposition, execution.
+ * Planner has 3 sub-views: decomposition, execution, output.
  */
 (function () {
     'use strict';
@@ -113,10 +113,12 @@
         existing.forEach((el) => el.remove());
     }
 
-    function renderExecutorStates(data) {
+    function renderWorkerStates(data) {
         if (!data) return;
-        if (data.executors && data.stats) {
-            renderChips('executorChips', data.executors, data.stats, {
+        const items = data.workers;
+        const stats = data.stats;
+        if (items && stats) {
+            renderChips('executorChips', items, stats, {
                 chipClass: 'executor-chip',
                 chipIdAttr: 'data-executor-id',
                 getStatusClass: (e) => {
@@ -126,9 +128,9 @@
                     return 'executor-idle';
                 },
                 getTitle: (e) => {
-                    if (e.status === 'validating') return `Executor ${e.id} validating output${e.taskId ? ': ' + e.taskId : ''}`;
-                    if (e.status === 'busy') return `Executor ${e.id} executing${e.taskId ? ': ' + e.taskId : ''}`;
-                    return `Executor ${e.id}${e.taskId ? ': ' + e.taskId : ''}`;
+                    if (e.status === 'validating') return `Worker ${e.id} validating output${e.taskId ? ': ' + e.taskId : ''}`;
+                    if (e.status === 'busy') return `Worker ${e.id} executing${e.taskId ? ': ' + e.taskId : ''}`;
+                    return `Worker ${e.id}${e.taskId ? ': ' + e.taskId : ''}`;
                 },
             });
         }
@@ -233,7 +235,7 @@
         buildChainCacheFromLayout,
         renderExecutionDiagram,
         animateConnectionLines,
-        renderExecutorStates,
+        renderWorkerStates,
         resetExecutionButtons,
         generateExecutionLayout,
     };

@@ -5,6 +5,7 @@
 :root {
     /* Layout (non-color) */
     --area-height: 300px;
+    --main-content-height: 550px;
     --border-radius: 8px;
     --padding: 16px;
     --gap: 20px;
@@ -22,8 +23,8 @@
     --placeholder-color: var(--text-muted);
     --placeholder-font-size: 14px;
 
-    /* Scrollbar */
-    --scrollbar-width: 10px;
+    /* Scrollbar - VSCode style */
+    --scrollbar-width: 8px;
 
     /* Button - unified design system */
     --btn-radius: 8px;
@@ -40,22 +41,30 @@
     --state-transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
 }
 
-/* Unified scrollbar (all scrollable areas) */
+/* Scrollbar - VSCode style (thin, minimal, semi-transparent) */
 *::-webkit-scrollbar {
     width: var(--scrollbar-width);
     height: var(--scrollbar-width);
 }
 *::-webkit-scrollbar-track {
-    background: var(--scrollbar-track);
-    border-radius: var(--border-radius);
+    background: transparent;
 }
 *::-webkit-scrollbar-thumb {
     background-color: var(--scrollbar-thumb);
-    border-radius: calc(var(--scrollbar-width) / 2);
-    border: 2px solid var(--scrollbar-track);
 }
 *::-webkit-scrollbar-thumb:hover {
     background-color: var(--scrollbar-thumb-hover);
+}
+*::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* Firefox only - Chrome 121+ prefers scrollbar-width/color over webkit when both present */
+@supports not selector(::-webkit-scrollbar) {
+    html {
+        scrollbar-width: thin;
+        scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    }
 }
 
 * {
@@ -72,7 +81,7 @@ body {
 }
 
 .container {
-    max-width: 1080px;
+    max-width: 1200px;
     margin: 0 auto;
-    padding: 40px 20px;
+    padding: 40px 24px;
 }

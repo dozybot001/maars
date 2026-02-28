@@ -6,8 +6,8 @@ from fastapi import APIRouter, Query
 from loguru import logger
 from fastapi.responses import JSONResponse
 
-from db import get_effective_api_config, get_execution, get_plan, save_execution
-from planner.visualization import build_execution_from_plan
+from db import get_effective_config, get_execution, get_plan, save_execution
+from plan.visualization import build_execution_from_plan
 
 from .. import state as api_state
 from ..schemas import ExecutionRequest
@@ -44,13 +44,13 @@ async def post_execution(body: ExecutionRequest):
 @router.post("/run")
 async def run_execution():
     """Start execution. Returns immediately; errors are pushed via WebSocket execution-error."""
-    api_config = await get_effective_api_config()
-    runner = api_state.executor_runner
+    config = await get_effective_config()
+    runner = api_state.runner
     sio = api_state.sio
 
     async def run():
         try:
-            await runner.start_execution(api_config=api_config)
+            await runner.start_execution(api_config=config)
         except Exception as e:
             logger.exception("Error in execution: {}", e)
             await sio.emit("execution-error", {"error": str(e)})
@@ -61,5 +61,5 @@ async def run_execution():
 
 @router.post("/stop")
 async def stop_execution():
-    await api_state.executor_runner.stop_async()
+    await api_state.runner.stop_async()
     return {"success": True, "message": "Execution stopped"}

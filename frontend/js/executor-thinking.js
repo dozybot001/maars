@@ -1,6 +1,6 @@
 /**
- * Executor AI Thinking - Execute + Validate blocks (Validate 为 Executor 内步骤).
- * Uses createThinkingArea factory. Right panel: task output per task; block click opens modal.
+ * Executor - Thinking merges into Planner; Task Output in Planner Output view.
+ * Uses createThinkingArea (shared with planner). Output blocks: click expand opens modal.
  */
 (function () {
     'use strict';
@@ -13,11 +13,12 @@
     window.MAARS.state = state;
 
     const escapeHtml = (window.MAARS?.utils?.escapeHtml) || ((s) => (s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')));
+    /* Executor thinking merges into Planner thinking area (same DOM, shared blocks) */
     const thinking = window.MAARS.createThinkingArea({
-        prefix: 'executor',
-        contentElId: 'executorThinkingContent',
-        areaElId: 'executorThinkingArea',
-        blockClass: 'executor-thinking-block',
+        prefix: 'planner',
+        contentElId: 'plannerThinkingContent',
+        areaElId: 'plannerThinkingArea',
+        blockClass: 'planner-thinking-block',
         onClear: () => {
             state.executorOutputs = {};
             state.executorOutputUserScrolled = false;
@@ -42,7 +43,6 @@
         });
         if (keys.length === 0) {
             el.innerHTML = '';
-            area.classList.remove('has-content');
             return;
         }
         let html = '';
@@ -71,7 +71,6 @@
         } catch (_) {
             el.textContent = keys.map((k) => `Task ${k}: ${outputs[k]}`).join('\n\n');
         }
-        area.classList.add('has-content');
         if (!state.executorOutputUserScrolled && wasNearBottom) {
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
@@ -180,34 +179,26 @@
         URL.revokeObjectURL(a.href);
     }
 
-    function initOutputBlockFocus() {
+    function initOutputAreaClick() {
         const area = document.getElementById('executorOutputArea');
         if (!area) return;
         area.addEventListener('click', (e) => {
-            if (e.target.closest('.executor-output-block-expand')) return;
+            const expandBtn = e.target.closest('.executor-output-block-expand');
+            if (expandBtn) {
+                e.stopPropagation();
+                const block = expandBtn.closest('.executor-output-block');
+                if (block) {
+                    const bodyEl = block.querySelector('.executor-output-block-body');
+                    openOutputModal(block.getAttribute('data-task-id') || '', bodyEl?.innerHTML || '', bodyEl?.scrollTop || 0);
+                }
+                return;
+            }
             const block = e.target.closest('.executor-output-block');
             if (!block) return;
             const allBlocks = area.querySelectorAll('.executor-output-block');
             const wasFocused = block.classList.contains('is-focused');
             allBlocks.forEach((b) => b.classList.remove('is-focused'));
             if (!wasFocused) block.classList.add('is-focused');
-        });
-    }
-
-    function initOutputBlockClick() {
-        const area = document.getElementById('executorOutputArea');
-        if (!area) return;
-        area.addEventListener('click', (e) => {
-            const expandBtn = e.target.closest('.executor-output-block-expand');
-            if (!expandBtn) return;
-            e.stopPropagation();
-            const block = expandBtn.closest('.executor-output-block');
-            if (!block) return;
-            const bodyEl = block.querySelector('.executor-output-block-body');
-            const taskId = block.getAttribute('data-task-id') || '';
-            const contentHtml = bodyEl ? bodyEl.innerHTML : '';
-            const scrollTop = bodyEl ? bodyEl.scrollTop : 0;
-            openOutputModal(taskId, contentHtml, scrollTop);
         });
     }
 
@@ -222,16 +213,13 @@
         });
     }
 
-    initOutputBlockFocus();
-    initOutputBlockClick();
+    initOutputAreaClick();
     initOutputScrollTracking();
     initOutputModalDownload();
 
     window.MAARS.executorThinking = {
         clear: thinking.clear,
         appendChunk: thinking.appendChunk,
-        render: thinking.render,
-        applyHighlight: thinking.applyHighlight,
         applyOutputHighlight,
         setTaskOutput,
         renderOutput,

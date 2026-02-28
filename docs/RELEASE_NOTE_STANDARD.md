@@ -131,7 +131,7 @@
 
 ## 变更 (Changed)
 
-- **API**：`/api/plan/{id}` 响应中 `layout` 字段结构变更，详见 [STAGE_LAYOUT_RULES](backend/planner/visualization/layout/STAGE_LAYOUT_RULES.md)
+- **API**：`/api/plan/{id}` 响应中 `layout` 字段结构变更，详见 [EXECUTION_LAYOUT_RULES](backend/plan/visualization/EXECUTION_LAYOUT_RULES.md)
 
 ## 修复 (Fixed)
 

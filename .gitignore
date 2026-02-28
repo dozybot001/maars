@@ -14,7 +14,8 @@ backend/db/plan_*/
 # Vendor / upstream clones (skills are copied to backend/skills/)
 backend/vendor/
 
-# API config (contains secrets)
+# Settings & API config (contain secrets)
+backend/db/settings.json
 backend/db/api_config.json
 
 # Atomic write leftovers (crash recovery)

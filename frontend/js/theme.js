@@ -33,8 +33,8 @@
         { key: 'decompose', label: 'Decompose' },
         { key: 'format', label: 'Format' },
         { key: 'quality', label: 'Quality Assess' },
-        { key: 'execute', label: 'Executor Execute' },
-        { key: 'validate', label: 'Executor Validate' },
+        { key: 'execute', label: 'Task Execute' },
+        { key: 'validate', label: 'Task Validate' },
     ];
 
     let _configState = { aiMode: 'mock', current: '', presets: {} };
@@ -45,16 +45,16 @@
     const MODE_DESCRIPTIONS = {
         mock: {
             title: 'Mock config',
-            desc: 'Use mock data, no API key required. Planner and Executor return preset results for quick flow and UI testing.',
+            desc: 'Use mock data, no API key required. Plan and task execution return preset results for quick flow and UI testing.',
         },
         llm: {
             title: 'LLM config',
-            desc: 'Planner and Executor both use LLM calls (single-turn). Planner decomposes tasks; Executor generates output once and validates. Select or create API config in Preset on the left.',
+            desc: 'Plan and task execution both use LLM calls (single-turn). Plan decomposes tasks; task execution generates output once and validates. Select or create API config in Preset on the left.',
             presetNote: true,
         },
         agent: {
             title: 'Agent config',
-            desc: 'Planner and Executor both use Agent mode (ReAct-style with tools). Planner: CheckAtomicity, Decompose, FormatTask, AddTasks, etc. Executor: ReadArtifact, ReadFile, WriteFile, Finish, ListSkills, LoadSkill. Each task runs in an isolated sandbox.',
+            desc: 'Plan and task execution both use Agent mode (ReAct-style with tools). Plan: CheckAtomicity, Decompose, FormatTask, AddTasks, etc. Task: ReadArtifact, ReadFile, WriteFile, Finish, ListSkills, LoadSkill. Each task runs in an isolated sandbox.',
             presetNote: true,
         },
     };
@@ -66,16 +66,16 @@
             { key: 'maxFailures', label: 'Max retries', type: 'number', min: 1, max: 10, default: 3, section: 'Mock', tip: 'Max retries after task failure' },
         ],
         llm: [
-            { key: 'plannerLlmTemperature', label: 'Planner Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Planner', tip: 'Temperature for Planner LLM calls (atomicity/decompose/format)' },
-            { key: 'executorLlmTemperature', label: 'Executor Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Executor', tip: 'Temperature for Executor single LLM output' },
-            { key: 'maxFailures', label: 'Max retries', type: 'number', min: 1, max: 10, default: 3, section: 'Executor', tip: 'Max retries after execution/validation failure' },
+            { key: 'planLlmTemperature', label: 'Plan Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Plan', tip: 'Temperature for plan LLM calls (atomicity/decompose/format)' },
+            { key: 'taskLlmTemperature', label: 'Task Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Task', tip: 'Temperature for task execution LLM output' },
+            { key: 'maxFailures', label: 'Max retries', type: 'number', min: 1, max: 10, default: 3, section: 'Task', tip: 'Max retries after execution/validation failure' },
         ],
         agent: [
-            { key: 'plannerAgentMaxTurns', label: 'Planner max turns', type: 'number', min: 1, max: 50, default: 30, section: 'Planner Agent', tip: 'Max turns for Planner Agent loop' },
-            { key: 'plannerLlmTemperature', label: 'Planner Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Planner Agent', tip: 'Temperature for Planner Agent LLM' },
-            { key: 'executorLlmTemperature', label: 'Executor Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Executor Agent', tip: 'Temperature for Executor Agent LLM' },
-            { key: 'executorAgentMaxTurns', label: 'Executor max turns', type: 'number', min: 1, max: 30, default: 15, section: 'Executor Agent', tip: 'Max turns for Executor Agent loop (incl. tool calls)' },
-            { key: 'maxFailures', label: 'Max retries', type: 'number', min: 1, max: 10, default: 3, section: 'Executor Agent', tip: 'Max retries after execution/validation failure' },
+            { key: 'planAgentMaxTurns', label: 'Plan max turns', type: 'number', min: 1, max: 50, default: 30, section: 'Plan Agent', tip: 'Max turns for plan Agent loop' },
+            { key: 'planLlmTemperature', label: 'Plan Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Plan Agent', tip: 'Temperature for plan Agent LLM' },
+            { key: 'taskLlmTemperature', label: 'Task Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Task Agent', tip: 'Temperature for task Agent LLM' },
+            { key: 'taskAgentMaxTurns', label: 'Task max turns', type: 'number', min: 1, max: 30, default: 15, section: 'Task Agent', tip: 'Max turns for task Agent loop (incl. tool calls)' },
+            { key: 'maxFailures', label: 'Max retries', type: 'number', min: 1, max: 10, default: 3, section: 'Task Agent', tip: 'Max retries after execution/validation failure' },
         ],
     };
 
@@ -230,6 +230,28 @@
         _readFormIntoState();
         const isPreset = itemId.startsWith('preset:');
         const presetKey = isPreset ? itemId.slice(7) : '';
+        const isTheme = itemId === 'theme';
+        const isDb = itemId === 'db';
+
+        document.querySelectorAll('.settings-nav-item').forEach(el => {
+            el.classList.toggle('active', el.dataset.item === itemId);
+        });
+
+        if (isTheme) {
+            document.getElementById('apiPanelTheme')?.classList.add('active');
+            document.getElementById('apiPanelDb')?.classList.remove('active');
+            document.getElementById('apiPanelMode')?.classList.remove('active');
+            document.getElementById('presetEditPanel')?.classList.remove('active');
+            _syncThemeOptionsActive();
+            return;
+        }
+        if (isDb) {
+            document.getElementById('apiPanelTheme')?.classList.remove('active');
+            document.getElementById('apiPanelDb')?.classList.add('active');
+            document.getElementById('apiPanelMode')?.classList.remove('active');
+            document.getElementById('presetEditPanel')?.classList.remove('active');
+            return;
+        }
         if (isPreset) {
             _activePresetKey = presetKey;
             _configState.current = presetKey;
@@ -238,16 +260,27 @@
             document.querySelectorAll('#apiPresetMenuList .api-menu-item').forEach(el => {
                 el.classList.toggle('active', el.dataset.item === itemId);
             });
+            document.getElementById('apiPanelTheme')?.classList.remove('active');
+            document.getElementById('apiPanelDb')?.classList.remove('active');
             document.getElementById('apiPanelMode')?.classList.remove('active');
             document.getElementById('presetEditPanel')?.classList.add('active');
         } else {
             _configState.aiMode = itemId;
             _syncModeActive();
+            document.getElementById('apiPanelTheme')?.classList.remove('active');
+            document.getElementById('apiPanelDb')?.classList.remove('active');
             document.getElementById('apiPanelMode')?.classList.add('active');
             document.getElementById('presetEditPanel')?.classList.remove('active');
             _renderModePanel();
         }
         _renderPresetMenuItems();
+    }
+
+    function _syncThemeOptionsActive() {
+        const current = document.documentElement.getAttribute('data-theme') || 'light';
+        document.querySelectorAll('.settings-theme-option').forEach(el => {
+            el.classList.toggle('active', el.dataset.theme === current);
+        });
     }
 
     function _updateEditPanelVisibility() {
@@ -343,16 +376,99 @@
 
     function initApiConfigModal() {
         const modal = document.getElementById('apiConfigModal');
-        const btn = document.getElementById('apiConfigBtn');
         const close = document.getElementById('apiConfigModalClose');
         const deleteBtn = document.getElementById('presetDeleteBtn');
         const sidebar = document.querySelector('.api-sidebar-menu');
+
+        async function openSettingsModal() {
+            let raw;
+            try {
+                raw = await cfg.fetchSettings();
+            } catch (e) {
+                console.error('Failed to load config:', e);
+                alert('Failed to load settings: ensure backend is running (e.g. uvicorn main:asgi_app) and refresh the page.');
+                return;
+            }
+            _loadConfig(raw);
+            _renderPresetMenuItems();
+            _syncModeActive();
+            const keys = Object.keys(_configState.presets);
+            const current = _configState.current && keys.includes(_configState.current)
+                ? _configState.current
+                : keys[0];
+            if (current) {
+                _activePresetKey = current;
+                _configState.current = current;
+                _populatePresetForm();
+                _updateEditPanelVisibility();
+                document.querySelectorAll('#apiPresetMenuList .api-menu-item').forEach(el => {
+                    el.classList.toggle('active', el.dataset.item === 'preset:' + current);
+                });
+            }
+            document.getElementById('apiPanelTheme')?.classList.add('active');
+            document.getElementById('apiPanelDb')?.classList.remove('active');
+            document.getElementById('presetEditPanel')?.classList.remove('active');
+            document.getElementById('apiPanelMode')?.classList.remove('active');
+            _selectItem('theme');
+            modal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.altKey && e.shiftKey && e.key === 'S') {
+                e.preventDefault();
+                openSettingsModal();
+            }
+        });
 
         sidebar?.addEventListener('click', (e) => {
             const item = e.target.closest('.api-menu-item');
             if (item?.dataset?.item) {
                 e.preventDefault();
                 _selectItem(item.dataset.item);
+            }
+        });
+
+        document.querySelectorAll('.settings-theme-option').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const theme = btn.dataset.theme;
+                if (!theme || !cfg.THEMES.includes(theme)) return;
+                applyTheme(theme);
+                localStorage.setItem(cfg.THEME_STORAGE_KEY, theme);
+                _syncThemeOptionsActive();
+            });
+        });
+
+        document.getElementById('settingsRestoreBtn')?.addEventListener('click', async () => {
+            const api = window.MAARS?.api;
+            if (!api?.restoreRecentPlan) return;
+            const btn = document.getElementById('settingsRestoreBtn');
+            const origText = btn?.textContent;
+            if (btn) { btn.disabled = true; btn.textContent = 'Restoring...'; }
+            try {
+                await api.restoreRecentPlan();
+                if (btn) { btn.textContent = 'Restored'; }
+                setTimeout(() => {
+                    if (btn) { btn.disabled = false; btn.textContent = origText || 'Restore'; }
+                }, 1500);
+            } catch (e) {
+                console.error('Restore failed:', e);
+                alert('Restore failed: ' + (e.message || e));
+                if (btn) { btn.disabled = false; btn.textContent = origText || 'Restore'; }
+            }
+        });
+
+        document.getElementById('settingsClearDbBtn')?.addEventListener('click', async () => {
+            if (!confirm('Clear DB? This will delete all plans.')) return;
+            try {
+                const api = window.MAARS?.api;
+                if (!api?.clearDb) return;
+                await api.clearDb();
+                try { localStorage.removeItem(cfg?.PLAN_ID_KEY || 'maars-plan-id'); } catch (_) {}
+                location.reload();
+            } catch (e) {
+                console.error('Clear DB failed:', e);
+                alert('Clear failed: ' + (e.message || e));
             }
         });
 
@@ -373,37 +489,6 @@
             _selectItem('preset:' + key);
         });
 
-        btn?.addEventListener('click', async () => {
-            let raw;
-            try {
-                raw = await cfg.fetchApiConfig();
-            } catch (e) {
-                console.error('Failed to load config:', e);
-                alert('Failed to load config: ensure backend is running (e.g. uvicorn main:asgi_app) and refresh the page.');
-                return;
-            }
-            _loadConfig(raw);
-            _renderPresetMenuItems();
-            _syncModeActive();
-            const keys = Object.keys(_configState.presets);
-            const current = _configState.current && keys.includes(_configState.current)
-                ? _configState.current
-                : keys[0];
-            if (current) {
-                _activePresetKey = current;
-                _configState.current = current;
-                _populatePresetForm();
-                _updateEditPanelVisibility();
-                document.querySelectorAll('#apiPresetMenuList .api-menu-item').forEach(el => {
-                    el.classList.toggle('active', el.dataset.item === 'preset:' + current);
-                });
-            }
-            document.getElementById('presetEditPanel')?.classList.add('active');
-            document.getElementById('apiPanelMode')?.classList.remove('active');
-            modal.style.display = 'flex';
-            document.body.style.overflow = 'hidden';
-        });
-
         function closeModal() {
             modal.style.display = 'none';
             document.body.style.overflow = '';
@@ -415,7 +500,7 @@
             _readFormIntoState();
             _readModeFormIntoState();
             try {
-                await cfg.saveApiConfig(_configState);
+                await cfg.saveSettings(_configState);
                 closeModal();
             } catch (err) {
                 console.error('Save config:', err);

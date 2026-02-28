@@ -1,6 +1,6 @@
 """
 MAARS Backend - FastAPI + Socket.io entry point.
-Python implementation of the planner backend.
+Python implementation of the MAARS backend.
 """
 
 import asyncio
@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from api import PlanRunState, register_routes
-from executor import ExecutorRunner, executor_manager
+from execution import ExecutionRunner, worker_manager
 
 # Socket.io
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
@@ -40,11 +40,11 @@ app.add_middleware(
 plan_run_state = PlanRunState()
 plan_run_state.lock = asyncio.Lock()
 
-# Executor runner instance
-executor_runner = ExecutorRunner(sio)
+# Execution runner instance
+runner = ExecutionRunner(sio)
 
-# Register API routes (db, plan, plans, execution, config, executors)
-register_routes(app, sio, executor_runner, plan_run_state)
+# Register API routes (db, plan, plans, execution, config, workers)
+register_routes(app, sio, runner, plan_run_state)
 
 
 # Disable cache for static files (dev: always fetch latest)
@@ -89,10 +89,10 @@ if FRONTEND_DIR.exists():
 @sio.event
 async def connect(sid, environ, auth):
     logger.info("Client connected: %s", sid)
-    executors = executor_manager["get_all_executors"]()
-    exec_stats = executor_manager["get_executor_stats"]()
-    await sio.emit("executor-states-update", {
-        "executors": executors, "stats": exec_stats,
+    workers = worker_manager["get_all_workers"]()
+    stats = worker_manager["get_worker_stats"]()
+    await sio.emit("worker-states-update", {
+        "workers": workers, "stats": stats,
     }, to=sid)
 
 

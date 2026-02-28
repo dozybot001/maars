@@ -32,7 +32,6 @@
 
     async function restoreRecentPlan() {
         if (window.MAARS?.executorThinking?.clear) window.MAARS.executorThinking.clear();
-        if (window.MAARS?.plannerThinking?.clear) window.MAARS.plannerThinking.clear();
 
         const plansRes = await fetch(`${cfg.API_BASE_URL}/plans`);
         const plansData = await plansRes.json();

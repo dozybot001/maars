@@ -38,18 +38,18 @@
         try { localStorage.setItem(PLAN_ID_KEY, id); } catch (_) {}
     }
 
-    async function fetchApiConfig() {
-        const res = await fetch(`${API_BASE_URL}/config`, { cache: 'no-store' });
-        if (!res.ok) throw new Error(`Config ${res.status}`);
+    async function fetchSettings() {
+        const res = await fetch(`${API_BASE_URL}/settings`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`Settings ${res.status}`);
         const data = await res.json();
-        return data.config != null ? data.config : {};
+        return data.settings != null ? data.settings : {};
     }
 
-    async function saveApiConfig(cfg) {
-        const res = await fetch(`${API_BASE_URL}/config`, {
+    async function saveSettings(settings) {
+        const res = await fetch(`${API_BASE_URL}/settings`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(cfg || {})
+            body: JSON.stringify(settings || {})
         });
         if (!res.ok) throw new Error('Save failed');
         return await res.json();
@@ -64,7 +64,7 @@
         getCurrentPlanId,
         setCurrentPlanId,
         resolvePlanId,
-        fetchApiConfig,
-        saveApiConfig,
+        fetchSettings,
+        saveSettings,
     };
 })();

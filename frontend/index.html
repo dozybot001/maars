@@ -24,28 +24,26 @@
                 <h1>MAARS</h1>
                 <p class="subtitle">Multi-Agent Automated Research System</p>
             </div>
-            <div class="header-actions">
-                <button type="button" id="themeToggleBtn" class="theme-toggle-btn" title="Cycle theme: Light / Dark / Black" aria-label="Cycle theme">
-                    <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
-                    <span class="theme-icon theme-icon-moon" aria-hidden="true">🌙</span>
-                    <span class="theme-icon theme-icon-black" aria-hidden="true">◻</span>
-                </button>
-                <button type="button" id="restoreBtn" class="icon-btn" title="Restore recent task: full MAARS workflow" aria-label="Restore recent task"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>
-                <button type="button" id="clearDbBtn" class="icon-btn" title="Clear DB: delete all plans" aria-label="Clear DB"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
-                <button type="button" id="apiConfigBtn" class="icon-btn" title="API config (Planner & Executor)" aria-label="API config"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg></button>
-            </div>
         </header>
 
         <div id="apiConfigModal" class="modal">
             <div class="modal-content modal-content-config">
                 <header class="api-modal-header">
-                    <h2 class="api-modal-title">API Config</h2>
+                    <h2 class="api-modal-title">Settings</h2>
                     <button type="button" class="api-modal-close" id="apiConfigModalClose" aria-label="Close">×</button>
                 </header>
                 <div id="apiConfigForm" class="api-config-form">
                     <div class="api-config-body">
                         <aside class="api-config-sidebar">
                             <nav class="api-sidebar-menu" role="navigation">
+                                <div class="api-menu-section">
+                                    <button type="button" class="api-menu-item settings-nav-item" data-item="theme">
+                                        <span class="api-menu-item-name">Theme</span>
+                                    </button>
+                                    <button type="button" class="api-menu-item settings-nav-item" data-item="db">
+                                        <span class="api-menu-item-name">DB Operation</span>
+                                    </button>
+                                </div>
                                 <div class="api-menu-section">
                                     <span class="api-section-title">AI Mode</span>
                                     <div class="api-menu-list" id="apiModeMenuList">
@@ -65,6 +63,25 @@
                             <button type="button" class="api-btn-ghost api-save-btn" id="apiGlobalSaveBtn">Save</button>
                         </aside>
                         <main class="api-config-main" id="apiConfigMain">
+                            <div class="api-panel api-panel-theme" id="apiPanelTheme" data-panel="theme">
+                                <div class="api-edit-card">
+                                    <h3 class="api-edit-title">Theme</h3>
+                                    <div class="settings-theme-options">
+                                        <button type="button" class="settings-theme-option" data-theme="light">Light</button>
+                                        <button type="button" class="settings-theme-option" data-theme="dark">Dark</button>
+                                        <button type="button" class="settings-theme-option" data-theme="black">Black</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="api-panel api-panel-db" id="apiPanelDb" data-panel="db">
+                                <div class="api-edit-card">
+                                    <h3 class="api-edit-title">DB Operation</h3>
+                                    <div class="settings-db-actions">
+                                        <button type="button" class="btn-default" id="settingsRestoreBtn">Restore</button>
+                                        <button type="button" class="btn-danger" id="settingsClearDbBtn">Clear DB</button>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="api-panel api-panel-mode" id="apiPanelMode" data-panel="mode">
                                 <div class="api-edit-card">
                                     <h3 class="api-edit-title" id="apiModePanelTitle">Config</h3>
@@ -95,7 +112,7 @@
                                     </div>
                                 </div>
                                 <div class="api-phase-section">
-                                    <h4 class="api-phase-title">Config by phase (Planner / Executor)</h4>
+                                    <h4 class="api-phase-title">Config by phase</h4>
                                     <div class="api-phase-grid" id="phaseCards"></div>
                                 </div>
                                 <div class="api-edit-actions">
@@ -109,87 +126,70 @@
             </div>
         </div>
         
-        <section class="planner-section" data-section="planner">
-            <div class="section-header" tabindex="0" role="button" aria-expanded="true" aria-controls="planner-content" title="Click to collapse/expand">
-                <h2>Planner<span class="section-chevron" aria-hidden="true"><svg viewBox="0 0 10 6" width="10" height="6"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h2>
+        <main class="main-content">
+            <div class="idea-input-row">
+                <input type="text" id="ideaInput" class="idea-input" placeholder="Enter your research idea..." />
+                <button id="loadExampleIdeaBtn">Load Idea</button>
+                <button id="generatePlanBtn">Generate</button>
+                <button id="stopPlanBtn" class="stop-btn" style="display: none;">Stop</button>
+                <button id="executionBtn">Execute</button>
+                <button id="stopExecutionBtn" class="stop-btn" style="display: none;">Stop</button>
             </div>
-            <div class="planner-content" id="planner-content">
-                <div class="idea-input-row">
-                    <input type="text" id="ideaInput" class="idea-input" placeholder="Enter your research idea..." />
-                    <button id="loadExampleIdeaBtn">Load Idea</button>
-                    <button id="generatePlanBtn">Generate</button>
-                    <button id="stopPlanBtn" class="stop-btn" style="display: none;">Stop</button>
-                    <button id="executionBtn">Execute</button>
-                    <button id="stopExecutionBtn" class="stop-btn" style="display: none;">Stop</button>
+            <div class="executor-stats">
+                <div class="executor-stats-items">
+                    <div class="stat-item">
+                        <span class="stat-label">Workers:</span>
+                        <span class="stat-value" id="executorTotal">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Busy:</span>
+                        <span class="stat-value stat-busy" id="executorBusy">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Validating:</span>
+                        <span class="stat-value stat-validating" id="executorValidating">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Idle:</span>
+                        <span class="stat-value stat-idle" id="executorIdle">0</span>
+                    </div>
                 </div>
-                <div class="planner-thinking-tree-row">
-                    <div class="planner-tree-area" data-tree-area="planner">
-                        <div class="tree-view-tabs">
-                            <button type="button" class="tree-view-tab active" data-view="decomposition" aria-pressed="true">Decomposition</button>
-                            <button type="button" class="tree-view-tab" data-view="execution" aria-pressed="false">Execution</button>
+                <div class="executor-chips" id="executorChips">
+                    <!-- Populated by renderWorkerStates -->
+                </div>
+            </div>
+            <div class="planner-thinking-tree-row">
+                <div class="planner-tree-area" data-tree-area="planner">
+                    <div class="tree-view-tabs">
+                        <button type="button" class="tree-view-tab active" data-view="decomposition" aria-pressed="true">Decomposition</button>
+                        <button type="button" class="tree-view-tab" data-view="execution" aria-pressed="false">Execution</button>
+                        <button type="button" class="tree-view-tab" data-view="output" aria-pressed="false">Output</button>
+                    </div>
+                    <div class="tree-view-panel view-decomposition active" data-view-panel="decomposition">
+                        <div class="planner-quality-badge" id="plannerQualityBadge" title="" style="display: none;"></div>
+                        <div class="tree-container">
+                            <div class="tasks-tree planner-tasks-tree"></div>
                         </div>
-                        <div class="tree-view-panel view-decomposition active" data-view-panel="decomposition">
-                            <div class="planner-quality-badge" id="plannerQualityBadge" title="" style="display: none;"></div>
+                    </div>
+                    <div class="tree-view-panel view-execution" data-view-panel="execution">
+                        <div class="planner-execution-tree-area" data-tree-area="execution">
                             <div class="tree-container">
-                                <div class="tasks-tree planner-tasks-tree"></div>
-                            </div>
-                        </div>
-                        <div class="tree-view-panel view-execution" data-view-panel="execution">
-                            <div class="planner-execution-tree-area" data-tree-area="execution">
-                                <div class="tree-container">
-                                    <div class="tasks-tree planner-execution-tree"></div>
-                                </div>
+                                <div class="tasks-tree planner-execution-tree"></div>
                             </div>
                         </div>
                     </div>
-                    <div class="planner-thinking-area" id="plannerThinkingArea">
-                        <div class="planner-thinking-content markdown-body" id="plannerThinkingContent"></div>
-                        <div class="planner-thinking-placeholder" id="plannerThinkingPlaceholder">Thinking will appear here when generating plan...</div>
+                    <div class="tree-view-panel view-output" data-view-panel="output">
+                        <div class="executor-output-area planner-output-area" id="executorOutputArea">
+                            <div class="executor-output-content markdown-body" id="executorOutputContent"></div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </section>
-
-        <section class="executor-section workers-section" data-section="executors">
-            <div class="section-header" tabindex="0" role="button" aria-expanded="true" aria-controls="executor-content" title="Click to collapse/expand">
-                <h2>Executors<span class="section-chevron" aria-hidden="true"><svg viewBox="0 0 10 6" width="10" height="6"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></h2>
-            </div>
-            <div class="executor-content" id="executor-content">
-                <div class="executor-stats">
-                    <div class="executor-stats-items">
-                        <div class="stat-item">
-                            <span class="stat-label">Executor:</span>
-                            <span class="stat-value" id="executorTotal">0</span>
-                        </div>
-                        <div class="stat-item">
-                            <span class="stat-label">Busy:</span>
-                            <span class="stat-value stat-busy" id="executorBusy">0</span>
-                        </div>
-                        <div class="stat-item">
-                            <span class="stat-label">Validating:</span>
-                            <span class="stat-value stat-validating" id="executorValidating">0</span>
-                        </div>
-                        <div class="stat-item">
-                            <span class="stat-label">Idle:</span>
-                            <span class="stat-value stat-idle" id="executorIdle">0</span>
-                        </div>
-                    </div>
-                    <div class="executor-chips" id="executorChips">
-                        <!-- Populated by renderExecutorStates -->
-                    </div>
-                </div>
-                <div class="executor-thinking-output-row">
-                    <div class="executor-output-area" id="executorOutputArea">
-                        <div class="executor-output-content markdown-body" id="executorOutputContent"></div>
-                        <div class="executor-output-placeholder" id="executorOutputPlaceholder">Final output will appear here when tasks complete...</div>
-                    </div>
-                    <div class="executor-thinking-area" id="executorThinkingArea">
-                        <div class="executor-thinking-content markdown-body" id="executorThinkingContent"></div>
-                        <div class="executor-thinking-placeholder" id="executorThinkingPlaceholder">Executor thinking will appear here (execute / validate)...</div>
-                    </div>
+                <div class="planner-thinking-area" id="plannerThinkingArea">
+                    <div class="planner-thinking-content markdown-body" id="plannerThinkingContent"></div>
+                    <div class="planner-thinking-placeholder" id="plannerThinkingPlaceholder">Thinking will appear here when generating plan or executing tasks...</div>
                 </div>
             </div>
-        </section>
+        </main>
     </div>
 
     <!-- Executor Task Output fullscreen modal -->

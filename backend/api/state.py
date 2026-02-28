@@ -1,5 +1,5 @@
 """
-Shared API state - sio, executor_runner, plan run state.
+Shared API state - sio, runner, plan run state.
 Initialized by main.py after creating app and services.
 """
 
@@ -15,12 +15,12 @@ class PlanRunState:
 
 # Set by main.py
 sio: Any = None
-executor_runner: Any = None
+runner: Any = None
 plan_run_state: Optional[PlanRunState] = None
 
 
-def init_api_state(sio_instance, runner, run_state: PlanRunState):
-    global sio, executor_runner, plan_run_state
+def init_api_state(sio_instance, run_runner, run_state: PlanRunState):
+    global sio, runner, plan_run_state
     sio = sio_instance
-    executor_runner = runner
+    runner = run_runner
     plan_run_state = run_state

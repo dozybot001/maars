@@ -8,14 +8,13 @@ from loguru import logger
 from fastapi.responses import JSONResponse
 
 from db import (
-    get_effective_api_config,
+    get_effective_config,
     get_plan,
     list_plan_outputs,
     save_plan,
 )
-from planner.visualization import build_layout_from_execution
-from planner.layout import compute_decomposition_layout
-from planner.index import run_plan
+from plan.visualization import build_layout_from_execution, compute_decomposition_layout
+from plan.index import run_plan
 
 from ..schemas import PlanLayoutRequest, PlanRunRequest
 from .. import state as api_state
@@ -35,7 +34,7 @@ async def set_plan_layout(body: PlanLayoutRequest):
     plan_id = body.plan_id
     layout = build_layout_from_execution(execution)
     try:
-        api_state.executor_runner.set_layout(layout, plan_id=plan_id, execution=execution)
+        api_state.runner.set_layout(layout, plan_id=plan_id, execution=execution)
     except ValueError as e:
         return JSONResponse(status_code=409, content={"error": str(e)})
     return {"layout": layout}
@@ -88,8 +87,8 @@ async def _run_plan_inner(body: PlanRunRequest):
         if not idea or not isinstance(idea, str) or not idea.strip():
             raise ValueError("Idea is required for plan generation.")
 
-        api_config = await get_effective_api_config()
-        use_mock = api_config.get("useMock", True)
+        config = await get_effective_config()
+        use_mock = config.get("useMock", True)
 
         plan_id = f"plan_{int(time.time() * 1000)}"
         plan = {
@@ -124,7 +123,7 @@ async def _run_plan_inner(body: PlanRunRequest):
 
         result = await run_plan(
             plan, None, on_thinking, abort_event, on_tasks_batch,
-            use_mock=use_mock, api_config=api_config,
+            use_mock=use_mock, api_config=config,
             skip_quality_assessment=body.skip_quality_assessment,
             plan_id=plan_id,
         )

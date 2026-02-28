@@ -20,13 +20,9 @@
     /* ========== Background ========== */
     --bg-color: #f5f7fa;
     --bg-white: #ffffff;
-    --bg-section-planner: #fefefe;
-    --bg-section-planner-views: #fafbfc;
-    --bg-section-executor: #fefefe;
     --bg-area-primary: #ffffff;
     --bg-area-secondary: #f8f9fa;
     --bg-area-tertiary: #f1f3f5;
-    --bg-muted: #f9f9f9;
     --bg-input: #f5f5f5;
     --bg-disabled: #d0d0d0;
 
@@ -97,10 +93,10 @@
     --failure-border: #ff6666;
     --failure-text: #ff6666;
 
-    /* ========== Scrollbar ========== */
-    --scrollbar-track: #f1f3f5;
-    --scrollbar-thumb: #cbd5e0;
-    --scrollbar-thumb-hover: #a0aec0;
+    /* ========== Scrollbar (VSCode style) ========== */
+    --scrollbar-track: transparent;
+    --scrollbar-thumb: rgba(0, 0, 0, 0.2);
+    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
 
     /* ========== Tree ========== */
     --tree-line-stroke: #b0b8c4;
@@ -140,13 +136,9 @@
 
     --bg-color: #0f0f1a;
     --bg-white: #1a1a2e;
-    --bg-section-planner: #16162a;
-    --bg-section-planner-views: #16162a;
-    --bg-section-executor: #16162a;
     --bg-area-primary: #1e1e35;
     --bg-area-secondary: #252540;
     --bg-area-tertiary: #2d2d4a;
-    --bg-muted: #1a1a2e;
     --bg-input: #252540;
     --bg-disabled: #4a5568;
 
@@ -209,9 +201,9 @@
     --failure-border: #ff6666;
     --failure-text: #ff9999;
 
-    --scrollbar-track: #1e1e35;
-    --scrollbar-thumb: #4a5568;
-    --scrollbar-thumb-hover: #718096;
+    --scrollbar-track: transparent;
+    --scrollbar-thumb: rgba(255, 255, 255, 0.2);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.28);
 
     --tree-line-stroke: #4a5568;
     --tree-idea-bg: #252540;
@@ -247,13 +239,9 @@
 
     --bg-color: #050505;
     --bg-white: #0a0a0a;
-    --bg-section-planner: #0a0a0a;
-    --bg-section-planner-views: #0a0a0a;
-    --bg-section-executor: #0a0a0a;
     --bg-area-primary: #0f0f0f;
     --bg-area-secondary: #141414;
     --bg-area-tertiary: #1a1a1a;
-    --bg-muted: #0a0a0a;
     --bg-input: #141414;
     --bg-disabled: #404040;
 
@@ -316,9 +304,9 @@
     --failure-border: #f87171;
     --failure-text: #fca5a5;
 
-    --scrollbar-track: #0f0f0f;
-    --scrollbar-thumb: #404040;
-    --scrollbar-thumb-hover: #525252;
+    --scrollbar-track: transparent;
+    --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.22);
 
     --tree-line-stroke: #404040;
     --tree-idea-bg: #141414;

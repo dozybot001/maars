@@ -106,22 +106,18 @@
             }
         });
 
-        state.socket.on('execution-start', () => {
-            if (executorThinking) executorThinking.clear();
-        });
-
-        state.socket.on('executor-thinking', (data) => {
+        state.socket.on('task-thinking', (data) => {
             if (!executorThinking) return;
             executorThinking.appendChunk(data.chunk || '', data.taskId, data.operation, data.scheduleInfo);
         });
 
-        state.socket.on('executor-output', (data) => {
+        state.socket.on('task-output', (data) => {
             if (!executorThinking || !data.taskId) return;
             executorThinking.setTaskOutput(data.taskId, data.output);
         });
 
-        state.socket.on('executor-states-update', (data) => {
-            plannerViews.renderExecutorStates(data);
+        state.socket.on('worker-states-update', (data) => {
+            plannerViews.renderWorkerStates(data);
         });
 
         state.socket.on('execution-error', (data) => {
@@ -135,10 +131,8 @@
 
         state.socket.on('execution-complete', (data) => {
             console.log(`Execution complete: ${data.completed}/${data.total} tasks completed`);
-            if (executorThinking) {
-                executorThinking.applyHighlight();
-                executorThinking.applyOutputHighlight();
-            }
+            if (plannerThinking) plannerThinking.applyHighlight();
+            if (executorThinking) executorThinking.applyOutputHighlight();
             if (stopExecutionBtn) stopExecutionBtn.style.display = 'none';
             if (executionBtn) {
                 executionBtn.disabled = false;

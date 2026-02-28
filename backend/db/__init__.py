@@ -1,7 +1,7 @@
 """
 Database Module
 File-based storage: db/{plan_id}/ contains plan.json, execution.json, validation.json.
-Planner generates a new plan_id folder on each new plan; all reads/writes use plan_id.
+Plan generates a new plan_id folder on each new plan; all reads/writes use plan_id.
 Uses orjson for faster JSON parsing.
 """
 
@@ -17,7 +17,7 @@ from loguru import logger
 
 DB_DIR = Path(__file__).parent
 DEFAULT_PLAN_ID = "test"
-API_CONFIG_FILE = "api_config.json"
+SETTINGS_FILE = "settings.json"
 
 
 def _validate_plan_id(plan_id: str) -> None:
@@ -191,7 +191,7 @@ async def list_plan_ids() -> list:
 
 
 def _ai_mode_to_flags(ai_mode: str) -> tuple:
-    """Convert aiMode to (useMock, executorAgentMode). aiMode: mock|llm|agent."""
+    """Convert aiMode to (useMock, taskAgentMode). aiMode: mock|llm|agent."""
     if ai_mode == "mock":
         return True, False
     if ai_mode == "agent":
@@ -199,12 +199,12 @@ def _ai_mode_to_flags(ai_mode: str) -> tuple:
     return False, False  # llm
 
 
-def _resolve_api_config(raw: dict) -> dict:
-    """Resolve presets+current to effective config. aiMode: mock|llm|agent."""
+def _resolve_config(raw: dict) -> dict:
+    """Resolve presets+current to effective config for LLM/plan/execution. aiMode: mock|llm|agent."""
     if not raw:
         return {}
     ai_mode = raw.get("aiMode") or "mock"
-    use_mock, exec_agent = _ai_mode_to_flags(ai_mode)
+    use_mock, task_agent = _ai_mode_to_flags(ai_mode)
 
     presets = raw.get("presets")
     current = raw.get("current")
@@ -214,44 +214,53 @@ def _resolve_api_config(raw: dict) -> dict:
     else:
         cfg = {k: v for k, v in raw.items() if k not in ("presets", "current", "aiMode")}
     cfg["useMock"] = use_mock
-    cfg["executorAgentMode"] = exec_agent
-    cfg["plannerAgentMode"] = exec_agent  # Agent mode: both Planner and Executor are agents
+    cfg["taskAgentMode"] = task_agent
+    cfg["planAgentMode"] = task_agent  # Agent mode: both plan and task execution use agents
     mode_config = raw.get("modeConfig") or {}
     cfg["modeConfig"] = mode_config
     for m in ("llm", "agent"):
         pm = mode_config.get(m) or {}
-        t = pm.get("plannerLlmTemperature")
+        t = pm.get("planLlmTemperature")
         if t is not None:
             cfg["temperature"] = float(t)
             break
     return cfg
 
 
-async def get_api_config() -> dict:
-    """Get full API config (with presets) from db/api_config.json. For frontend."""
-    file_path = DB_DIR / API_CONFIG_FILE
+async def get_settings() -> dict:
+    """Get full settings from db/settings.json. For frontend and other modules."""
+    file_path = DB_DIR / SETTINGS_FILE
     try:
         async with aiofiles.open(file_path, "rb") as f:
             data = await f.read()
             return orjson.loads(data)
     except FileNotFoundError:
+        legacy = DB_DIR / "api_config.json"
+        if legacy.exists():
+            try:
+                data = orjson.loads(legacy.read_bytes())
+                migrated = data if isinstance(data, dict) else {}
+                await save_settings(migrated)
+                return migrated
+            except Exception as e:
+                logger.warning("Failed to migrate api_config.json: %s", e)
         return {}
     except orjson.JSONDecodeError as e:
         logger.warning("Invalid JSON in %s: %s", file_path, e)
         return {}
 
 
-async def get_effective_api_config() -> dict:
-    """Get effective API config for LLM calls (resolves current preset)."""
-    raw = await get_api_config()
-    return _resolve_api_config(raw)
+async def get_effective_config() -> dict:
+    """Get effective config for LLM/plan/execution (resolves current preset from settings)."""
+    raw = await get_settings()
+    return _resolve_config(raw)
 
 
-async def save_api_config(config: dict) -> dict:
-    """Save API config to db/api_config.json. Atomic write to avoid corruption."""
-    file_path = DB_DIR / API_CONFIG_FILE
+async def save_settings(settings: dict) -> dict:
+    """Save settings to db/settings.json. Atomic write to avoid corruption."""
+    file_path = DB_DIR / SETTINGS_FILE
     tmp_path = file_path.with_suffix(file_path.suffix + ".tmp")
-    content = orjson.dumps(config or {}, option=orjson.OPT_INDENT_2).decode("utf-8")
+    content = orjson.dumps(settings or {}, option=orjson.OPT_INDENT_2).decode("utf-8")
     async with aiofiles.open(tmp_path, "w", encoding="utf-8") as f:
         await f.write(content)
     tmp_path.replace(file_path)

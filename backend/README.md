@@ -7,14 +7,13 @@
 | 目录 | 职责 |
 |------|------|
 | api/ | 路由、schemas、共享状态 |
-| planner/ | AI 规划：atomicity → decompose → format；含 visualization（执行图） |
-| executor/ | 任务执行与调度（Execute → Validate） |
-| shared/ | 公共工具（graph） |
+| plan/ | AI 规划：atomicity → decompose → format；含 visualization（分解树、执行图布局） |
+| execution/ | 任务执行与调度（Execute → Validate） |
 | db/ | 文件存储：db/{plan_id}/ |
 | test/ | Mock AI |
 
 ## 数据流
 
 ```
-plan.json ← Planner     execution.json ← Planner (visualization)     Execution → 状态更新
+plan.json ← plan     execution.json ← plan (visualization)     execution → 状态更新
 ```
