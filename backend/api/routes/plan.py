@@ -13,7 +13,7 @@ from db import (
     list_plan_outputs,
     save_plan,
 )
-from plan.visualization import build_layout_from_execution, compute_decomposition_layout
+from visualization import build_layout_from_execution, compute_decomposition_layout
 from plan.index import run_plan
 
 from ..schemas import PlanLayoutRequest, PlanRunRequest

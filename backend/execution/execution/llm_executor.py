@@ -13,7 +13,8 @@ import orjson
 import json_repair
 
 from db import ensure_sandbox_dir
-from plan.llm_client import chat_completion, merge_phase_config
+from shared.llm_client import chat_completion, merge_phase_config
+from shared.utils import chunk_string
 
 from .agent_tools import TOOLS, execute_tool
 
@@ -26,7 +27,7 @@ async def _mock_execute(output_format: str, task_id: str, on_thinking: Optional[
     if _is_json_format(output_format):
         result = {"_mock": True, "task_id": task_id, "note": "Simulated output (Mock AI mode)"}
         if on_thinking:
-            for chunk in _chunk_string(orjson.dumps(result, option=orjson.OPT_INDENT_2).decode("utf-8"), 20):
+            for chunk in chunk_string(orjson.dumps(result, option=orjson.OPT_INDENT_2).decode("utf-8"), 20):
                 r = on_thinking(chunk, task_id=task_id, operation="Execute")
                 if asyncio.iscoroutine(r):
                     await r
@@ -34,18 +35,12 @@ async def _mock_execute(output_format: str, task_id: str, on_thinking: Optional[
         return result
     text = f"# Mock Output\n\nSimulated content for task {task_id}.\n\n(Mock AI mode)"
     if on_thinking:
-        for chunk in _chunk_string(text, 20):
+        for chunk in chunk_string(text, 20):
             r = on_thinking(chunk, task_id=task_id, operation="Execute")
             if asyncio.iscoroutine(r):
                 await r
             await asyncio.sleep(_MOCK_CHUNK_DELAY)
     return text
-
-
-def _chunk_string(s: str, size: int):
-    """Yield string in chunks for simulated streaming."""
-    for i in range(0, len(s), size):
-        yield s[i : i + size]
 
 
 def _is_json_format(output_format: str) -> bool:

@@ -1,14 +1,11 @@
 """
 Generate execution from plan: extract atomic tasks, resolve dependencies, recompute stages.
-
-Dependency resolution:
-  1. Inherit: each task inherits its ancestors' cross-subtree dependencies.
-  2. Resolve: non-atomic dep targets are replaced with their atomic descendants.
+Business logic: plan → execution for db storage.
 """
 
 from typing import Dict, List, Set
 
-from plan.graph import get_ancestor_chain, get_parent_id
+from shared.graph import get_ancestor_chain, get_parent_id, compute_task_stages
 
 
 def _is_atomic(task: Dict) -> bool:
@@ -80,8 +77,6 @@ def build_execution_from_plan(plan: Dict) -> Dict:
         return {"tasks": []}
 
     resolved = _resolve_deps_for_atomic(all_tasks, atomic_tasks)
-
-    from .tasks.stages import compute_task_stages
     staged = compute_task_stages(resolved)
     flat = []
     for stage_list in staged:

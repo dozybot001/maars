@@ -69,8 +69,10 @@ maars/
 ├── backend/
 │   ├── main.py          # FastAPI + Socket.io 入口
 │   ├── api/             # 路由、schemas、state
-│   ├── plan/            # 规划：atomicity → decompose → format，含 visualization
+│   ├── plan/            # 规划：atomicity → decompose → format（业务逻辑）
+│   ├── visualization/   # 分解树、执行图布局
 │   ├── execution/       # 执行：runner、execution、validation
+│   ├── shared/          # 共享模块：graph、llm_client、skill_utils、utils
 │   ├── db/              # 文件存储：db/{plan_id}/、settings.json
 │   └── test/            # Mock AI
 └── frontend/            # 静态页面、任务树、WebSocket
@@ -84,4 +86,4 @@ maars/
 
 - [前端脚本与模块依赖](docs/FRONTEND_SCRIPTS.md)
 - [Release Note 标准](docs/RELEASE_NOTE_STANDARD.md)
-- [执行图布局规则](backend/plan/visualization/EXECUTION_LAYOUT_RULES.md)
+- [执行图布局规则](backend/visualization/EXECUTION_LAYOUT_RULES.md)

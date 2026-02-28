@@ -14,9 +14,9 @@ import orjson
 import json_repair
 
 from db import save_ai_response
-from .graph import build_dependency_graph, get_ancestor_path, get_parent_id
-from .llm_client import chat_completion as real_chat_completion, merge_phase_config
-from .agent_tools import PLANNER_TOOLS, execute_planner_tool
+from shared.graph import build_dependency_graph, get_ancestor_path, get_parent_id
+from shared.llm_client import chat_completion as real_chat_completion, merge_phase_config
+from .agent_tools import PLANNER_TOOLS, _find_task_idx, execute_planner_tool
 from test.mock_stream import mock_chat_completion
 
 PLAN_DIR = Path(__file__).parent
@@ -79,11 +79,6 @@ _OP_LABELS = {
     "format": "Format",
     "quality": "Quality",
 }
-
-
-def _find_task_idx(all_tasks: List[Dict], task_id: str) -> int:
-    """Return index of task in all_tasks, or -1 if not found."""
-    return next((i for i, t in enumerate(all_tasks) if t.get("task_id") == task_id), -1)
 
 
 def _build_user_message(response_type: str, task: Dict, context: Optional[Dict] = None) -> str:

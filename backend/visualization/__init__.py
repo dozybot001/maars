@@ -1,8 +1,8 @@
 """
-Plan visualization - Decomposition Tree, Execution Graph.
+Visualization - Decomposition Tree, Execution Graph layout.
 
-Builds layout from execution, generates execution from plan.
-All layout and visualization logic consolidated here.
+Reads data (from db via API), computes layout, returns for render.
+No dependency on plan; pure visualization logic.
 """
 
 import json
@@ -11,11 +11,9 @@ from typing import Any, Dict, List
 from .decomposition_layout import compute_decomposition_layout
 from .execution_layout import compute_execution_graph_layout
 from .tasks.tree_data import build_tree_data
-from .execution_builder import build_execution_from_plan
 
 __all__ = [
     "build_layout_from_execution",
-    "build_execution_from_plan",
     "compute_decomposition_layout",
     "compute_execution_graph_layout",
 ]

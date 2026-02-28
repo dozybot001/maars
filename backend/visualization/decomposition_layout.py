@@ -9,7 +9,7 @@ Each node gets a fixed slot — subtree width does not affect sibling spacing.
 
 from typing import Any, Dict, List, Optional
 
-from plan.graph import get_parent_id, natural_task_id_key
+from shared.graph import get_parent_id, natural_task_id_key
 
 from .constants import (
     DEFAULT_NODE_H,

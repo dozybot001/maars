@@ -16,7 +16,7 @@
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
     font-size: 14px;
-    font-family: inherit;
+    font-family: var(--font-family);
     background: var(--bg-input);
     color: var(--text-color);
 }
@@ -105,7 +105,7 @@
 .planner-thinking-block--schedule .planner-thinking-block-schedule-text {
     font-size: 11px;
     color: var(--text-muted);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-family);
 }
 
 .planner-thinking-block-header {

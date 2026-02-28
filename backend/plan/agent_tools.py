@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import orjson
-import yaml
 
-from plan.graph import get_ancestor_path, get_parent_id
+from shared.graph import get_ancestor_path, get_parent_id
+from shared.skill_utils import parse_skill_frontmatter
 
 # Plan skills root: MAARS_PLAN_SKILLS_DIR env or backend/plan/skills/
 _PLAN_SKILLS_DIR = os.environ.get("MAARS_PLAN_SKILLS_DIR")
@@ -25,19 +25,6 @@ PLAN_SKILLS_ROOT = (
 def _find_task_idx(all_tasks: List[Dict], task_id: str) -> int:
     """Return index of task in all_tasks, or -1 if not found."""
     return next((i for i, t in enumerate(all_tasks) if t.get("task_id") == task_id), -1)
-
-
-def _parse_skill_frontmatter(content: str) -> dict:
-    """Parse YAML frontmatter from SKILL.md."""
-    if not content or "---" not in content:
-        return {}
-    parts = content.split("---", 2)
-    if len(parts) < 3:
-        return {}
-    try:
-        return yaml.safe_load(parts[1]) or {}
-    except yaml.YAMLError:
-        return {}
 
 
 def _planner_list_skills() -> str:
@@ -54,7 +41,7 @@ def _planner_list_skills() -> str:
                 continue
             try:
                 content = skill_md.read_text(encoding="utf-8", errors="replace")
-                meta = _parse_skill_frontmatter(content)
+                meta = parse_skill_frontmatter(content)
                 name = meta.get("name") or item.name
                 desc = meta.get("description") or ""
                 skills.append({"name": name, "description": desc})

@@ -1,5 +1,5 @@
 """
-LLM client for plan. Uses Google GenAI SDK (Gemini API only).
+LLM client for plan and execution. Uses Google GenAI SDK (Gemini API only).
 """
 
 import asyncio

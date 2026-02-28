@@ -9,7 +9,7 @@ Pipeline (each run, no old stage reused):
 
 from typing import List, Dict
 
-from .stages import compute_task_stages
+from shared.graph import compute_task_stages
 
 
 def extract_cache_from_tasks(tasks: List[Dict]) -> List[Dict]:

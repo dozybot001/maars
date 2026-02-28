@@ -9,7 +9,7 @@ See EXECUTION_LAYOUT_RULES.md for full sorting and alignment rules.
 
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from plan.graph import natural_task_id_key
+from shared.graph import natural_task_id_key
 
 from .constants import (
     DEFAULT_NODE_H,

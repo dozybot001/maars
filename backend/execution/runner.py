@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Set
 from loguru import logger
 
 from db import save_execution, save_task_artifact
+from shared.utils import chunk_string
 from .pools import worker_manager
 from .execution import resolve_artifacts, execute_task
 from .validation import validate_task_output
@@ -30,12 +31,6 @@ def _int_env(name: str, default: int) -> int:
 _RUNNER_EXECUTION_PASS_PROBABILITY = _float_env("MAARS_EXECUTION_PASS_PROBABILITY", 0.95)
 _RUNNER_VALIDATION_PASS_PROBABILITY = _float_env("MAARS_VALIDATION_PASS_PROBABILITY", 0.95)
 _RUNNER_MAX_FAILURES = _int_env("MAARS_MAX_FAILURES", 3)
-
-
-def _chunk_string(s: str, size: int):
-    """Yield string in chunks for simulated streaming."""
-    for i in range(0, len(s), size):
-        yield s[i : i + size]
 
 
 class ExecutionRunner:
@@ -308,7 +303,7 @@ class ExecutionRunner:
                 validation_passed, report = validate_task_output(
                     result, output_spec, task_id
                 )
-            for chunk in _chunk_string(report, 20):
+            for chunk in chunk_string(report, 20):
                 await self._emit_await("task-thinking", {"chunk": chunk, "taskId": task_id, "operation": "Validate"})
                 await asyncio.sleep(_MOCK_VALIDATOR_CHUNK_DELAY)
 

@@ -10,7 +10,6 @@
     const API_BASE_URL = _base + '/api';
     const WS_URL = (typeof window !== 'undefined' && window.location) ? window.location.origin : 'http://localhost:3001';
     const PLAN_ID_KEY = 'maars-plan-id';
-    const THEME_STORAGE_KEY = 'maars-theme';
     const THEMES = ['light', 'dark', 'black'];
 
     function getCurrentPlanId() {
@@ -59,7 +58,6 @@
         API_BASE_URL,
         WS_URL,
         PLAN_ID_KEY,
-        THEME_STORAGE_KEY,
         THEMES,
         getCurrentPlanId,
         setCurrentPlanId,

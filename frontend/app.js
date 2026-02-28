@@ -12,8 +12,8 @@
         const ws = window.MAARS?.ws;
 
         if (theme) {
-            theme.initTheme();
-            theme.initApiConfigModal();
+            theme.initTheme().catch(() => {});
+            theme.initSettingsModal();
         }
         if (cfg && cfg.resolvePlanId) cfg.resolvePlanId().catch(() => {});
         if (planner) planner.init();

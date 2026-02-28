@@ -80,11 +80,11 @@
     --accent-primary-border: #94a3b8;
     --accent-text-on-primary: #ffffff;
 
-    /* ========== API Config - selected / hover (grayscale) ========== */
-    --api-select-bg-hover: #dee2e6;
-    --api-select-bg-active: #ced4da;
-    --api-select-bg-selected: #adb5bd;
-    --api-select-text: #495057;
+    /* ========== Settings nav (selected / hover) ========== */
+    --settings-select-hover: #dee2e6;
+    --settings-select-active: #ced4da;
+    --settings-select-selected: #adb5bd;
+    --settings-select-text: #495057;
 
     /* ========== Failure (unified) ========== */
     --failure-bg: #ffcccc;
@@ -93,10 +93,10 @@
     --failure-border: #ff6666;
     --failure-text: #ff6666;
 
-    /* ========== Scrollbar (VSCode style) ========== */
-    --scrollbar-track: transparent;
-    --scrollbar-thumb: rgba(0, 0, 0, 0.2);
-    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.28);
+    /* ========== Scrollbar (subtle, blends with bg) ========== */
+    --scrollbar-track: var(--bg-area-secondary);
+    --scrollbar-thumb: rgba(0, 0, 0, 0.18);
+    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.26);
 
     /* ========== Tree ========== */
     --tree-line-stroke: #b0b8c4;
@@ -190,10 +190,10 @@
     --accent-primary-border: #64748b;
     --accent-text-on-primary: #0f172a;
 
-    --api-select-bg-hover: #4a5568;
-    --api-select-bg-active: #5a6578;
-    --api-select-bg-selected: #3d4758;
-    --api-select-text: #cbd5e0;
+    --settings-select-hover: #4a5568;
+    --settings-select-active: #5a6578;
+    --settings-select-selected: #3d4758;
+    --settings-select-text: #cbd5e0;
 
     --failure-bg: #5c2a2a;
     --failure-bg-hover: #7a3838;
@@ -201,9 +201,9 @@
     --failure-border: #ff6666;
     --failure-text: #ff9999;
 
-    --scrollbar-track: transparent;
+    --scrollbar-track: var(--bg-area-secondary);
     --scrollbar-thumb: rgba(255, 255, 255, 0.2);
-    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.28);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
 
     --tree-line-stroke: #4a5568;
     --tree-idea-bg: #252540;
@@ -293,10 +293,10 @@
     --accent-primary-border: #525252;
     --accent-text-on-primary: #fafafa;
 
-    --api-select-bg-hover: #404040;
-    --api-select-bg-active: #525252;
-    --api-select-bg-selected: #363636;
-    --api-select-text: #a3a3a3;
+    --settings-select-hover: #404040;
+    --settings-select-active: #525252;
+    --settings-select-selected: #363636;
+    --settings-select-text: #a3a3a3;
 
     --failure-bg: #3d1a1a;
     --failure-bg-hover: #522222;
@@ -304,9 +304,9 @@
     --failure-border: #f87171;
     --failure-text: #fca5a5;
 
-    --scrollbar-track: transparent;
+    --scrollbar-track: var(--bg-area-secondary);
     --scrollbar-thumb: rgba(255, 255, 255, 0.15);
-    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.22);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.24);
 
     --tree-line-stroke: #404040;
     --tree-idea-bg: #141414;

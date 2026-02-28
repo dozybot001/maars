@@ -1,8 +1,10 @@
 /**
- * Base - Reset, variables, scrollbar, body
+ * Base - Reset, variables, body
  */
 
 :root {
+    --font-family: 'JetBrains Mono', monospace;
+
     /* Layout (non-color) */
     --area-height: 300px;
     --main-content-height: 550px;
@@ -23,7 +25,7 @@
     --placeholder-color: var(--text-muted);
     --placeholder-font-size: 14px;
 
-    /* Scrollbar - VSCode style */
+    /* Scrollbar - thin, subtle */
     --scrollbar-width: 8px;
 
     /* Button - unified design system */
@@ -41,25 +43,24 @@
     --state-transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
 }
 
-/* Scrollbar - VSCode style (thin, minimal, semi-transparent) */
+/* Scrollbar - subtle track, semi-transparent thumb */
 *::-webkit-scrollbar {
     width: var(--scrollbar-width);
     height: var(--scrollbar-width);
 }
 *::-webkit-scrollbar-track {
-    background: transparent;
+    background: var(--scrollbar-track);
 }
 *::-webkit-scrollbar-thumb {
     background-color: var(--scrollbar-thumb);
+    border-radius: 4px;
 }
 *::-webkit-scrollbar-thumb:hover {
     background-color: var(--scrollbar-thumb-hover);
 }
 *::-webkit-scrollbar-corner {
-    background: transparent;
+    background: var(--scrollbar-track);
 }
-
-/* Firefox only - Chrome 121+ prefers scrollbar-width/color over webkit when both present */
 @supports not selector(::-webkit-scrollbar) {
     html {
         scrollbar-width: thin;
@@ -71,13 +72,23 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    font-family: var(--font-family);
+}
+
+html {
+    font-family: var(--font-family);
 }
 
 body {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-family);
     line-height: 1.6;
     color: var(--text-color);
     background: var(--bg-color);
+}
+
+/* Override highlight.js to use JetBrains Mono */
+.hljs {
+    font-family: var(--font-family) !important;
 }
 
 .container {

@@ -212,11 +212,16 @@ def _resolve_config(raw: dict) -> dict:
         cfg = dict(presets[current])
         cfg.pop("label", None)
     else:
-        cfg = {k: v for k, v in raw.items() if k not in ("presets", "current", "aiMode")}
+        cfg = {}
     cfg["useMock"] = use_mock
     cfg["taskAgentMode"] = task_agent
-    cfg["planAgentMode"] = task_agent  # Agent mode: both plan and task execution use agents
     mode_config = raw.get("modeConfig") or {}
+    # planAgentMode: in agent mode, can downgrade plan to LLM via modeConfig.agent.planAgentMode (default True)
+    if ai_mode == "agent":
+        agent_cfg = mode_config.get("agent") or {}
+        cfg["planAgentMode"] = agent_cfg.get("planAgentMode", True)
+    else:
+        cfg["planAgentMode"] = False
     cfg["modeConfig"] = mode_config
     for m in ("llm", "agent"):
         pm = mode_config.get(m) or {}
@@ -235,15 +240,6 @@ async def get_settings() -> dict:
             data = await f.read()
             return orjson.loads(data)
     except FileNotFoundError:
-        legacy = DB_DIR / "api_config.json"
-        if legacy.exists():
-            try:
-                data = orjson.loads(legacy.read_bytes())
-                migrated = data if isinstance(data, dict) else {}
-                await save_settings(migrated)
-                return migrated
-            except Exception as e:
-                logger.warning("Failed to migrate api_config.json: %s", e)
         return {}
     except orjson.JSONDecodeError as e:
         logger.warning("Invalid JSON in %s: %s", file_path, e)

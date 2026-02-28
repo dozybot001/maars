@@ -43,7 +43,7 @@
 .executor-output-modal-body.markdown-body code {
     padding: 0.15em 0.35em;
     font-size: 0.9em;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-family);
     background: var(--bg-area-tertiary);
     border-radius: 4px;
 }
@@ -54,7 +54,7 @@
     padding: 10px 12px;
     overflow-x: auto;
     font-size: 11px;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-family);
     background: var(--bg-area-tertiary);
     border-radius: 4px;
     white-space: pre-wrap;
@@ -157,7 +157,6 @@ button:disabled:not([class]),
 [data-theme="black"] .theme-toggle-btn .theme-icon-black { opacity: 1; }
 
 /* Variant: close (×) */
-.api-modal-close,
 .executor-output-modal-close,
 .executor-output-modal-download,
 .task-detail-popover-close,
@@ -190,13 +189,13 @@ button:disabled:not([class]),
 }
 
 /* close + expand shared hover/active */
-.api-modal-close:hover, .executor-output-modal-close:hover,
+.executor-output-modal-close:hover,
 .executor-output-modal-download:hover, .task-detail-popover-close:hover, .btn-close:hover,
 .executor-output-block-expand:hover, .btn-expand:hover {
     color: var(--text-color);
     background: var(--btn-hover-bg);
 }
-.api-modal-close:active, .executor-output-modal-close:active,
+.executor-output-modal-close:active,
 .executor-output-modal-download:active, .task-detail-popover-close:active, .btn-close:active,
 .executor-output-block-expand:active, .btn-expand:active {
     color: var(--text-color);
@@ -204,7 +203,6 @@ button:disabled:not([class]),
 }
 
 /* Variant: ghost */
-.api-btn-ghost,
 .btn-ghost {
     padding: 9px 20px;
     font-size: 13px;
@@ -212,71 +210,7 @@ button:disabled:not([class]),
     background: transparent;
     color: var(--text-secondary);
 }
-.api-btn-ghost:hover,
 .btn-ghost:hover { color: var(--text-color); }
-
-/* Variant: menu */
-.api-menu-item,
-.btn-menu {
-    display: flex; flex-direction: column; align-items: flex-start;
-    gap: 2px;
-    padding: 10px 12px;
-    font-size: 13px;
-    color: var(--text-color);
-    background: none;
-    border: 1px solid transparent;
-    text-align: left;
-    width: 100%;
-    min-width: 0;
-}
-.api-menu-item:hover,
-.btn-menu:hover { background: var(--api-select-bg-hover); color: var(--api-select-text); }
-.api-menu-item:active,
-.btn-menu:active { background: var(--api-select-bg-active); color: var(--api-select-text); }
-.api-menu-item.active,
-.btn-menu.active { background: var(--api-select-bg-selected); color: var(--api-select-text); }
-
-.api-menu-item.active:hover,
-.api-menu-item.active:active,
-.btn-menu.active:hover,
-.btn-menu.active:active { background: var(--api-select-bg-selected); }
-
-.api-menu-item-meta {
-    font-size: 11px; font-weight: 400; color: var(--text-muted);
-    line-height: 1.3;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    max-width: 100%; min-width: 0;
-}
-.api-menu-item.active .api-menu-item-meta { color: var(--api-select-text); opacity: 0.9; }
-.api-menu-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-
-/* Variant: menu-add */
-.api-menu-add,
-.btn-menu-add {
-    margin-top: 6px;
-    padding: 10px 12px;
-    font-size: 12px;
-    color: var(--text-muted);
-    background: none;
-    border: 1px dashed var(--border-color);
-    width: 100%;
-    text-align: left;
-}
-
-.api-menu-add:hover,
-.btn-menu-add:hover {
-    background: var(--btn-hover-bg);
-    color: var(--text-secondary);
-    border-color: var(--btn-hover-border);
-}
-.api-menu-add:active,
-.btn-menu-add:active {
-    background: var(--btn-active-bg);
-    color: var(--text-color);
-    border-color: var(--btn-hover-border);
-}
-
-.api-save-btn { margin-top: auto; flex-shrink: 0; }
 
 /* Variant: tab */
 .task-detail-tab,
@@ -331,7 +265,7 @@ button:disabled:not([class]),
 .btn-danger:active:not(:disabled) { background: var(--failure-bg-active); box-shadow: var(--shadow-lg); }
 
 /* Modal overrides */
-.modal-content-config button {
+.modal-content--settings button {
     box-shadow: none;
 }
 
@@ -382,7 +316,6 @@ button:disabled:not([class]),
 
 .modal-header,
 .modal-dialog-header,
-.api-modal-header,
 .executor-output-modal-header {
     display: flex;
     align-items: center;
@@ -396,7 +329,6 @@ button:disabled:not([class]),
 .modal-title,
 .modal-header h2,
 .modal-dialog-header .modal-title,
-.api-modal-title,
 .executor-output-modal-title {
     margin: 0;
     font-size: 14px;
@@ -415,11 +347,11 @@ button:disabled:not([class]),
     padding: 16px 20px;
 }
 
-/* Legacy modal (API config uses .modal) */
+/* Settings modal uses .modal */
 .modal {
     padding: 24px 16px 48px;
 }
-.modal .modal-content:not(.modal-content-config) {
+.modal .modal-content:not(.modal-content--settings) {
     margin: 0 auto;
     padding: 0;
     width: 500px;

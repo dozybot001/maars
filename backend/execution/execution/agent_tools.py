@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
 import orjson
-import yaml
 
 from db import DB_DIR, _validate_plan_id, get_sandbox_dir, get_task_artifact
+from shared.skill_utils import parse_skill_frontmatter
 
 # RunSkillScript: allowed extensions, timeout (seconds, configurable via env)
 _RUN_SCRIPT_ALLOWED_EXT = (".py", ".sh", ".js")
@@ -263,19 +263,6 @@ async def run_write_file(plan_id: str, path: str, content: str, task_id: str = "
         return f"Error writing file: {e}"
 
 
-def _parse_skill_frontmatter(content: str) -> dict:
-    """Parse YAML frontmatter from SKILL.md. Returns dict with name, description, etc."""
-    if not content or "---" not in content:
-        return {}
-    parts = content.split("---", 2)
-    if len(parts) < 3:
-        return {}
-    try:
-        return yaml.safe_load(parts[1]) or {}
-    except yaml.YAMLError:
-        return {}
-
-
 def run_list_skills() -> str:
     """Execute ListSkills. Returns JSON string of [{name, description}, ...] or error."""
     try:
@@ -290,7 +277,7 @@ def run_list_skills() -> str:
                 continue
             try:
                 content = skill_md.read_text(encoding="utf-8", errors="replace")
-                meta = _parse_skill_frontmatter(content)
+                meta = parse_skill_frontmatter(content)
                 name = meta.get("name") or item.name
                 desc = meta.get("description") or ""
                 skills.append({"name": name, "description": desc})

@@ -4,7 +4,7 @@
 
 1. **默认有边框**：所有按钮默认具备可见边框（`1px solid`），保证视觉边界清晰
 2. **三种背景色与容器背景色的色差递增**：默认（色差最小）→ hover（色差中等）→ active（色差最大，点击反馈）
-3. **选中状态**：选中态使用专用变量（如 `--api-select-bg-selected`），通常比 hover 更深
+3. **选中状态**：选中态使用专用变量（如 `--settings-select-selected`），通常比 hover 更深
 4. **统一 hover 逻辑**：hover 时背景与边框使用统一变量，无缩放/位移效果
 5. **无 focus 外圈**：移除 `outline`，避免点击时出现外圈边框
 
@@ -33,7 +33,7 @@
 | **默认** | 各变体自定义背景色（与容器色差最小） |
 | **hover** | `background: var(--btn-hover-bg)`, `border-color: var(--btn-hover-border)`（色差中等） |
 | **active** | `background: var(--btn-active-bg)`（色差最大，点击反馈） |
-| **选中** | 维持 hover 背景色（如 `.api-menu-item.active`） |
+| **选中** | 维持 hover 背景色（如 `.settings-nav-item.active`） |
 | **disabled** | `opacity: 0.5`, `cursor: not-allowed` |
 | **focus** | `outline: none`（无外圈） |
 
@@ -52,7 +52,7 @@
 - 背景：`var(--bg-area-secondary)`
 
 ### close（关闭按钮）
-- 适用：`.close`, `.api-modal-close`, `.executor-output-modal-close`, `.task-detail-popover-close`
+- 适用：`.close`, `.executor-output-modal-close`, `.task-detail-popover-close`
 - 尺寸：32×32px
 - 边框：`1px solid var(--border-color)`
 - 背景：`transparent`，hover 时 `var(--btn-hover-bg)`
@@ -63,20 +63,20 @@
 - 背景：`transparent`，hover 时 `var(--btn-hover-bg)`
 
 ### ghost（描边透明）
-- 适用：`.api-btn-ghost`, `.btn-ghost`
+- 适用：`.btn-ghost`
 - 边框：`1px solid var(--border-color)`
 - 背景：`transparent`
 
 ### menu（侧栏菜单项）
-- 适用：`.api-menu-item`, `.btn-menu`
+- 适用：`.settings-nav-item`
 - 边框：`1px solid transparent`
-- 背景：`none`，hover `var(--api-select-bg-hover)`，active `var(--api-select-bg-active)`，选中 `var(--api-select-bg-selected)`
-- 选中（`.active`）：`var(--api-select-bg-selected)`（比 hover 更深，避免过亮）
+- 背景：`none`，hover `var(--settings-select-hover)`，active `var(--settings-select-active)`，选中 `var(--settings-select-selected)`
+- 选中（`.active`）：`var(--settings-select-selected)`（比 hover 更深，避免过亮）
 
-### menu-add（添加项）
-- 适用：`.api-menu-add`, `.btn-menu-add`
+### preset-add（预设添加）
+- 适用：`.settings-preset-add`
 - 边框：`1px dashed var(--border-color)`
-- 背景：`transparent`，hover `var(--btn-hover-bg)`，active `var(--btn-active-bg)`
+- 背景：`var(--bg-white)`，hover `var(--btn-hover-bg)`
 
 ### tab（标签）
 - 适用：`.task-detail-tab`, `.btn-tab`
