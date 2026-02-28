@@ -1,7 +1,6 @@
 """
-Plan module - atomicity check, decompose, format flow.
-(Atomicity = check if task is atomic; output validation is in execution phase.)
-Uses real LLM by default; Mock AI when use_mock=True.
+Plan Agent 单轮 LLM 实现 - atomicity, decompose, format, quality.
+Agent 实现放在 plan_agent/，单轮 LLM 放在 plan_agent/llm/。
 """
 
 import asyncio
@@ -16,10 +15,9 @@ import json_repair
 from db import save_ai_response
 from shared.graph import build_dependency_graph, get_ancestor_path, get_parent_id
 from shared.llm_client import chat_completion as real_chat_completion, merge_phase_config
-from .agent_tools import PLANNER_TOOLS, _find_task_idx, execute_planner_tool
 from test.mock_stream import mock_chat_completion
 
-PLAN_DIR = Path(__file__).parent
+PLAN_DIR = Path(__file__).resolve().parent.parent
 MOCK_AI_DIR = PLAN_DIR.parent / "test" / "mock-ai"
 MAX_CONCURRENT_CALLS = 10
 MAX_VALIDATION_RETRIES = 2
@@ -70,9 +68,6 @@ async def _load_mock_response(response_type: str, task_id: str) -> Optional[Dict
     return {"content": content_str, "reasoning": entry.get("reasoning", "")}
 
 
-# Operation labels for thinking display
-# "atomicity" = atomicity check (whether task is atomic, no further decomposition)
-# "validator" in execution = output validation (whether task output meets criteria)
 _OP_LABELS = {
     "atomicity": "Atomicity",
     "decompose": "Decompose",
@@ -194,7 +189,6 @@ async def _call_chat_completion(
         phase = "format"
     cfg = merge_phase_config(api_config, phase)
     effective_on_chunk = stream_chunk if (stream and on_thinking) else None
-    # JSON mode for atomicity/quality (pure JSON); decompose/format keep reasoning + JSON block
     response_format = {"type": "json_object"} if response_type in ("atomicity", "quality") else None
     async with _get_call_semaphore():
         return await real_chat_completion(
@@ -221,7 +215,6 @@ def _parse_json_response(text: str) -> Any:
 
 
 def _validate_atomicity_response(result: Any) -> bool:
-    """Validate atomicity check output. Returns True if valid."""
     if not isinstance(result, dict):
         return False
     if "atomic" not in result:
@@ -231,7 +224,6 @@ def _validate_atomicity_response(result: Any) -> bool:
 
 
 def _validate_decompose_response(result: Any, parent_id: str) -> tuple[bool, str]:
-    """Validate decompose output. Returns (valid, error_msg)."""
     if not isinstance(result, dict):
         return False, "Response is not a dict"
     tasks = result.get("tasks")
@@ -271,13 +263,58 @@ def _validate_decompose_response(result: Any, parent_id: str) -> tuple[bool, str
     return True, ""
 
 
-def _raise_if_aborted(abort_event: Optional[Any]) -> None:
-    """Raise CancelledError if abort_event is set. Call before any LLM/API call to avoid token waste."""
+def raise_if_aborted(abort_event: Optional[Any]) -> None:
+    """Raise CancelledError if abort_event is set."""
     if abort_event is not None and abort_event.is_set():
         raise asyncio.CancelledError("Aborted")
 
 
-async def _decompose_task(
+async def check_atomicity(
+    task: Dict,
+    on_thinking: Callable[[str], None],
+    abort_event: Optional[Any],
+    atomicity_context: Optional[Dict] = None,
+    use_mock: bool = False,
+    api_config: Optional[Dict] = None,
+    plan_id: Optional[str] = None,
+) -> Dict:
+    """Check if task is atomic. Plan Agent LLM single-turn."""
+    raise_if_aborted(abort_event)
+    ctx: Dict[str, Any] = {"type": "atomicity", "taskId": task["task_id"], "task": task}
+    if atomicity_context:
+        ctx["atomicityContext"] = atomicity_context
+    last_err: Optional[Exception] = None
+    for attempt in range(MAX_VALIDATION_RETRIES + 1):
+        raise_if_aborted(abort_event)
+        try:
+            content = await _call_chat_completion(
+                on_thinking,
+                ctx,
+                abort_event,
+                stream=False,
+                use_mock=use_mock,
+                api_config=api_config,
+                temperature=0.0 if attempt == 0 else RETRY_TEMPERATURE,
+                plan_id=plan_id,
+            )
+            result = _parse_json_response(content)
+            if not _validate_atomicity_response(result):
+                raise ValueError("Atomicity response invalid: missing or invalid atomic field")
+            out = {"atomic": bool(result.get("atomic"))}
+            if plan_id:
+                asyncio.create_task(save_ai_response(
+                    plan_id, "atomicity", task["task_id"],
+                    {"content": {"atomic": out["atomic"]}, "reasoning": ""},
+                ))
+            return out
+        except Exception as e:
+            last_err = e
+            if attempt >= MAX_VALIDATION_RETRIES:
+                raise
+    raise last_err or ValueError("Atomicity check failed")
+
+
+async def decompose_task(
     parent_task: Dict,
     on_thinking: Callable[[str], None],
     abort_event: Optional[Any],
@@ -288,7 +325,8 @@ async def _decompose_task(
     api_config: Optional[Dict] = None,
     plan_id: Optional[str] = None,
 ) -> List[Dict]:
-    _raise_if_aborted(abort_event)
+    """Decompose non-atomic task into children. Plan Agent LLM single-turn."""
+    raise_if_aborted(abort_event)
     ctx: Dict[str, Any] = {"type": "decompose", "taskId": parent_task["task_id"], "task": parent_task}
     pid = parent_task["task_id"]
     siblings = [t for t in all_tasks if t.get("task_id") != pid and get_parent_id(t.get("task_id", "")) == get_parent_id(pid)]
@@ -300,7 +338,7 @@ async def _decompose_task(
     }
     last_err: Optional[Exception] = None
     for attempt in range(MAX_VALIDATION_RETRIES + 1):
-        _raise_if_aborted(abort_event)
+        raise_if_aborted(abort_event)
         try:
             content = await _call_chat_completion(
                 on_thinking,
@@ -335,51 +373,7 @@ async def _decompose_task(
     raise last_err or ValueError("Decompose failed")
 
 
-async def _check_atomicity(
-    task: Dict,
-    on_thinking: Callable[[str], None],
-    abort_event: Optional[Any],
-    atomicity_context: Optional[Dict] = None,
-    use_mock: bool = False,
-    api_config: Optional[Dict] = None,
-    plan_id: Optional[str] = None,
-) -> Dict:
-    _raise_if_aborted(abort_event)
-    ctx: Dict[str, Any] = {"type": "atomicity", "taskId": task["task_id"], "task": task}
-    if atomicity_context:
-        ctx["atomicityContext"] = atomicity_context
-    last_err: Optional[Exception] = None
-    for attempt in range(MAX_VALIDATION_RETRIES + 1):
-        _raise_if_aborted(abort_event)
-        try:
-            content = await _call_chat_completion(
-                on_thinking,
-                ctx,
-                abort_event,
-                stream=False,
-                use_mock=use_mock,
-                api_config=api_config,
-                temperature=0.0 if attempt == 0 else RETRY_TEMPERATURE,
-                plan_id=plan_id,
-            )
-            result = _parse_json_response(content)
-            if not _validate_atomicity_response(result):
-                raise ValueError("Atomicity response invalid: missing or invalid atomic field")
-            out = {"atomic": bool(result.get("atomic"))}
-            if plan_id:
-                asyncio.create_task(save_ai_response(
-                    plan_id, "atomicity", task["task_id"],
-                    {"content": {"atomic": out["atomic"]}, "reasoning": ""},
-                ))
-            return out
-        except Exception as e:
-            last_err = e
-            if attempt >= MAX_VALIDATION_RETRIES:
-                raise
-    raise last_err or ValueError("Atomicity check failed")
-
-
-async def _format_task(
+async def format_task(
     task: Dict,
     on_thinking: Callable[[str], None],
     abort_event: Optional[Any],
@@ -387,7 +381,8 @@ async def _format_task(
     api_config: Optional[Dict] = None,
     plan_id: Optional[str] = None,
 ) -> Optional[Dict]:
-    _raise_if_aborted(abort_event)
+    """Generate input/output spec for atomic task. Plan Agent LLM single-turn."""
+    raise_if_aborted(abort_event)
     content = await _call_chat_completion(
         on_thinking,
         {"type": "format", "taskId": task.get("task_id", ""), "task": task},
@@ -414,72 +409,15 @@ async def _format_task(
     return out
 
 
-async def _atomicity_and_decompose_recursive(
-    task: Dict,
-    all_tasks: List[Dict],
-    on_task: Optional[Callable[[Dict], None]],
-    on_thinking: Callable[[str], None],
-    depth: int,
-    check_aborted: Callable[[], bool],
-    abort_event: Optional[Any],
-    on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]] = None,
-    idea: Optional[str] = None,
-    use_mock: bool = False,
-    api_config: Optional[Dict] = None,
-    plan_id: Optional[str] = None,
-) -> None:
-    if check_aborted and check_aborted():
-        raise asyncio.CancelledError("Aborted")
-
-    pid = task["task_id"]
-    siblings = [t for t in all_tasks if t.get("task_id") != pid and get_parent_id(t.get("task_id", "")) == get_parent_id(pid)]
-    atomicity_context = {
-        "depth": depth,
-        "ancestor_path": get_ancestor_path(pid),
-        "idea": idea or "",
-        "siblings": siblings,
-    }
-    v = await _check_atomicity(task, on_thinking, abort_event, atomicity_context, use_mock, api_config, plan_id)
-    atomic = v["atomic"]
-
-    if atomic:
-        io_result = await _format_task(task, on_thinking, abort_event, use_mock, api_config, plan_id)
-        if not io_result:
-            raise ValueError(f"Format failed for atomic task {task['task_id']}: missing input/output")
-        idx = _find_task_idx(all_tasks, task["task_id"])
-        if idx >= 0:
-            all_tasks[idx] = {**all_tasks[idx], **io_result}
-        return
-
-    children = await _decompose_task(task, on_thinking, abort_event, all_tasks, idea, depth, use_mock, api_config, plan_id)
-    if not children:
-        raise ValueError(f"Decompose returned no children for task {task['task_id']}")
-
-    all_tasks.extend(children)
-    if on_tasks_batch:
-        on_tasks_batch(children, task, list(all_tasks))
-    elif on_task:
-        for t in children:
-            on_task(t)
-
-    await asyncio.gather(*[
-        _atomicity_and_decompose_recursive(
-            child, all_tasks, on_task, on_thinking, depth + 1, check_aborted, abort_event, on_tasks_batch,
-            idea, use_mock, api_config, plan_id,
-        )
-        for child in children
-    ])
-
-
-async def _assess_quality(
+async def assess_quality(
     plan: Dict,
     on_thinking: Callable[[str], None],
     abort_event: Optional[Any],
     use_mock: bool = False,
     api_config: Optional[Dict] = None,
 ) -> Dict[str, Any]:
-    """Assess plan quality. Returns {score, comment} or {score: 0, comment: 'N/A'} on failure."""
-    _raise_if_aborted(abort_event)
+    """Assess plan quality. Plan Agent LLM single-turn. Returns {score, comment}."""
+    raise_if_aborted(abort_event)
     if use_mock:
         return {"score": 85, "comment": "Mock assessment"}
     idea = plan.get("idea", "")
@@ -517,225 +455,3 @@ async def _assess_quality(
         return {"score": score, "comment": str(comment)}
     except Exception:
         return {"score": 0, "comment": "Assessment skipped"}
-
-
-def _get_plan_agent_params(api_config: Dict[str, Any]) -> tuple:
-    """Return (max_turns, temperature) for plan agent from modeConfig or defaults."""
-    mode_cfg = api_config.get("modeConfig") or {}
-    agent_cfg = mode_cfg.get("agent") or {}
-    llm_cfg = mode_cfg.get("llm") or {}
-    max_turns = agent_cfg.get("planAgentMaxTurns") or MAX_PLAN_AGENT_TURNS
-    max_turns = int(max_turns)
-    temperature = (
-        agent_cfg.get("planLlmTemperature")
-        or llm_cfg.get("planLlmTemperature")
-        or 0.3
-    )
-    return max_turns, float(temperature)
-
-
-async def run_plan_agent(
-    plan: Dict,
-    on_thinking: Callable[[str], None],
-    abort_event: Optional[Any],
-    on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]],
-    use_mock: bool,
-    api_config: Optional[Dict],
-    plan_id: Optional[str],
-) -> Dict:
-    """ReAct-style Agent loop for planning. Uses CheckAtomicity, Decompose, FormatTask, AddTasks, UpdateTask, GetPlan, GetNextTask, FinishPlan."""
-    tasks = plan.get("tasks") or []
-    root_task = next((t for t in tasks if t.get("task_id") == "0"), None)
-    if not root_task:
-        root_task = next(
-            (t for t in tasks if t.get("task_id") and not (t.get("dependencies") or [])),
-            tasks[0] if tasks else None,
-        )
-    if not root_task:
-        raise ValueError("No decomposable task found. Generate plan first.")
-
-    all_tasks = list(tasks)
-    idea = plan.get("idea") or root_task.get("description") or ""
-    plan_state: Dict[str, Any] = {
-        "all_tasks": all_tasks,
-        "pending_queue": ["0"],
-        "idea": idea,
-    }
-
-    system_prompt = _get_prompt_cached("planner-agent-prompt.txt")
-    user_message = f"**Idea:** {idea}\n\n**Root task:** task_id \"0\", description \"{root_task.get('description', '')}\"\n\nProcess all tasks until GetNextTask returns null, then call FinishPlan."
-
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_message},
-    ]
-
-    cfg = merge_phase_config(api_config, "atomicity")
-    max_turns, temperature = _get_plan_agent_params(api_config or {})
-    on_thinking_fn = on_thinking or (lambda *a, **_: None)
-
-    turn = 0
-    while turn < max_turns:
-        turn += 1
-        _raise_if_aborted(abort_event)
-        if on_thinking_fn:
-            r = on_thinking_fn("", task_id=None, operation="Plan", schedule_info={"turn": turn, "max_turns": max_turns})
-            if asyncio.iscoroutine(r):
-                await r
-
-        result = await real_chat_completion(
-            messages,
-            cfg,
-            on_chunk=None,
-            abort_event=abort_event,
-            stream=False,
-            temperature=temperature,
-            response_format=None,
-            tools=PLANNER_TOOLS,
-        )
-
-        content: str = ""
-        if isinstance(result, dict):
-            raw_content = result.get("content") or ""
-            content = raw_content if isinstance(raw_content, str) else str(raw_content)
-        else:
-            content = result or ""
-
-        schedule_info = {"turn": turn, "max_turns": max_turns}
-        if on_thinking_fn and content:
-            r = on_thinking_fn(content, task_id=None, operation="Plan", schedule_info=schedule_info)
-            if asyncio.iscoroutine(r):
-                await r
-
-        if isinstance(result, dict) and result.get("finish_reason") == "tool_calls":
-            tool_calls = result.get("tool_calls") or []
-            if not tool_calls:
-                continue
-
-            # Gemini 3: first functionCall must include thought_signature. For parallel calls,
-            # API returns it only in the first part - ensure first entry gets it.
-            sig_from_any = None
-            for tc in tool_calls:
-                s = tc.get("thought_signature") or tc.get("thoughtSignature")
-                if s is not None:
-                    sig_from_any = s
-                    break
-
-            assistant_msg = {"role": "assistant", "content": content or None}
-            tool_calls_for_msg = []
-            for i, tc in enumerate(tool_calls):
-                entry = {
-                    "id": tc.get("id", f"tc_{i}"),
-                    "type": tc.get("type", "function"),
-                    "function": tc.get("function", {}),
-                }
-                sig = tc.get("thought_signature") or tc.get("thoughtSignature") or (sig_from_any if i == 0 else None)
-                if sig is not None:
-                    entry["thought_signature"] = sig
-                tool_calls_for_msg.append(entry)
-            tool_calls_for_msg = [tc for tc in tool_calls_for_msg if tc.get("function")]
-            if tool_calls_for_msg:
-                assistant_msg["tool_calls"] = tool_calls_for_msg
-            if result.get("gemini_model_content") is not None:
-                assistant_msg["gemini_model_content"] = result["gemini_model_content"]
-            messages.append(assistant_msg)
-
-            finished = False
-            for tc in tool_calls:
-                fn = tc.get("function") or {}
-                name = fn.get("name") or ""
-                args = fn.get("arguments") or "{}"
-                if on_thinking_fn:
-                    tool_schedule = {"turn": turn, "max_turns": max_turns, "tool_name": name, "tool_args": (args[:200] + "...") if len(args) > 200 else args}
-                    r = on_thinking_fn("", task_id=None, operation="Plan", schedule_info=tool_schedule)
-                    if asyncio.iscoroutine(r):
-                        await r
-                try:
-                    is_finish, tool_result = await execute_planner_tool(
-                        name,
-                        args,
-                        plan_state,
-                        check_atomicity_fn=_check_atomicity,
-                        decompose_fn=_decompose_task,
-                        format_fn=_format_task,
-                        on_thinking=on_thinking_fn,
-                        on_tasks_batch=on_tasks_batch,
-                        abort_event=abort_event,
-                        use_mock=use_mock,
-                        api_config=api_config,
-                        plan_id=plan_id,
-                    )
-                except Exception as e:
-                    tool_result = f"Error: {e}"
-                    is_finish = False
-
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc.get("id", ""),
-                    "content": tool_result,
-                })
-
-                if is_finish:
-                    finished = True
-                    break
-
-            if finished:
-                break
-            continue
-
-        break
-
-    plan["tasks"] = plan_state["all_tasks"]
-    return {"tasks": plan_state["all_tasks"]}
-
-
-async def run_plan(
-    plan: Dict,
-    on_task: Optional[Callable[[Dict], None]],
-    on_thinking: Callable[[str], None],
-    abort_event: Optional[Any] = None,
-    on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]] = None,
-    use_mock: bool = False,
-    api_config: Optional[Dict] = None,
-    skip_quality_assessment: bool = False,
-    plan_id: Optional[str] = None,
-) -> Dict:
-    """Run atomicity->decompose->format from root task, top-down to all atomic tasks. When planAgentMode=True, uses Agent loop instead."""
-
-    def check_aborted() -> bool:
-        return abort_event is not None and abort_event.is_set()
-
-    tasks = plan.get("tasks") or []
-    root_task = next((t for t in tasks if t.get("task_id") == "0"), None)
-    if not root_task:
-        root_task = next(
-            (t for t in tasks if t.get("task_id") and not (t.get("dependencies") or [])),
-            tasks[0] if tasks else None,
-        )
-    if not root_task:
-        raise ValueError("No decomposable task found. Generate plan first.")
-
-    all_tasks = list(tasks)
-    on_thinking_fn = on_thinking or (lambda *a, **_: None)
-    idea = plan.get("idea") or root_task.get("description") or ""
-
-    if api_config and api_config.get("planAgentMode"):
-        await run_plan_agent(
-            plan, on_thinking_fn, abort_event, on_tasks_batch,
-            use_mock=use_mock, api_config=api_config, plan_id=plan_id,
-        )
-    else:
-        await _atomicity_and_decompose_recursive(
-            root_task, all_tasks, on_task, on_thinking_fn, 0, check_aborted, abort_event, on_tasks_batch,
-            idea=idea, use_mock=use_mock, api_config=api_config, plan_id=plan_id,
-        )
-        plan["tasks"] = all_tasks
-    if not skip_quality_assessment:
-        _raise_if_aborted(abort_event)
-        quality = await _assess_quality(plan, on_thinking_fn, abort_event, use_mock, api_config)
-        plan["qualityScore"] = quality.get("score", 0)
-        plan["qualityComment"] = quality.get("comment", "")
-    else:
-        plan["qualityScore"] = None
-        plan["qualityComment"] = ""
-    return {"tasks": all_tasks}

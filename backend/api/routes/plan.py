@@ -14,7 +14,7 @@ from db import (
     save_plan,
 )
 from visualization import build_layout_from_execution, compute_decomposition_layout
-from plan.index import run_plan
+from plan_agent.index import run_plan
 
 from ..schemas import PlanLayoutRequest, PlanRunRequest
 from .. import state as api_state

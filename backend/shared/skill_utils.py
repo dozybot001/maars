@@ -1,4 +1,4 @@
-"""Skill parsing utilities. Shared by plan and execution agent tools."""
+"""Skill parsing utilities. Shared by Plan Agent and Task Agent tools."""
 
 import yaml
 

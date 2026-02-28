@@ -133,7 +133,6 @@ button:disabled:not([class]),
 
 /* Variant: icon */
 .icon-btn,
-.theme-toggle-btn,
 .btn-icon {
     width: 40px; height: 40px;
     padding: 0;
@@ -143,18 +142,6 @@ button:disabled:not([class]),
     color: var(--text-secondary);
     font-size: 18px;
 }
-.theme-toggle-btn { flex-shrink: 0; position: relative; }
-.theme-toggle-btn .theme-icon { position: absolute; font-size: 20px; transition: opacity 0.2s ease, transform 0.2s ease; }
-
-.theme-toggle-btn .theme-icon-sun { opacity: 1; }
-.theme-toggle-btn .theme-icon-moon,
-.theme-toggle-btn .theme-icon-black { opacity: 0; }
-[data-theme="dark"] .theme-toggle-btn .theme-icon-sun,
-[data-theme="dark"] .theme-toggle-btn .theme-icon-black { opacity: 0; }
-[data-theme="dark"] .theme-toggle-btn .theme-icon-moon { opacity: 1; }
-[data-theme="black"] .theme-toggle-btn .theme-icon-sun,
-[data-theme="black"] .theme-toggle-btn .theme-icon-moon { opacity: 0; }
-[data-theme="black"] .theme-toggle-btn .theme-icon-black { opacity: 1; }
 
 /* Variant: close (×) */
 .executor-output-modal-close,
@@ -474,4 +461,15 @@ button:disabled:not([class]),
 
 .task-detail-validation .validation-optional {
     font-style: italic;
+}
+
+.task-detail-actions {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-color);
+}
+
+.task-detail-actions .btn-default {
+    font-size: 12px;
+    padding: 4px 10px;
 }

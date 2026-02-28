@@ -18,12 +18,12 @@ from shared.skill_utils import parse_skill_frontmatter
 _RUN_SCRIPT_ALLOWED_EXT = (".py", ".sh", ".js")
 _RUN_SCRIPT_TIMEOUT = int(os.environ.get("MAARS_RUN_SCRIPT_TIMEOUT", "120"))
 
-# Skills root: MAARS_TASK_SKILLS_DIR env or backend/execution/skills/
+# Skills root: MAARS_TASK_SKILLS_DIR env or backend/task_agent/skills/
 _TASK_SKILLS_DIR = os.environ.get("MAARS_TASK_SKILLS_DIR")
 SKILLS_ROOT = (
     Path(_TASK_SKILLS_DIR).resolve()
     if _TASK_SKILLS_DIR
-    else Path(__file__).resolve().parent.parent / "skills"
+    else Path(__file__).resolve().parent / "skills"
 )
 
 

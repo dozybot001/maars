@@ -1,8 +1,7 @@
 """
-LLM-based task executor. Generates output from task description and input artifacts.
-Supports mock mode (useMock=True): returns simulated output without LLM calls.
-Supports streaming via on_thinking callback for real-time output display.
-When taskAgentMode=True, uses Agent loop with ReadArtifact, ReadFile, Finish tools.
+Task Agent - ReAct-style agent loop (taskAgentMode=True).
+Uses ReadArtifact, ReadFile, WriteFile, Finish, ListSkills, etc. via TOOLS.
+Agent 实现放在 task_agent/，单轮 LLM 放在 task_agent/llm/。
 """
 
 import asyncio
@@ -14,41 +13,49 @@ import json_repair
 
 from db import ensure_sandbox_dir
 from shared.llm_client import chat_completion, merge_phase_config
-from shared.utils import chunk_string
 
 from .agent_tools import TOOLS, execute_tool
 
-# Mock 模式下 chunk 间延迟（秒），确保 WebSocket emit 完成后再发下一 chunk，避免 chip 先于 thinking 完成
-_MOCK_CHUNK_DELAY = 0.03
+MAX_AGENT_TURNS = 15
 
 
-async def _mock_execute(output_format: str, task_id: str, on_thinking: Optional[Callable] = None) -> Any:
-    """Return simulated output for mock mode. No LLM call. Optionally streams to on_thinking with delays."""
-    if _is_json_format(output_format):
-        result = {"_mock": True, "task_id": task_id, "note": "Simulated output (Mock AI mode)"}
-        if on_thinking:
-            for chunk in chunk_string(orjson.dumps(result, option=orjson.OPT_INDENT_2).decode("utf-8"), 20):
-                r = on_thinking(chunk, task_id=task_id, operation="Execute")
-                if asyncio.iscoroutine(r):
-                    await r
-                await asyncio.sleep(_MOCK_CHUNK_DELAY)
-        return result
-    text = f"# Mock Output\n\nSimulated content for task {task_id}.\n\n(Mock AI mode)"
-    if on_thinking:
-        for chunk in chunk_string(text, 20):
-            r = on_thinking(chunk, task_id=task_id, operation="Execute")
-            if asyncio.iscoroutine(r):
-                await r
-            await asyncio.sleep(_MOCK_CHUNK_DELAY)
-    return text
+def _get_executor_params(api_config: Dict[str, Any]) -> tuple[int, float]:
+    """Return (max_turns, temperature) from modeConfig or defaults."""
+    mode_cfg = api_config.get("modeConfig") or {}
+    agent_cfg = mode_cfg.get("agent") or {}
+    llm_cfg = mode_cfg.get("llm") or {}
+    max_turns = agent_cfg.get("taskAgentMaxTurns") or MAX_AGENT_TURNS
+    max_turns = int(max_turns)
+    temperature = (
+        agent_cfg.get("taskLlmTemperature")
+        or llm_cfg.get("taskLlmTemperature")
+        or 0.3
+    )
+    return max_turns, float(temperature)
 
 
 def _is_json_format(output_format: str) -> bool:
-    """Check if output format expects JSON."""
     if not output_format:
         return False
     fmt = output_format.strip().upper()
     return fmt.startswith("JSON") or "JSON" in fmt
+
+
+def _parse_executor_output(content: str, use_json_mode: bool) -> Any:
+    """Parse executor output (content) to final result."""
+    content = (content or "").strip()
+    if not content:
+        raise ValueError("LLM returned empty response")
+    if use_json_mode:
+        cleaned = content
+        m = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned)
+        if m:
+            cleaned = m.group(1).strip()
+        try:
+            return json_repair.loads(cleaned)
+        except Exception as e:
+            raise ValueError(f"Failed to parse JSON from LLM response: {e}") from e
+    return content
 
 
 def _build_executor_messages(
@@ -57,9 +64,8 @@ def _build_executor_messages(
     input_spec: Dict[str, Any],
     output_spec: Dict[str, Any],
     resolved_inputs: Dict[str, Any],
-    agent_mode: bool = False,
 ) -> tuple[list[dict], str]:
-    """Build system + user messages and output_format for executor."""
+    """Build system + user messages for agent mode."""
     output_format = output_spec.get("format") or ""
     output_desc = output_spec.get("description") or ""
     input_desc = input_spec.get("description") or ""
@@ -70,9 +76,7 @@ Rules:
 1. Use only the provided input artifacts and task description.
 2. Output must strictly conform to the specified format.
 3. For JSON: output valid JSON only, no extra text or markdown fences.
-4. For Markdown: output the document content directly."""
-    if agent_mode:
-        system_prompt += """
+4. For Markdown: output the document content directly.
 
 You have tools: ReadArtifact (read dependency task output), ReadFile (read files; use 'sandbox/X' for this task's sandbox), WriteFile (write to sandbox only), ListSkills, LoadSkill, ReadSkillFile (read skill's scripts/references), RunSkillScript (execute skill scripts, use {{sandbox}}/file for sandbox paths), Finish (submit final output).
 Use ListSkills to discover skills, LoadSkill when relevant. ReadSkillFile and RunSkillScript let you use skill capabilities (e.g. docx validate, pptx convert). When your output satisfies the output spec, you MUST call Finish with the result—do not output inline. For JSON format pass a valid JSON string; for Markdown pass the content string. All file I/O is scoped to the plan dir and this task's sandbox."""
@@ -105,42 +109,7 @@ Produce the output now. Output ONLY the result, no explanation."""
     return messages, output_format
 
 
-def _parse_executor_output(content: str, use_json_mode: bool) -> Any:
-    """Parse executor output (content) to final result."""
-    content = (content or "").strip()
-    if not content:
-        raise ValueError("LLM returned empty response")
-    if use_json_mode:
-        cleaned = content
-        m = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned)
-        if m:
-            cleaned = m.group(1).strip()
-        try:
-            return json_repair.loads(cleaned)
-        except Exception as e:
-            raise ValueError(f"Failed to parse JSON from LLM response: {e}") from e
-    return content
-
-
-MAX_AGENT_TURNS = 15
-
-
-def _get_executor_params(api_config: Dict[str, Any]) -> tuple[int, float]:
-    """Return (max_turns, temperature) from modeConfig or defaults."""
-    mode_cfg = api_config.get("modeConfig") or {}
-    agent_cfg = mode_cfg.get("agent") or {}
-    llm_cfg = mode_cfg.get("llm") or {}
-    max_turns = agent_cfg.get("taskAgentMaxTurns") or MAX_AGENT_TURNS
-    max_turns = int(max_turns)
-    temperature = (
-        agent_cfg.get("taskLlmTemperature")
-        or llm_cfg.get("taskLlmTemperature")
-        or 0.3
-    )
-    return max_turns, float(temperature)
-
-
-async def _execute_task_agent(
+async def run_task_agent(
     task_id: str,
     description: str,
     input_spec: Dict[str, Any],
@@ -155,7 +124,7 @@ async def _execute_task_agent(
     if plan_id and task_id:
         await ensure_sandbox_dir(plan_id, task_id)
     messages, output_format = _build_executor_messages(
-        task_id, description, input_spec, output_spec, resolved_inputs, agent_mode=True
+        task_id, description, input_spec, output_spec, resolved_inputs
     )
     use_json_mode = _is_json_format(output_format)
     cfg = merge_phase_config(api_config, "execute")
@@ -174,7 +143,7 @@ async def _execute_task_agent(
             abort_event=abort_event,
             stream=False,
             temperature=temperature,
-            response_format=None,  # tools mode: no response_format
+            response_format=None,
             tools=TOOLS,
         )
 
@@ -197,8 +166,6 @@ async def _execute_task_agent(
                 content = content or "(no content)"
                 return _parse_executor_output(content, use_json_mode)
 
-            # Gemini 3: first functionCall must include thought_signature. For parallel calls,
-            # API returns it only in the first part - ensure first entry gets it.
             sig_from_any = None
             for tc in tool_calls:
                 s = tc.get("thought_signature") or tc.get("thoughtSignature")
@@ -206,7 +173,6 @@ async def _execute_task_agent(
                     sig_from_any = s
                     break
 
-            # Append assistant message with tool_calls
             assistant_msg = {"role": "assistant", "content": content or None}
             tool_calls_for_msg = []
             for i, tc in enumerate(tool_calls):
@@ -257,10 +223,8 @@ async def _execute_task_agent(
                 return finished_output
             continue
 
-        # finish_reason == "stop": parse content
         return _parse_executor_output(content, use_json_mode)
 
-    # max_turns reached: use last assistant content
     last = ""
     for m in reversed(messages):
         if m.get("role") == "assistant" and m.get("content"):
@@ -269,63 +233,3 @@ async def _execute_task_agent(
     if not last:
         raise ValueError(f"Agent reached max turns ({max_turns}) without producing output")
     return _parse_executor_output(last, use_json_mode)
-
-
-async def execute_task(
-    task_id: str,
-    description: str,
-    input_spec: Dict[str, Any],
-    output_spec: Dict[str, Any],
-    resolved_inputs: Dict[str, Any],
-    api_config: Optional[Dict[str, Any]] = None,
-    abort_event: Optional[Any] = None,
-    on_thinking: Optional[Callable[[str, Optional[str], Optional[str]], None]] = None,
-    plan_id: Optional[str] = None,
-) -> Any:
-    """
-    Execute task via LLM. Returns parsed output (dict for JSON, str for Markdown).
-    When useMock=True in api_config, returns simulated output without LLM call.
-    When taskAgentMode=True, uses Agent loop (ReAct-style with tools).
-    """
-    raw_cfg = api_config or {}
-    if raw_cfg.get("useMock"):
-        output_format = (output_spec or {}).get("format") or ""
-        return await _mock_execute(output_format, task_id, on_thinking)
-
-    if raw_cfg.get("taskAgentMode"):
-        return await _execute_task_agent(
-            task_id=task_id,
-            description=description,
-            input_spec=input_spec,
-            output_spec=output_spec,
-            resolved_inputs=resolved_inputs,
-            api_config=raw_cfg,
-            abort_event=abort_event,
-            on_thinking=on_thinking,
-            plan_id=plan_id or "",
-        )
-
-    api_config = merge_phase_config(raw_cfg, "execute")
-    _, temperature = _get_executor_params(raw_cfg)
-    messages, output_format = _build_executor_messages(
-        task_id, description, input_spec, output_spec, resolved_inputs
-    )
-    use_json_mode = _is_json_format(output_format)
-    response_format = {"type": "json_object"} if use_json_mode else None
-    stream = on_thinking is not None
-
-    def _on_chunk(chunk: str):
-        if on_thinking and chunk:
-            return on_thinking(chunk, task_id=task_id, operation="Execute")
-
-    raw = await chat_completion(
-        messages,
-        api_config,
-        on_chunk=_on_chunk if stream else None,
-        abort_event=abort_event,
-        stream=stream,
-        temperature=temperature,
-        response_format=response_format,
-    )
-    content = raw if isinstance(raw, str) else (raw.get("content") or "")
-    return _parse_executor_output(content, use_json_mode)

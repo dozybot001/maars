@@ -31,7 +31,7 @@
     }
 
     async function restoreRecentPlan() {
-        if (window.MAARS?.executorThinking?.clear) window.MAARS.executorThinking.clear();
+        if (window.MAARS?.thinking?.clear) window.MAARS.thinking.clear();
 
         const plansRes = await fetch(`${cfg.API_BASE_URL}/plans`);
         const plansData = await plansRes.json();
@@ -61,12 +61,9 @@
         }
 
         if (treePayload.treeData.length) {
-            if (typeof TaskTree !== 'undefined' && TaskTree.renderPlannerTree) {
-                TaskTree.renderPlannerTree(treePayload.treeData, treePayload.layout);
-            }
-            if (plan?.qualityScore != null && typeof TaskTree !== 'undefined' && TaskTree.updatePlannerQualityBadge) {
-                TaskTree.updatePlannerQualityBadge(plan.qualityScore, plan.qualityComment);
-            }
+            const taskTree = window.MAARS?.taskTree;
+            if (taskTree?.renderPlannerTree) taskTree.renderPlannerTree(treePayload.treeData, treePayload.layout);
+            if (plan?.qualityScore != null && taskTree?.updatePlannerQualityBadge) taskTree.updatePlannerQualityBadge(plan.qualityScore, plan.qualityComment);
         }
 
         if (!execution || !execution.tasks?.length) {
@@ -92,17 +89,8 @@
             }
             const layoutData = await layoutRes.json();
             const layout = layoutData.layout;
-            if (layout && window.MAARS?.plannerViews) {
-                window.MAARS.plannerViews.state.executionLayout = layout;
-                window.MAARS.plannerViews.state.previousTaskStates.clear();
-                const tasks = execution.tasks || [];
-                tasks.forEach((t) => {
-                    if (t.task_id && t.status) {
-                        window.MAARS.plannerViews.state.previousTaskStates.set(t.task_id, t.status);
-                    }
-                });
-                window.MAARS.plannerViews.state.chainCache = window.MAARS.plannerViews.buildChainCacheFromLayout(layout);
-                window.MAARS.plannerViews.renderExecutionDiagram();
+            if (layout && window.MAARS?.views?.restoreExecution) {
+                window.MAARS.views.restoreExecution(layout, execution);
                 const socket = window.MAARS?.state?.socket;
                 if (socket?.connected) socket.emit('execution-layout', { layout });
             }
@@ -111,16 +99,40 @@
         const outRes = await fetch(`${cfg.API_BASE_URL}/plan/outputs?planId=${encodeURIComponent(planId)}`);
         const outData = await outRes.json();
         const outputs = outData.outputs || {};
-        if (Object.keys(outputs).length && window.MAARS?.executorThinking?.setTaskOutput) {
+        if (Object.keys(outputs).length && window.MAARS?.output?.setTaskOutput) {
             Object.entries(outputs).forEach(([taskId, out]) => {
                 const val = out && typeof out === 'object' && 'content' in out ? out.content : out;
-                window.MAARS.executorThinking.setTaskOutput(taskId, val);
+                window.MAARS.output.setTaskOutput(taskId, val);
             });
-            window.MAARS.executorThinking.applyOutputHighlight?.();
+            window.MAARS.output.applyOutputHighlight?.();
         }
 
         return { planId };
     }
 
-    window.MAARS.api = { loadExampleIdea, loadExecution, clearDb, restoreRecentPlan };
+    async function retryTask(taskId) {
+        const planId = await cfg.resolvePlanId();
+        const response = await fetch(`${cfg.API_BASE_URL}/execution/retry-task`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ taskId, planId }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Failed to retry task');
+        return data;
+    }
+
+    async function resumeFromTask(taskId) {
+        const planId = await cfg.resolvePlanId();
+        const response = await fetch(`${cfg.API_BASE_URL}/execution/run`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ planId, resumeFromTaskId: taskId }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Failed to start execution');
+        return data;
+    }
+
+    window.MAARS.api = { loadExampleIdea, loadExecution, clearDb, restoreRecentPlan, retryTask, resumeFromTask };
 })();

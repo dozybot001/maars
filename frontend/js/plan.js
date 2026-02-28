@@ -1,5 +1,5 @@
 /**
- * MAARS planner - generate plan, stop.
+ * MAARS plan - generate plan, stop.
  */
 (function () {
     'use strict';
@@ -13,10 +13,6 @@
     const loadExampleIdeaBtn = document.getElementById('loadExampleIdeaBtn');
 
     let planRunAbortController = null;
-
-    async function buildPlanRunRequest(extra = {}) {
-        return { ...extra };
-    }
 
     async function generatePlan() {
         const idea = (ideaInput?.value || '').trim();
@@ -40,19 +36,19 @@
             if (stopPlanBtn) stopPlanBtn.style.display = '';
             planRunAbortController = new AbortController();
 
-            TaskTree.clearPlannerTree();
-            TaskTree.clearExecutionTree();
-            if (window.MAARS?.executorThinking) window.MAARS.executorThinking.clear();
-            const pv = window.MAARS?.plannerViews;
-            if (pv?.state) {
-                pv.state.executionLayout = null;
-                pv.state.chainCache = [];
-                pv.state.previousTaskStates?.clear?.();
+            window.MAARS.taskTree?.clearPlannerTree();
+            window.MAARS.taskTree?.clearExecutionTree();
+            if (window.MAARS?.thinking) window.MAARS.thinking.clear();
+            const views = window.MAARS?.views;
+            if (views?.state) {
+                views.state.executionLayout = null;
+                views.state.chainCache = [];
+                views.state.previousTaskStates?.clear?.();
             }
             const response = await fetch(`${cfg.API_BASE_URL}/plan/run`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(await buildPlanRunRequest({ idea })),
+                body: JSON.stringify({ idea }),
                 signal: planRunAbortController.signal
             });
 
@@ -74,7 +70,7 @@
     }
 
     function resetPlanUI() {
-        if (generatePlanBtn) { generatePlanBtn.disabled = false; generatePlanBtn.textContent = 'Generate Plan'; }
+        if (generatePlanBtn) { generatePlanBtn.disabled = false; generatePlanBtn.textContent = 'Plan'; }
         if (stopPlanBtn) stopPlanBtn.style.display = 'none';
         planRunAbortController = null;
     }
@@ -85,5 +81,5 @@
         if (loadExampleIdeaBtn) loadExampleIdeaBtn.addEventListener('click', api.loadExampleIdea);
     }
 
-    window.MAARS.planner = { init, generatePlan, stopPlanRun, resetPlanUI };
+    window.MAARS.plan = { init, generatePlan, stopPlanRun, resetPlanUI };
 })();

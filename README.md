@@ -20,7 +20,7 @@ python -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001 --loop asyncio --http
 
 ### 1. Generate Plan（规划）
 
-用户输入 idea → Planner 递归分解为任务树 → 保存 `plan.json`
+用户输入 idea → Plan Agent 递归分解为任务树 → 保存 `plan.json`
 
 - **Atomicity**：判断任务是否可直接执行（原子任务）
 - **Decompose**：非原子任务分解为 2–6 个子任务，仅同级依赖
@@ -32,13 +32,13 @@ python -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001 --loop asyncio --http
 
 ### 3. Execution（执行）
 
-Executor 池并行执行就绪任务，每个任务执行后 Validate，实时状态推送。
+Task Agent 池并行执行就绪任务，每个任务执行后 Validate，实时状态推送。
 
 ## Agent 工作流
 
-**AI Mode** 可选 Mock / LLM / Agent。Agent 模式下，Planner 与 Executor 均采用 ReAct 式多轮工具调用。
+**AI Mode** 可选 Mock / LLM / LLM+Agent / Agent。Multi Agent 叙事：Plan Agent + Task Agent，均支持 ReAct 式多轮工具调用。
 
-### Planner Agent
+### Plan Agent
 
 多轮调用工具完成分解，可 LoadSkill 加载技能（分解模式、研究范围、格式规范等）：
 
@@ -49,9 +49,9 @@ Executor 池并行执行就绪任务，每个任务执行后 Validate，实时�
 | FormatTask | 为原子任务生成 input/output |
 | AddTasks / UpdateTask | 增改任务 |
 | GetPlan / GetNextTask | 读取当前计划 |
-| ListSkills / LoadSkill | 加载 Planner 技能 |
+| ListSkills / LoadSkill | 加载 Plan Agent 技能 |
 
-### Executor Agent
+### Task Agent
 
 多轮调用工具完成任务，每个任务在独立沙箱中运行，可 LoadSkill 加载技能（markdown-reporter、json-utils 等）：
 
@@ -69,9 +69,11 @@ maars/
 ├── backend/
 │   ├── main.py          # FastAPI + Socket.io 入口
 │   ├── api/             # 路由、schemas、state
-│   ├── plan/            # 规划：atomicity → decompose → format（业务逻辑）
+│   ├── plan_agent/      # Plan Agent：atomicity → decompose → format（业务逻辑）
+│   │   └── llm/         # Plan Agent LLM 实现
+│   ├── task_agent/      # Task Agent：runner、execution、validation
+│   │   └── llm/         # Task Agent LLM 实现
 │   ├── visualization/   # 分解树、执行图布局
-│   ├── execution/       # 执行：runner、execution、validation
 │   ├── shared/          # 共享模块：graph、llm_client、skill_utils、utils
 │   ├── db/              # 文件存储：db/{plan_id}/、settings.json
 │   └── test/            # Mock AI

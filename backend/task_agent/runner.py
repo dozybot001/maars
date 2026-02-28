@@ -1,6 +1,7 @@
 """
-Execution Runner - orchestrates worker pool.
+Task Agent 实现 - Execution Runner，编排 worker pool。
 Each task: Execute → Validate (validation is fixed behavior). Task status persisted to execution.json in real-time.
+单轮 LLM 在 task_agent/llm/。
 """
 
 import asyncio
@@ -10,11 +11,13 @@ from typing import Any, Dict, List, Optional, Set
 
 from loguru import logger
 
-from db import save_execution, save_task_artifact
+from db import delete_task_artifact, save_execution, save_task_artifact, save_validation_report
 from shared.utils import chunk_string
 from .pools import worker_manager
-from .execution import resolve_artifacts, execute_task
-from .validation import validate_task_output
+from .artifact_resolver import resolve_artifacts
+from .agent import run_task_agent
+from .llm.executor import execute_task
+from .validation import validate_task_output_with_llm
 
 # Mock validation chunk delay (seconds), same as task execution for consistent streaming UX
 _MOCK_VALIDATOR_CHUNK_DELAY = 0.03
@@ -89,7 +92,27 @@ class ExecutionRunner:
             except Exception:
                 pass
 
-    async def start_execution(self, api_config: Optional[Dict] = None) -> None:
+    def _get_downstream_task_ids(self, task_id: str) -> Set[str]:
+        """Return task_id and all downstream dependents."""
+        result: Set[str] = {task_id}
+        visited: Set[str] = set()
+
+        def collect(tid: str) -> None:
+            if tid in visited:
+                return
+            visited.add(tid)
+            result.add(tid)
+            for dep_id in self.reverse_dependency_index.get(tid, []):
+                collect(dep_id)
+
+        collect(task_id)
+        return result
+
+    async def start_execution(
+        self,
+        api_config: Optional[Dict] = None,
+        resume_from_task_id: Optional[str] = None,
+    ) -> None:
         if api_config is not None:
             self.api_config = api_config
             mode_cfg = api_config.get("modeConfig") or {}
@@ -101,10 +124,16 @@ class ExecutionRunner:
                 v = mock_cfg.get("validationPassProbability")
                 if v is not None:
                     self.VALIDATION_PASS_PROBABILITY = float(v)
-            # maxFailures: 按当前模式读取（mock | llm | agent）
+            # maxFailures: read from mock | llm | llmagent | agent
             use_mock = api_config.get("useMock", True)
             exec_agent = api_config.get("taskAgentMode", False)
-            runner_cfg = mock_cfg if use_mock else (mode_cfg.get("agent") if exec_agent else mode_cfg.get("llm") or {})
+            ai_mode = api_config.get("aiMode") or ""
+            if use_mock:
+                runner_cfg = mock_cfg
+            elif exec_agent:
+                runner_cfg = mode_cfg.get(ai_mode) or mode_cfg.get("agent") or {}
+            else:
+                runner_cfg = mode_cfg.get("llm") or {}
             v = runner_cfg.get("maxFailures")
             if v is not None:
                 self.MAX_FAILURES = int(v)
@@ -119,15 +148,11 @@ class ExecutionRunner:
         self.abort_event = asyncio.Event()
         self.abort_event.clear()
         try:
-            worker_manager["initialize_workers"]()
+            max_conc = (self.api_config or {}).get("maxExecutionConcurrency", 7)
+            worker_manager["initialize_workers"](max_conc)
             self._broadcast_worker_states()
 
             execution_layout = self.execution_layout
-            for task in self.chain_cache:
-                task["status"] = "undone"
-            if self.plan_id and self.chain_cache:
-                await save_execution({"tasks": self.chain_cache}, self.plan_id)
-
             self.running_tasks.clear()
             self.completed_tasks.clear()
             self.pending_tasks.clear()
@@ -145,6 +170,25 @@ class ExecutionRunner:
                 for dep_id in (task.get("dependencies") or []):
                     if dep_id in self.reverse_dependency_index:
                         self.reverse_dependency_index[dep_id].append(task["task_id"])
+
+            if resume_from_task_id and resume_from_task_id in self.task_map:
+                to_reset = self._get_downstream_task_ids(resume_from_task_id)
+                for task in self.chain_cache:
+                    if task["task_id"] in to_reset:
+                        task["status"] = "undone"
+                        if self.plan_id:
+                            await delete_task_artifact(self.plan_id, task["task_id"])
+                        self.pending_tasks.add(task["task_id"])
+                        self.completed_tasks.discard(task["task_id"])
+                        self.task_failure_count.pop(task["task_id"], None)
+                    elif task.get("status") == "done":
+                        self.completed_tasks.add(task["task_id"])
+                        self.pending_tasks.discard(task["task_id"])
+            else:
+                for task in self.chain_cache:
+                    task["status"] = "undone"
+            if self.plan_id and self.chain_cache:
+                await save_execution({"tasks": self.chain_cache}, self.plan_id)
 
             self._emit("execution-start", {})
             self._emit("execution-layout", {"layout": execution_layout})
@@ -195,12 +239,12 @@ class ExecutionRunner:
     async def _execute_task(self, task: Dict) -> None:
         if not self.is_running:
             return
-        worker_id = None
+        slot_id = None
         retry_count = 0
-        while self.is_running and worker_id is None and retry_count < 50:
+        while self.is_running and slot_id is None and retry_count < 50:
             async with self._worker_lock:
-                worker_id = worker_manager["assign_task"](task["task_id"])
-            if worker_id is None:
+                slot_id = worker_manager["assign_task"](task["task_id"])
+            if slot_id is None:
                 await asyncio.sleep(min(0.1 + retry_count * 0.02, 0.5))
                 retry_count += 1
                 if retry_count % 5 == 0:
@@ -208,8 +252,8 @@ class ExecutionRunner:
             else:
                 break
 
-        if worker_id is None:
-            logger.warning("Failed to assign worker to task %s after %d retries", task["task_id"], retry_count)
+        if slot_id is None:
+            logger.warning("Failed to acquire slot for task %s after %d retries", task["task_id"], retry_count)
             self.completed_tasks.add(task["task_id"])
             self.running_tasks.discard(task["task_id"])
             self.pending_tasks.discard(task["task_id"])
@@ -236,17 +280,31 @@ class ExecutionRunner:
                         payload["scheduleInfo"] = schedule_info
                     await self._emit_await("task-thinking", payload)
 
-                result = await execute_task(
-                    task_id=task["task_id"],
-                    description=task.get("description") or "",
-                    input_spec=input_spec,
-                    output_spec=output_spec,
-                    resolved_inputs=resolved_inputs,
-                    api_config=self.api_config or {},
-                    abort_event=self.abort_event,
-                    on_thinking=_on_thinking,
-                    plan_id=self.plan_id or "",
-                )
+                api_cfg = self.api_config or {}
+                if api_cfg.get("taskAgentMode"):
+                    result = await run_task_agent(
+                        task_id=task["task_id"],
+                        description=task.get("description") or "",
+                        input_spec=input_spec,
+                        output_spec=output_spec,
+                        resolved_inputs=resolved_inputs,
+                        api_config=api_cfg,
+                        abort_event=self.abort_event,
+                        on_thinking=_on_thinking,
+                        plan_id=self.plan_id or "",
+                    )
+                else:
+                    result = await execute_task(
+                        task_id=task["task_id"],
+                        description=task.get("description") or "",
+                        input_spec=input_spec,
+                        output_spec=output_spec,
+                        resolved_inputs=resolved_inputs,
+                        api_config=api_cfg,
+                        abort_event=self.abort_event,
+                        on_thinking=_on_thinking,
+                        plan_id=self.plan_id or "",
+                    )
                 to_save = result if isinstance(result, dict) else {"content": result}
                 await save_task_artifact(self.plan_id or "", task["task_id"], to_save)
                 self._emit("task-output", {"taskId": task["task_id"], "output": result})
@@ -257,11 +315,6 @@ class ExecutionRunner:
 
             if not execution_passed:
                 self._update_task_status(task["task_id"], "execution-failed")
-                worker_obj = worker_manager["get_worker_by_id"](worker_id)
-                if worker_obj:
-                    worker_obj["status"] = "failed"
-                    self._broadcast_worker_states()
-                    await asyncio.sleep(0.5)
                 failure_count = self.task_failure_count.get(task["task_id"], 0)
                 self.task_failure_count[task["task_id"]] = failure_count + 1
                 async with self._worker_lock:
@@ -279,12 +332,12 @@ class ExecutionRunner:
                     await self._rollback_task(task)
                     return
 
-            # Worker stays assigned; validation is fixed behavior after execution
-            worker_manager["set_worker_status"](worker_id, "validating")
+            # Slot stays held; validation is fixed behavior after execution
+            worker_manager["set_worker_status"](task["task_id"], "validating")
             self._broadcast_worker_states()
             self._update_task_status(task["task_id"], "validating")
 
-            # Validation: real checks when not mock; mock mode uses random for testing
+            # Validation: mock uses random; otherwise LLM validation
             task_id = task["task_id"]
             output_spec = task.get("output") or {}
             use_mock = (self.api_config or {}).get("useMock", True)
@@ -300,12 +353,25 @@ class ExecutionRunner:
                     "(Mock validation mode)"
                 )
             else:
-                validation_passed, report = validate_task_output(
-                    result, output_spec, task_id
+                validation_spec = task.get("validation")
+                validation_passed, report = await validate_task_output_with_llm(
+                    result,
+                    output_spec,
+                    task_id,
+                    validation_spec=validation_spec,
+                    api_config=self.api_config,
+                    abort_event=self.abort_event,
                 )
             for chunk in chunk_string(report, 20):
                 await self._emit_await("task-thinking", {"chunk": chunk, "taskId": task_id, "operation": "Validate"})
                 await asyncio.sleep(_MOCK_VALIDATOR_CHUNK_DELAY)
+
+            if self.plan_id:
+                await save_validation_report(
+                    self.plan_id,
+                    task_id,
+                    {"passed": validation_passed, "report": report},
+                )
 
             await asyncio.sleep(0.1)
 
@@ -315,11 +381,6 @@ class ExecutionRunner:
                 self._broadcast_worker_states()
             else:
                 self._update_task_status(task["task_id"], "validation-failed")
-                worker_obj = worker_manager["get_worker_by_id"](worker_id)
-                if worker_obj:
-                    worker_obj["status"] = "failed"
-                    self._broadcast_worker_states()
-                    await asyncio.sleep(0.5)
                 failure_count = self.task_failure_count.get(task["task_id"], 0)
                 self.task_failure_count[task["task_id"]] = failure_count + 1
                 await asyncio.sleep(1.0)
@@ -413,12 +474,9 @@ class ExecutionRunner:
         self._emit("task-states-update", {"tasks": task_states})
 
     def _broadcast_worker_states(self) -> None:
-        """Broadcast worker pool state."""
-        workers_list = worker_manager["get_all_workers"]()
+        """Broadcast execution concurrency stats."""
         stats = worker_manager["get_worker_stats"]()
-        self._emit("worker-states-update", {
-            "workers": workers_list, "stats": stats,
-        })
+        self._emit("execution-stats-update", {"stats": stats})
 
     async def _rollback_task(self, task: Dict) -> None:
         """Rollback task and all affected: upstream deps + downstream dependents.
@@ -455,6 +513,9 @@ class ExecutionRunner:
                     self.task_failure_count.pop(task_id, None)
                     self.task_tasks.pop(task_id, None)
                     worker_manager["release_worker_by_task_id"](task_id)
+                # P0: Clean artifact so downstream re-runs read fresh data
+                if self.plan_id:
+                    await delete_task_artifact(self.plan_id, task_id)
 
         self._broadcast_worker_states()
 
@@ -498,6 +559,34 @@ class ExecutionRunner:
                     "output": full.get("output") or t.get("output"),
                     "validation": full.get("validation") or t.get("validation"),
                 })
+
+    async def retry_task(self, task_id: str) -> bool:
+        """
+        Retry a single failed task. If execution is running, reset and re-schedule in-place.
+        If not running, start execution with resume_from_task_id.
+        Returns True if retry was initiated.
+        """
+        if task_id not in self.task_map:
+            return False
+        task = self.task_map[task_id]
+        status = task.get("status")
+        if status not in ("execution-failed", "validation-failed"):
+            return False
+
+        if self.is_running:
+            self.completed_tasks.discard(task_id)
+            self.running_tasks.discard(task_id)
+            self.pending_tasks.add(task_id)
+            self.task_failure_count.pop(task_id, None)
+            self.task_tasks.pop(task_id, None)
+            task["status"] = "undone"
+            if self.plan_id:
+                await delete_task_artifact(self.plan_id, task_id)
+            self._persist_execution()
+            self._broadcast_task_states()
+            self._schedule_ready_tasks([task])
+            return True
+        return False
 
     async def stop_async(self) -> None:
         """Stop execution: signal abort (stops API calls/token use), cancel tasks, release workers."""

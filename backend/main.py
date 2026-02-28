@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from api import PlanRunState, register_routes
-from execution import ExecutionRunner, worker_manager
+from task_agent import ExecutionRunner, worker_manager
 
 # Socket.io
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
@@ -43,7 +43,7 @@ plan_run_state.lock = asyncio.Lock()
 # Execution runner instance
 runner = ExecutionRunner(sio)
 
-# Register API routes (db, plan, plans, execution, config, workers)
+# Register API routes (db, plan, plans, execution, settings)
 register_routes(app, sio, runner, plan_run_state)
 
 
@@ -89,11 +89,8 @@ if FRONTEND_DIR.exists():
 @sio.event
 async def connect(sid, environ, auth):
     logger.info("Client connected: %s", sid)
-    workers = worker_manager["get_all_workers"]()
     stats = worker_manager["get_worker_stats"]()
-    await sio.emit("worker-states-update", {
-        "workers": workers, "stats": stats,
-    }, to=sid)
+    await sio.emit("execution-stats-update", {"stats": stats}, to=sid)
 
 
 @sio.event

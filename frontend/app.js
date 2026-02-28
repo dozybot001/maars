@@ -7,8 +7,8 @@
     document.addEventListener('DOMContentLoaded', () => {
         const cfg = window.MAARS?.config;
         const theme = window.MAARS?.theme;
-        const planner = window.MAARS?.planner;
-        const plannerViews = window.MAARS?.plannerViews;
+        const plan = window.MAARS?.plan;
+        const views = window.MAARS?.views;
         const ws = window.MAARS?.ws;
 
         if (theme) {
@@ -16,13 +16,12 @@
             theme.initSettingsModal();
         }
         if (cfg && cfg.resolvePlanId) cfg.resolvePlanId().catch(() => {});
-        if (planner) planner.init();
-        if (plannerViews) plannerViews.init();
+        if (plan) plan.init();
+        if (views) views.init();
         if (ws) ws.init();
 
-        if (typeof TaskTree !== 'undefined' && TaskTree.initClickHandlers) {
-            TaskTree.initClickHandlers();
-        }
+        const taskTree = window.MAARS?.taskTree;
+        if (taskTree?.initClickHandlers) taskTree.initClickHandlers();
 
         initTreeViewTabs();
 

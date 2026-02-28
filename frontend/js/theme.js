@@ -24,17 +24,6 @@
         }
     }
 
-    async function toggleTheme() {
-        const current = document.documentElement.getAttribute('data-theme') || 'light';
-        const idx = cfg.THEMES.indexOf(current);
-        const next = cfg.THEMES[(idx + 1) % cfg.THEMES.length];
-        applyTheme(next);
-        try {
-            const raw = await cfg.fetchSettings();
-            await cfg.saveSettings({ ...raw, theme: next });
-        } catch (_) {}
-    }
-
     const PHASES = [
         { key: 'atomicity', label: 'Atomicity Check' },
         { key: 'decompose', label: 'Decompose' },
@@ -57,9 +46,14 @@
             desc: 'Plan and task execution both use LLM calls (single-turn). Plan decomposes tasks; task execution generates output once and validates. Select or create preset in Preset.',
             presetNote: true,
         },
+        llmagent: {
+            title: 'LLM+Agent config',
+            desc: 'Plan uses LLM (single-turn atomicity/decompose/format). Task execution uses Agent mode (ReAct-style with tools): ReadArtifact, ReadFile, WriteFile, Finish, ListSkills, LoadSkill.',
+            presetNote: true,
+        },
         agent: {
             title: 'Agent config',
-            desc: 'Task execution uses Agent mode (ReAct-style with tools). Plan can use Agent or downgrade to LLM. When Plan Agent is on: CheckAtomicity, Decompose, FormatTask, AddTasks, etc. When off: plan uses single-turn LLM. Task: ReadArtifact, ReadFile, WriteFile, Finish, ListSkills, LoadSkill.',
+            desc: 'Plan and task execution both use Agent mode (ReAct-style with tools). Plan: CheckAtomicity, Decompose, FormatTask, AddTasks, etc. Task: ReadArtifact, ReadFile, WriteFile, Finish, ListSkills, LoadSkill.',
             presetNote: true,
         },
     };
@@ -75,8 +69,13 @@
             { key: 'taskLlmTemperature', label: 'Task Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Task', tip: 'Temperature for task execution LLM output' },
             { key: 'maxFailures', label: 'Max retries', type: 'number', min: 1, max: 10, default: 3, section: 'Task', tip: 'Max retries after execution/validation failure' },
         ],
+        llmagent: [
+            { key: 'planLlmTemperature', label: 'Plan Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Plan', tip: 'Temperature for plan LLM (atomicity/decompose/format)' },
+            { key: 'taskLlmTemperature', label: 'Task Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Task Agent', tip: 'Temperature for task Agent LLM' },
+            { key: 'taskAgentMaxTurns', label: 'Task max turns', type: 'number', min: 1, max: 30, default: 15, section: 'Task Agent', tip: 'Max turns for task Agent loop (incl. tool calls)' },
+            { key: 'maxFailures', label: 'Max retries', type: 'number', min: 1, max: 10, default: 3, section: 'Task Agent', tip: 'Max retries after execution/validation failure' },
+        ],
         agent: [
-            { key: 'planAgentMode', label: 'Plan Agent', type: 'checkbox', default: true, section: 'Plan', tip: 'Use Agent for plan (ReAct loop). When off, plan downgrades to LLM (single-turn atomicity/decompose/format).' },
             { key: 'planAgentMaxTurns', label: 'Plan max turns', type: 'number', min: 1, max: 50, default: 30, section: 'Plan Agent', tip: 'Max turns for plan Agent loop' },
             { key: 'planLlmTemperature', label: 'Plan Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Plan Agent', tip: 'Temperature for plan Agent LLM' },
             { key: 'taskLlmTemperature', label: 'Task Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.3, section: 'Task Agent', tip: 'Temperature for task Agent LLM' },
@@ -238,9 +237,10 @@
         const presetKey = isPreset ? itemId.slice(7) : '';
         const isTheme = itemId === 'theme';
         const isDb = itemId === 'db';
+        const isExecution = itemId === 'execution';
         const isMode = itemId === 'mode';
         const isPresetNav = itemId === 'preset';
-        const isModeOption = ['mock', 'llm', 'agent'].includes(itemId);
+        const isModeOption = ['mock', 'llm', 'llmagent', 'agent'].includes(itemId);
 
         const navItemId = isPreset ? 'preset' : (isModeOption ? 'mode' : itemId);
         document.querySelectorAll('.settings-nav-item').forEach(el => {
@@ -259,14 +259,26 @@
         if (isDb) {
             document.getElementById('settingsPanelTheme')?.classList.remove('active');
             document.getElementById('settingsPanelDb')?.classList.add('active');
+            document.getElementById('settingsPanelExecution')?.classList.remove('active');
             document.getElementById('settingsPanelMode')?.classList.remove('active');
             document.getElementById('settingsPanelPreset')?.classList.remove('active');
             _renderPresetSelectItems();
             return;
         }
+        if (isExecution) {
+            document.getElementById('settingsPanelTheme')?.classList.remove('active');
+            document.getElementById('settingsPanelDb')?.classList.remove('active');
+            document.getElementById('settingsPanelExecution')?.classList.add('active');
+            document.getElementById('settingsPanelMode')?.classList.remove('active');
+            document.getElementById('settingsPanelPreset')?.classList.remove('active');
+            const inp = document.getElementById('maxExecutionConcurrency');
+            if (inp) inp.value = String(_configState.maxExecutionConcurrency ?? 7);
+            return;
+        }
         if (isMode) {
             document.getElementById('settingsPanelTheme')?.classList.remove('active');
             document.getElementById('settingsPanelDb')?.classList.remove('active');
+            document.getElementById('settingsPanelExecution')?.classList.remove('active');
             document.getElementById('settingsPanelMode')?.classList.add('active');
             document.getElementById('settingsPanelPreset')?.classList.remove('active');
             _syncModeActive();
@@ -277,6 +289,7 @@
         if (isPresetNav) {
             document.getElementById('settingsPanelTheme')?.classList.remove('active');
             document.getElementById('settingsPanelDb')?.classList.remove('active');
+            document.getElementById('settingsPanelExecution')?.classList.remove('active');
             document.getElementById('settingsPanelMode')?.classList.remove('active');
             document.getElementById('settingsPanelPreset')?.classList.add('active');
             _populatePresetForm();
@@ -379,6 +392,9 @@
         raw = raw || {};
         const aiMode = raw.aiMode || 'mock';
         const theme = raw.theme && cfg.THEMES.includes(raw.theme) ? raw.theme : 'black';
+        const maxExecutionConcurrency = typeof raw.maxExecutionConcurrency === 'number'
+            ? raw.maxExecutionConcurrency
+            : (parseInt(raw.maxExecutionConcurrency, 10) || 7);
 
         let presets = {};
         let current = '';
@@ -392,7 +408,7 @@
         const modeConfig = raw.modeConfig && typeof raw.modeConfig === 'object'
             ? JSON.parse(JSON.stringify(raw.modeConfig))
             : {};
-        _configState = { theme, aiMode, current, presets, modeConfig };
+        _configState = { theme, aiMode, current, presets, modeConfig, maxExecutionConcurrency };
         _activePresetKey = current || Object.keys(presets)[0];
     }
 
@@ -425,6 +441,7 @@
             }
             document.getElementById('settingsPanelTheme')?.classList.add('active');
             document.getElementById('settingsPanelDb')?.classList.remove('active');
+            document.getElementById('settingsPanelExecution')?.classList.remove('active');
             document.getElementById('settingsPanelPreset')?.classList.remove('active');
             document.getElementById('settingsPanelMode')?.classList.remove('active');
             _selectItem('theme');
@@ -526,6 +543,9 @@
         document.getElementById('settingsSaveBtn')?.addEventListener('click', async () => {
             _readFormIntoState();
             _readModeFormIntoState();
+            const concInp = document.getElementById('maxExecutionConcurrency');
+            const conc = concInp ? parseInt(concInp.value, 10) : 7;
+            _configState.maxExecutionConcurrency = (conc >= 1 && conc <= 32) ? conc : 7;
             _configState.theme = document.documentElement.getAttribute('data-theme') || 'light';
             try {
                 await cfg.saveSettings(_configState);
@@ -546,5 +566,5 @@
         });
     }
 
-    window.MAARS.theme = { initTheme, applyTheme, toggleTheme, initSettingsModal };
+    window.MAARS.theme = { initTheme, applyTheme, initSettingsModal };
 })();

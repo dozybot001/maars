@@ -1,6 +1,6 @@
 """
 Database Module
-File-based storage: db/{plan_id}/ contains plan.json, execution.json, validation.json.
+File-based storage: db/{plan_id}/ contains plan.json, execution.json, {task_id}/output.json.
 Plan generates a new plan_id folder on each new plan; all reads/writes use plan_id.
 Uses orjson for faster JSON parsing.
 """
@@ -118,6 +118,36 @@ async def save_task_artifact(plan_id: str, task_id: str, value) -> dict:
     return {"success": True}
 
 
+async def delete_task_artifact(plan_id: str, task_id: str) -> bool:
+    """Remove artifact at db/{plan_id}/{task_id}/output.json. Returns True if deleted."""
+    _validate_plan_id(plan_id)
+    _validate_task_id(task_id)
+    task_dir = _get_task_dir(plan_id, task_id)
+    file_path = task_dir / "output.json"
+    try:
+        if file_path.exists():
+            file_path.unlink()
+            return True
+    except OSError as e:
+        logger.warning("Failed to delete artifact %s: %s", file_path, e)
+    return False
+
+
+async def save_validation_report(plan_id: str, task_id: str, report: dict) -> dict:
+    """Save validation report to db/{plan_id}/{task_id}/validation.json."""
+    _validate_plan_id(plan_id)
+    _validate_task_id(task_id)
+    task_dir = _get_task_dir(plan_id, task_id)
+    task_dir.mkdir(parents=True, exist_ok=True)
+    file_path = task_dir / "validation.json"
+    tmp_path = file_path.with_suffix(file_path.suffix + ".tmp")
+    content = orjson.dumps(report, option=orjson.OPT_INDENT_2).decode("utf-8")
+    async with aiofiles.open(tmp_path, "w", encoding="utf-8") as f:
+        await f.write(content)
+    tmp_path.replace(file_path)
+    return {"success": True}
+
+
 async def _ensure_plan_dir(plan_id: str = DEFAULT_PLAN_ID) -> None:
     _validate_plan_id(plan_id)
     plan_dir = _get_plan_dir(plan_id)
@@ -161,17 +191,6 @@ async def save_execution(execution: dict, plan_id: str = DEFAULT_PLAN_ID) -> dic
     return {"success": True, "execution": execution}
 
 
-async def get_validation(plan_id: str = DEFAULT_PLAN_ID):
-    """Get validation (output validation results)."""
-    return await _read_json_file(plan_id, "validation.json")
-
-
-async def save_validation(validation: dict, plan_id: str = DEFAULT_PLAN_ID) -> dict:
-    """Save validation (output validation results)."""
-    await _write_json_file(plan_id, "validation.json", validation)
-    return {"success": True, "validation": validation}
-
-
 async def list_plan_ids() -> list:
     """List plan IDs from db/, sorted by plan.json mtime (newest first)."""
     if not DB_DIR.exists():
@@ -191,20 +210,22 @@ async def list_plan_ids() -> list:
 
 
 def _ai_mode_to_flags(ai_mode: str) -> tuple:
-    """Convert aiMode to (useMock, taskAgentMode). aiMode: mock|llm|agent."""
+    """Convert aiMode to (useMock, taskAgentMode, planAgentMode). aiMode: mock|llm|llmagent|agent."""
     if ai_mode == "mock":
-        return True, False
+        return True, False, False
+    if ai_mode == "llmagent":
+        return False, True, False  # Plan: LLM, Execute: Agent
     if ai_mode == "agent":
-        return False, True
-    return False, False  # llm
+        return False, True, True  # Plan: Agent, Execute: Agent
+    return False, False, False  # llm
 
 
 def _resolve_config(raw: dict) -> dict:
-    """Resolve presets+current to effective config for LLM/plan/execution. aiMode: mock|llm|agent."""
+    """Resolve presets+current to effective config for LLM/plan/execution. aiMode: mock|llm|llmagent|agent."""
     if not raw:
         return {}
     ai_mode = raw.get("aiMode") or "mock"
-    use_mock, task_agent = _ai_mode_to_flags(ai_mode)
+    use_mock, task_agent, plan_agent = _ai_mode_to_flags(ai_mode)
 
     presets = raw.get("presets")
     current = raw.get("current")
@@ -215,15 +236,13 @@ def _resolve_config(raw: dict) -> dict:
         cfg = {}
     cfg["useMock"] = use_mock
     cfg["taskAgentMode"] = task_agent
+    cfg["planAgentMode"] = plan_agent
+    cfg["aiMode"] = ai_mode
     mode_config = raw.get("modeConfig") or {}
-    # planAgentMode: in agent mode, can downgrade plan to LLM via modeConfig.agent.planAgentMode (default True)
-    if ai_mode == "agent":
-        agent_cfg = mode_config.get("agent") or {}
-        cfg["planAgentMode"] = agent_cfg.get("planAgentMode", True)
-    else:
-        cfg["planAgentMode"] = False
     cfg["modeConfig"] = mode_config
-    for m in ("llm", "agent"):
+    v = raw.get("maxExecutionConcurrency")
+    cfg["maxExecutionConcurrency"] = int(v) if v is not None else 7
+    for m in ("llm", "llmagent", "agent"):
         pm = mode_config.get(m) or {}
         t = pm.get("planLlmTemperature")
         if t is not None:

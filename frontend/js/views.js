@@ -1,6 +1,5 @@
 /**
- * MAARS planner views - execution tree (执行图), executor chips.
- * Planner has 3 sub-views: decomposition, execution, output.
+ * MAARS views - tree (decomposition/execution), output, execution stats.
  */
 (function () {
     'use strict';
@@ -32,7 +31,7 @@
     function renderExecutionDiagram() {
         const layout = state.executionLayout;
         const treeData = layout?.treeData || [];
-        TaskTree.renderExecutionTree(treeData, layout?.layout);
+        window.MAARS.taskTree?.renderExecutionTree(treeData, layout?.layout);
     }
 
     function animateConnectionLines(taskId, color, direction) {
@@ -68,84 +67,35 @@
         });
     }
 
-    function renderChips(containerId, items, stats, opts) {
-        const { chipClass, chipIdAttr, getStatusClass, getTitle } = opts;
-        const chipsEl = document.getElementById(containerId);
-        const baseId = containerId.replace('Chips', '');
-        const totalEl = document.getElementById(baseId + 'Total');
-        const busyEl = document.getElementById(baseId + 'Busy');
-        const validatingEl = document.getElementById(baseId + 'Validating');
-        const idleEl = document.getElementById(baseId + 'Idle');
-        if (!chipsEl || !totalEl || !busyEl || !idleEl) return;
-        if (!items || items.length === 0) {
-            chipsEl.innerHTML = '';
-            totalEl.textContent = busyEl.textContent = idleEl.textContent = '0';
-            if (validatingEl) validatingEl.textContent = '0';
-            return;
-        }
-        totalEl.textContent = stats.total ?? items.length;
-        busyEl.textContent = stats.busy ?? 0;
-        if (validatingEl) validatingEl.textContent = stats.validating ?? 0;
-        idleEl.textContent = stats.idle ?? 0;
-        const existing = new Map();
-        chipsEl.querySelectorAll(`.${chipClass}`).forEach((el) => {
-            const id = el.getAttribute(chipIdAttr);
-            if (id) existing.set(id, el);
-        });
-        items.forEach((item) => {
-            const id = String(item.id);
-            const statusClass = getStatusClass(item);
-            const title = getTitle(item);
-            let chip = existing.get(id);
-            if (chip) {
-                chip.className = `${chipClass} ${statusClass}`;
-                chip.title = title;
-                existing.delete(id);
-            } else {
-                chip = document.createElement('div');
-                chip.className = `${chipClass} ${statusClass}`;
-                chip.setAttribute(chipIdAttr, item.id);
-                chip.title = title;
-                chip.textContent = item.id;
-                chipsEl.appendChild(chip);
-            }
-        });
-        existing.forEach((el) => el.remove());
+    function renderExecutionStats(data) {
+        if (!data?.stats) return;
+        const stats = data.stats;
+        const concurrent = (stats.busy ?? 0) + (stats.validating ?? 0);
+        const max = stats.max ?? 7;
+        const concurrentEl = document.getElementById('executorConcurrent');
+        const maxEl = document.getElementById('executorMax');
+        if (concurrentEl) concurrentEl.textContent = concurrent;
+        if (maxEl) maxEl.textContent = max;
     }
 
-    function renderWorkerStates(data) {
-        if (!data) return;
-        const items = data.workers;
-        const stats = data.stats;
-        if (items && stats) {
-            renderChips('executorChips', items, stats, {
-                chipClass: 'executor-chip',
-                chipIdAttr: 'data-executor-id',
-                getStatusClass: (e) => {
-                    if (e.status === 'busy') return 'executor-busy';
-                    if (e.status === 'validating') return 'executor-validating';
-                    if (e.status === 'failed') return 'executor-failed';
-                    return 'executor-idle';
-                },
-                getTitle: (e) => {
-                    if (e.status === 'validating') return `Worker ${e.id} validating output${e.taskId ? ': ' + e.taskId : ''}`;
-                    if (e.status === 'busy') return `Worker ${e.id} executing${e.taskId ? ': ' + e.taskId : ''}`;
-                    return `Worker ${e.id}${e.taskId ? ': ' + e.taskId : ''}`;
-                },
-            });
+    function startExecutionUI() {
+        if (executionBtn) {
+            executionBtn.disabled = true;
+            executionBtn.textContent = 'Executing...';
         }
+        if (stopExecutionBtn) stopExecutionBtn.style.display = '';
     }
 
     async function runExecution() {
         const execution = await api.loadExecution();
         if (!execution) {
-            alert('Please generate plan first.');
+            alert('Plan first.');
             return;
         }
+        const planId = await cfg.resolvePlanId();
         const btn = executionBtn;
         const originalText = btn.textContent;
-        btn.disabled = true;
-        btn.textContent = 'Executing...';
+        startExecutionUI();
         try {
             const socket = window.MAARS?.state?.socket;
             if (!socket || !socket.connected) {
@@ -154,7 +104,8 @@
             }
             const response = await fetch(`${cfg.API_BASE_URL}/execution/run`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ planId })
             });
             if (!response.ok) {
                 const error = await response.json();
@@ -191,7 +142,7 @@
             if (!genRes.ok) throw new Error(genData.error || 'Failed to generate execution from plan');
             const execution = genData.execution;
             if (!execution || !execution.tasks?.length) {
-                alert('No atomic tasks in plan. Generate plan first.');
+                alert('No atomic tasks. Plan first.');
                 return;
             }
             const response = await fetch(`${cfg.API_BASE_URL}/plan/layout`, {
@@ -223,20 +174,30 @@
         renderExecutionDiagram();
     }
 
+    function restoreExecution(layout, execution) {
+        state.executionLayout = layout;
+        state.previousTaskStates.clear();
+        (execution?.tasks || []).forEach((t) => {
+            if (t.task_id && t.status) state.previousTaskStates.set(t.task_id, t.status);
+        });
+        state.chainCache = buildChainCacheFromLayout(layout);
+        renderExecutionDiagram();
+    }
+
     function init() {
         if (executionBtn) executionBtn.addEventListener('click', runExecution);
         if (stopExecutionBtn) stopExecutionBtn.addEventListener('click', stopExecution);
     }
 
-    window.MAARS.plannerViews = {
+    window.MAARS.views = {
         init,
         state,
         setExecutionLayout,
-        buildChainCacheFromLayout,
-        renderExecutionDiagram,
+        restoreExecution,
         animateConnectionLines,
-        renderWorkerStates,
+        renderExecutionStats,
         resetExecutionButtons,
         generateExecutionLayout,
+        startExecutionUI,
     };
 })();

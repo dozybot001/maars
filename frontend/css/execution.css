@@ -125,6 +125,11 @@
     transition: var(--state-transition);
 }
 
+.stat-sep {
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
 .stat-value.stat-busy {
     color: var(--executor-busy-text);
 }

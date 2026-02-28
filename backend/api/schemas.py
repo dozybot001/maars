@@ -18,16 +18,21 @@ class PlanLayoutRequest(BaseModel):
     plan_id: str = Field(default="test", alias="planId")
 
 
-class TaskIdRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-    task_id: str = Field(..., alias="taskId")
-
-
 class ExecutionRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
     plan_id: str = Field(default="test", alias="planId")
 
 
-class ValidationRequest(BaseModel):
+class ExecutionRunRequest(BaseModel):
+    """Request for starting execution. planId optional; if provided, validated against runner layout.
+    resumeFromTaskId: when set, only reset that task and downstream to undone, then run (resume from task)."""
     model_config = ConfigDict(populate_by_name=True, extra="allow")
-    plan_id: str = Field(default="test", alias="planId")
+    plan_id: Optional[str] = Field(default=None, alias="planId")
+    resume_from_task_id: Optional[str] = Field(default=None, alias="resumeFromTaskId")
+
+
+class ExecutionRetryRequest(BaseModel):
+    """Request for retrying a single failed task."""
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    plan_id: Optional[str] = Field(default=None, alias="planId")
+    task_id: str = Field(..., alias="taskId")

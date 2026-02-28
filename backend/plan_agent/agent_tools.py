@@ -13,7 +13,7 @@ import orjson
 from shared.graph import get_ancestor_path, get_parent_id
 from shared.skill_utils import parse_skill_frontmatter
 
-# Plan skills root: MAARS_PLAN_SKILLS_DIR env or backend/plan/skills/
+# Plan skills root: MAARS_PLAN_SKILLS_DIR env or backend/plan_agent/skills/
 _PLAN_SKILLS_DIR = os.environ.get("MAARS_PLAN_SKILLS_DIR")
 PLAN_SKILLS_ROOT = (
     Path(_PLAN_SKILLS_DIR).resolve()

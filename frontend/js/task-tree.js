@@ -4,11 +4,14 @@
  */
 (function () {
     'use strict';
+    window.MAARS = window.MAARS || {};
 
     const AREA = {
         decomposition: '.planner-tree-area',
         execution: '.planner-execution-tree-area',
     };
+
+    const escapeHtml = (window.MAARS?.utils?.escapeHtml) || ((s) => (s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')));
 
     let plannerTreeData = [];
     let plannerLayout = null;
@@ -157,7 +160,6 @@
         });
         const leafIds = new Set(Object.keys(nodes).filter(id => !parentIds.has(id)));
 
-        /* 样式统一：普通=tree-task，特殊=tree-task-leaf。分解树叶子/执行图合并节点用特殊样式 */
         for (const [taskId, pos] of Object.entries(nodes)) {
             const ids = pos.ids;
             const isMerged = ids && ids.length >= 2;
@@ -202,26 +204,23 @@
         renderFull(treeData, layout, AREA.decomposition);
     }
 
-    // Popover
     let popoverEl = null;
     let popoverAnchor = null;
     let popoverOutsideClickHandler = null;
     let popoverKeydownHandler = null;
 
-    const escapeHtml = (() => {
-        const u = typeof window !== 'undefined' && window.MAARS?.utils;
-        if (u?.escapeHtml) return u.escapeHtml;
-        return function (str) {
-            if (str == null) return '';
-            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        };
-    })();
-
     function buildTaskDetailBody(task) {
         const desc = (task.description || task.objective || '').trim() || '-';
         const deps = (task.dependencies || []).length > 0 ? (task.dependencies || []).join(', ') : 'None';
         const hasStatus = task.status != null;
+        const isFailed = task.status === 'execution-failed' || task.status === 'validation-failed';
+        const isUndone = !task.status || task.status === 'undone';
         const statusRow = hasStatus ? `<div class="task-detail-row"><span class="task-detail-label">Status:</span><span class="task-detail-value task-status-${task.status}">${escapeHtml(task.status)}</span></div>` : '';
+        const actionRow = isFailed
+            ? `<div class="task-detail-row task-detail-actions"><button type="button" class="btn-default task-retry-btn" data-retry-task-id="${escapeHtml(task.task_id)}">Retry</button></div>`
+            : isUndone
+                ? `<div class="task-detail-row task-detail-actions"><button type="button" class="btn-default task-resume-btn" data-resume-task-id="${escapeHtml(task.task_id)}">Run from here</button></div>`
+                : '';
         const hasInputOutput = task.input && task.output;
         const inputRow = hasInputOutput ? `<div class="task-detail-row"><span class="task-detail-label">Input:</span><span class="task-detail-value">${escapeHtml(task.input.description || '-')}</span></div>` : '';
         const out = task.output || {};
@@ -242,7 +241,8 @@
                 ${statusRow}
                 ${inputRow}
                 ${outputRow}
-                ${validationRow}`;
+                ${validationRow}
+                ${actionRow}`;
     }
 
     function showTaskPopover(taskOrTasks, anchorEl) {
@@ -308,6 +308,25 @@
         popoverEl.style.top = top + 'px';
 
         popoverEl.querySelector('.task-detail-popover-close').addEventListener('click', hideTaskPopover);
+        popoverEl.addEventListener('click', (e) => {
+            const retryBtn = e.target.closest('.task-retry-btn');
+            const resumeBtn = e.target.closest('.task-resume-btn');
+            const taskId = retryBtn?.getAttribute('data-retry-task-id') || resumeBtn?.getAttribute('data-resume-task-id');
+            if (taskId && window.MAARS?.api) {
+                const fn = retryBtn ? window.MAARS.api.retryTask : window.MAARS.api.resumeFromTask;
+                if (fn) {
+                    fn.call(window.MAARS.api, taskId).then(() => {
+                        if (window.MAARS?.views?.startExecutionUI) {
+                            window.MAARS.views.startExecutionUI();
+                        }
+                    }).catch((err) => {
+                        console.error('Action failed:', err);
+                        alert('Failed: ' + (err.message || err));
+                    });
+                    hideTaskPopover();
+                }
+            }
+        });
         popoverOutsideClickHandler = (e) => {
             if (popoverEl && !popoverEl.contains(e.target) && !e.target.closest('.tree-task')) hideTaskPopover();
         };
@@ -361,19 +380,13 @@
         else badge.classList.add('quality-low');
     }
 
-    window.TaskTree = {
-        AREA,
+    window.MAARS.taskTree = {
         aggregateStatus,
         renderPlannerTree,
         renderExecutionTree: (data, layout) => renderFull(data, layout, AREA.execution),
         clearPlannerTree: () => { clear(AREA.decomposition); updatePlannerQualityBadge(null); },
         clearExecutionTree: () => clear(AREA.execution),
         initClickHandlers,
-        showTaskPopover,
-        hideTaskPopover,
         updatePlannerQualityBadge,
-        buildTaskDataForPopover: getTaskDataForPopover,
-        get plannerTreeData() { return plannerTreeData; },
-        get plannerLayout() { return plannerLayout; },
     };
 })();

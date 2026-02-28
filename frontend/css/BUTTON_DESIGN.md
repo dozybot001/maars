@@ -46,7 +46,7 @@
 - hover：`box-shadow: var(--shadow-lg)`
 
 ### icon（图标按钮）
-- 适用：`.icon-btn`, `.theme-toggle-btn`, `.btn-icon`
+- 适用：`.icon-btn`, `.btn-icon`
 - 尺寸：40×40px
 - 边框：`1px solid var(--border-color)`
 - 背景：`var(--bg-area-secondary)`

@@ -34,6 +34,9 @@
                                 <button type="button" class="settings-nav-item" data-item="db">
                                     <span class="settings-nav-item-name">DB Operation</span>
                                 </button>
+                                <button type="button" class="settings-nav-item" data-item="execution">
+                                    <span class="settings-nav-item-name">Execution</span>
+                                </button>
                                 <button type="button" class="settings-nav-item" data-item="mode">
                                     <span class="settings-nav-item-name">AI Mode</span>
                                 </button>
@@ -63,12 +66,23 @@
                                     </div>
                                 </div>
                             </div>
+                            <div class="settings-panel" id="settingsPanelExecution" data-panel="execution">
+                                <div class="settings-card">
+                                    <h3 class="settings-card-title">Execution</h3>
+                                    <div class="settings-field">
+                                        <label for="maxExecutionConcurrency">Max concurrent tasks</label>
+                                        <input type="number" id="maxExecutionConcurrency" min="1" max="32" value="7" />
+                                        <span class="settings-param-tip">Maximum number of tasks running in parallel during execution</span>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="settings-panel" id="settingsPanelMode" data-panel="mode">
                                 <div class="settings-card">
                                     <h3 class="settings-card-title">AI Mode</h3>
                                     <div class="settings-options" id="settingsModeOptions">
                                         <button type="button" class="settings-option" data-item="mock">Mock</button>
                                         <button type="button" class="settings-option" data-item="llm">LLM</button>
+                                        <button type="button" class="settings-option" data-item="llmagent">LLM+Agent</button>
                                         <button type="button" class="settings-option" data-item="agent">Agent</button>
                                     </div>
                                 </div>
@@ -126,7 +140,7 @@
             <div class="idea-input-row">
                 <input type="text" id="ideaInput" class="idea-input" placeholder="Enter your research idea..." />
                 <button id="loadExampleIdeaBtn">Load Idea</button>
-                <button id="generatePlanBtn">Generate</button>
+                <button id="generatePlanBtn">Plan</button>
                 <button id="stopPlanBtn" class="stop-btn" style="display: none;">Stop</button>
                 <button id="executionBtn">Execute</button>
                 <button id="stopExecutionBtn" class="stop-btn" style="display: none;">Stop</button>
@@ -134,24 +148,11 @@
             <div class="executor-stats">
                 <div class="executor-stats-items">
                     <div class="stat-item">
-                        <span class="stat-label">Workers:</span>
-                        <span class="stat-value" id="executorTotal">0</span>
+                        <span class="stat-label">Concurrent:</span>
+                        <span class="stat-value" id="executorConcurrent">0</span>
+                        <span class="stat-sep">/</span>
+                        <span class="stat-value" id="executorMax">7</span>
                     </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Busy:</span>
-                        <span class="stat-value stat-busy" id="executorBusy">0</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Validating:</span>
-                        <span class="stat-value stat-validating" id="executorValidating">0</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Idle:</span>
-                        <span class="stat-value stat-idle" id="executorIdle">0</span>
-                    </div>
-                </div>
-                <div class="executor-chips" id="executorChips">
-                    <!-- Populated by renderWorkerStates -->
                 </div>
             </div>
             <div class="planner-thinking-tree-row">
@@ -188,7 +189,7 @@
         </main>
     </div>
 
-    <!-- Executor Task Output fullscreen modal -->
+    <!-- Task Output modal -->
     <div id="executorOutputModal" class="executor-output-modal" aria-hidden="true">
         <div class="executor-output-modal-backdrop"></div>
         <div class="executor-output-modal-dialog">
@@ -208,16 +209,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="js/utils.js"></script>
-    <script src="task-tree.js"></script>
     <script src="js/config.js"></script>
-    <script src="js/constants.js"></script>
+    <script src="js/task-tree.js"></script>
     <script src="js/theme.js"></script>
     <script src="js/api.js"></script>
-    <script src="js/planner.js"></script>
-    <script src="js/thinking-area.js"></script>
-    <script src="js/planner-thinking.js"></script>
-    <script src="js/executor-thinking.js"></script>
-    <script src="js/planner-views.js"></script>
+    <script src="js/plan.js"></script>
+    <script src="js/thinking.js"></script>
+    <script src="js/views.js"></script>
     <script src="js/websocket.js"></script>
     <script src="app.js"></script>
 </body>
