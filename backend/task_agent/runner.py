@@ -116,18 +116,18 @@ class ExecutionRunner:
         if api_config is not None:
             self.api_config = api_config
             mode_cfg = api_config.get("modeConfig") or {}
-            mock_cfg = mode_cfg.get("mock") or {}
-            if mock_cfg:
+            ai_mode = api_config.get("aiMode") or ""
+            mock_cfg = mode_cfg.get(ai_mode) or mode_cfg.get("mock") or {}
+            if mock_cfg and api_config.get("useMock"):
                 v = mock_cfg.get("executionPassProbability")
                 if v is not None:
                     self.EXECUTION_PASS_PROBABILITY = float(v)
                 v = mock_cfg.get("validationPassProbability")
                 if v is not None:
                     self.VALIDATION_PASS_PROBABILITY = float(v)
-            # maxFailures: read from mock | llm | llmagent | agent
+            # maxFailures: read from mock | mockagent | llm | llmagent | agent
             use_mock = api_config.get("useMock", True)
             exec_agent = api_config.get("taskAgentMode", False)
-            ai_mode = api_config.get("aiMode") or ""
             if use_mock:
                 runner_cfg = mock_cfg
             elif exec_agent:

@@ -13,6 +13,7 @@ import json_repair
 
 from db import ensure_sandbox_dir
 from shared.llm_client import chat_completion, merge_phase_config
+from shared.utils import format_tool_args_preview
 
 from .agent_tools import TOOLS, execute_tool
 
@@ -142,6 +143,28 @@ async def run_task_agent(
     validation_spec: Optional[Dict[str, Any]] = None,
 ) -> Any:
     """ReAct-style Agent loop with ReadArtifact, ReadFile, Finish tools. Runs in isolated sandbox."""
+    if api_config.get("useMock"):
+        from .llm.executor import _mock_execute
+
+        output_format = (output_spec or {}).get("format") or ""
+        mock_tools = ["ReadArtifact", "ReadFile", "ListSkills", "LoadSkill", "ReadSkillFile", "WriteFile", "Finish"]
+        for i, tool in enumerate(mock_tools, start=1):
+            if on_thinking:
+                tool_schedule = {
+                    "turn": i,
+                    "max_turns": len(mock_tools),
+                    "tool_name": tool,
+                    "tool_args": "(...)",
+                    "tool_args_preview": None,
+                    "operation": "Execute",
+                    "task_id": task_id,
+                }
+                r = on_thinking("", task_id=task_id, operation="Execute", schedule_info=tool_schedule)
+                if asyncio.iscoroutine(r):
+                    await r
+            await asyncio.sleep(0.03)
+        return await _mock_execute(output_format, task_id, on_thinking)
+
     if plan_id and task_id:
         await ensure_sandbox_dir(plan_id, task_id)
     messages, output_format = _build_task_agent_messages(
@@ -175,7 +198,7 @@ async def run_task_agent(
         else:
             content = result or ""
 
-        schedule_info = {"turn": turn, "max_turns": max_turns}
+        schedule_info = {"turn": turn, "max_turns": max_turns, "operation": "Execute", "task_id": task_id}
         if on_thinking and content:
             r = on_thinking(content, task_id=task_id, operation="Execute", schedule_info=schedule_info)
             if asyncio.iscoroutine(r):
@@ -219,7 +242,17 @@ async def run_task_agent(
                 name = fn.get("name") or ""
                 args = fn.get("arguments") or "{}"
                 if on_thinking:
-                    tool_schedule = {"turn": turn, "max_turns": max_turns, "tool_name": name, "tool_args": (args[:200] + "...") if len(args) > 200 else args}
+                    tool_args_raw = (args[:200] + "...") if len(args) > 200 else args
+                    tool_args_preview = format_tool_args_preview(name, args)
+                    tool_schedule = {
+                        "turn": turn,
+                        "max_turns": max_turns,
+                        "tool_name": name,
+                        "tool_args": tool_args_raw,
+                        "tool_args_preview": tool_args_preview,
+                        "operation": "Execute",
+                        "task_id": task_id,
+                    }
                     r = on_thinking("", task_id=task_id, operation="Execute", schedule_info=tool_schedule)
                     if asyncio.iscoroutine(r):
                         await r

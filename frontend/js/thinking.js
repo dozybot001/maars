@@ -6,6 +6,12 @@
     'use strict';
 
     const escapeHtml = window.MAARS?.utils?.escapeHtml || ((s) => (s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')));
+    const truncateForDisplay = (s, maxLen) => {
+        if (s == null || typeof s !== 'string') return '';
+        const str = String(s).trim();
+        if (str.length <= maxLen) return str;
+        return str.slice(0, maxLen - 3) + '...';
+    };
     const RENDER_THROTTLE_MS = 120;
     const RENDER_THROTTLE_LARGE_MS = 250;
     const LARGE_CONTENT_CHARS = 6000;
@@ -37,23 +43,43 @@
         if (!el) return;
         const blocks = state[`${PREFIX}ThinkingBlocks`];
         let html = '';
-        for (const block of blocks) {
+        let i = 0;
+        while (i < blocks.length) {
+            const block = blocks[i];
             if (block.blockType === 'schedule') {
-                const si = block.scheduleInfo || {};
-                const parts = [];
-                if (si.turn != null) parts.push(`Turn ${si.turn}${si.max_turns != null ? `/${si.max_turns}` : ''}`);
-                if (si.tool_name) parts.push(si.tool_name + (si.tool_args ? '(...)' : ''));
-                const scheduleText = parts.length ? parts.join(' | ') : 'Scheduling';
-                html += `<div class="${BLOCK_CLASS} ${BLOCK_CLASS}--schedule" data-block-key="${(block.key || '').replace(/"/g, '&quot;')}"><div class="${BLOCK_CLASS}-schedule-text">${escapeHtml(scheduleText)}</div></div>`;
+                const scheduleBlocks = [];
+                while (i < blocks.length && blocks[i].blockType === 'schedule') {
+                    scheduleBlocks.push(blocks[i]);
+                    i++;
+                }
+                const scheduleHtml = scheduleBlocks.map((b) => {
+                    const si = b.scheduleInfo || {};
+                    const parts = [];
+                    if (si.task_id) parts.push(`Task ${si.task_id}`);
+                    if (si.operation) parts.push(si.operation);
+                    if (si.turn != null) parts.push(`Turn ${si.turn}${si.max_turns != null ? `/${si.max_turns}` : ''}`);
+                    if (si.tool_name) {
+                        const argsDisplay = si.tool_args_preview || (si.tool_args ? truncateForDisplay(si.tool_args, 60) : null);
+                        parts.push(si.tool_name + (argsDisplay ? `(${argsDisplay})` : ''));
+                    }
+                    const scheduleText = parts.length ? parts.join(' · ') : 'Scheduling';
+                    return `<div class="${BLOCK_CLASS} ${BLOCK_CLASS}--schedule" data-block-key="${(b.key || '').replace(/"/g, '&quot;')}"><div class="${BLOCK_CLASS}-schedule-text">${escapeHtml(scheduleText)}</div></div>`;
+                }).join('');
+                html += `<div class="plan-agent-schedule-group">${scheduleHtml}</div>`;
                 continue;
             }
+            i++;
             let headerText = block.taskId != null ? `Task ${block.taskId} | ${block.operation || ''}` : (block.operation || 'Thinking');
             const si = block.scheduleInfo;
             if (si) {
                 const parts = [];
+                if (si.operation) parts.push(si.operation);
                 if (si.turn != null) parts.push(`Turn ${si.turn}${si.max_turns != null ? `/${si.max_turns}` : ''}`);
-                if (si.tool_name) parts.push(si.tool_name + (si.tool_args ? '(...)' : ''));
-                if (parts.length) headerText += ' | ' + parts.join(' | ');
+                if (si.tool_name) {
+                    const argsDisplay = si.tool_args_preview || (si.tool_args ? truncateForDisplay(si.tool_args, 50) : null);
+                    parts.push(si.tool_name + (argsDisplay ? `(${argsDisplay})` : ''));
+                }
+                if (parts.length) headerText += ' · ' + parts.join(' · ');
             }
             const raw = block.content || '';
             let blockHtml = raw ? (typeof marked !== 'undefined' ? marked.parse(raw) : raw) : '';
@@ -224,9 +250,15 @@
         for (const taskId of keys) {
             const raw = outputs[taskId];
             let content = '';
-            if (typeof raw === 'object') {
-                const str = JSON.stringify(raw, null, 2);
-                content = typeof marked !== 'undefined' ? marked.parse('```json\n' + str + '\n```') : '<pre>' + str + '</pre>';
+            if (typeof raw === 'object' && raw !== null) {
+                // Object with 'content' string (e.g. from Agent Finish tool) → render content as markdown
+                if ('content' in raw && typeof raw.content === 'string') {
+                    const text = raw.content || '';
+                    content = text ? (typeof marked !== 'undefined' ? marked.parse(text) : text) : '';
+                } else {
+                    const str = JSON.stringify(raw, null, 2);
+                    content = typeof marked !== 'undefined' ? marked.parse('```json\n' + str + '\n```') : '<pre>' + str + '</pre>';
+                }
             } else {
                 content = (raw || '') ? (typeof marked !== 'undefined' ? marked.parse(String(raw)) : String(raw)) : '';
             }

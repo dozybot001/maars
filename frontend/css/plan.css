@@ -92,6 +92,23 @@
     margin-bottom: 0;
 }
 
+/* Consecutive schedule blocks - scrollable container with height limit */
+.plan-agent-schedule-group {
+    max-height: 120px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    margin-bottom: 8px;
+    padding-right: 4px;
+    scrollbar-gutter: stable;
+}
+.plan-agent-schedule-group::-webkit-scrollbar {
+    width: 6px;
+}
+.plan-agent-schedule-group::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
 /* Schedule message - simple text line, no border, no click */
 .plan-agent-thinking-block--schedule {
     height: auto;

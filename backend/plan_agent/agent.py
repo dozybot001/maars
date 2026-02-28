@@ -9,6 +9,7 @@ import asyncio
 from typing import Any, Callable, Dict, List, Optional
 
 from shared.llm_client import chat_completion as real_chat_completion, merge_phase_config
+from shared.utils import format_tool_args_preview
 
 from .agent_tools import PLAN_AGENT_TOOLS, execute_plan_agent_tool
 from .llm.executor import (
@@ -81,7 +82,12 @@ async def run_plan_agent(
         turn += 1
         raise_if_aborted(abort_event)
         if on_thinking_fn:
-            r = on_thinking_fn("", task_id=None, operation="Plan", schedule_info={"turn": turn, "max_turns": max_turns})
+            r = on_thinking_fn(
+                "",
+                task_id=None,
+                operation="Plan",
+                schedule_info={"turn": turn, "max_turns": max_turns, "operation": "Plan"},
+            )
             if asyncio.iscoroutine(r):
                 await r
 
@@ -103,7 +109,7 @@ async def run_plan_agent(
         else:
             content = result or ""
 
-        schedule_info = {"turn": turn, "max_turns": max_turns}
+        schedule_info = {"turn": turn, "max_turns": max_turns, "operation": "Plan"}
         if on_thinking_fn and content:
             r = on_thinking_fn(content, task_id=None, operation="Plan", schedule_info=schedule_info)
             if asyncio.iscoroutine(r):
@@ -146,7 +152,16 @@ async def run_plan_agent(
                 name = fn.get("name") or ""
                 args = fn.get("arguments") or "{}"
                 if on_thinking_fn:
-                    tool_schedule = {"turn": turn, "max_turns": max_turns, "tool_name": name, "tool_args": (args[:200] + "...") if len(args) > 200 else args}
+                    tool_args_raw = (args[:200] + "...") if len(args) > 200 else args
+                    tool_args_preview = format_tool_args_preview(name, args)
+                    tool_schedule = {
+                        "turn": turn,
+                        "max_turns": max_turns,
+                        "tool_name": name,
+                        "tool_args": tool_args_raw,
+                        "tool_args_preview": tool_args_preview,
+                        "operation": "Plan",
+                    }
                     r = on_thinking_fn("", task_id=None, operation="Plan", schedule_info=tool_schedule)
                     if asyncio.iscoroutine(r):
                         await r

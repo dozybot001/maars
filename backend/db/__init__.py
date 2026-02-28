@@ -210,9 +210,11 @@ async def list_plan_ids() -> list:
 
 
 def _ai_mode_to_flags(ai_mode: str) -> tuple:
-    """Convert aiMode to (useMock, taskAgentMode, planAgentMode). aiMode: mock|llm|llmagent|agent."""
-    if ai_mode == "mock":
-        return True, False, False
+    """Convert aiMode to (useMock, taskAgentMode, planAgentMode). aiMode: mock|mockllm|mockagent|llm|llmagent|agent."""
+    if ai_mode in ("mock", "mockllm"):
+        return True, False, False  # Mock LLM: useMock, Task uses LLM path
+    if ai_mode == "mockagent":
+        return True, True, False  # Mock Agent: useMock, Task uses Agent path (simulated)
     if ai_mode == "llmagent":
         return False, True, False  # Plan: LLM, Execute: Agent
     if ai_mode == "agent":

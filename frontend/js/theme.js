@@ -38,8 +38,12 @@
 
     const MODE_DESCRIPTIONS = {
         mock: {
-            title: 'Mock config',
-            desc: 'Use mock data, no API key required. Plan and task execution return preset results for quick flow and UI testing.',
+            title: 'Mock LLM config',
+            desc: 'Mock LLM mode: Plan and task use LLM execution path with simulated output. No API key required. Quick flow and UI testing.',
+        },
+        mockagent: {
+            title: 'Mock Agent config',
+            desc: 'Mock Agent mode: Plan uses mock; task uses Agent path with simulated tool calls (ReadArtifact, ReadFile, Finish) and output. No API key required.',
         },
         llm: {
             title: 'LLM config',
@@ -60,6 +64,11 @@
 
     const MODE_PARAMS = {
         mock: [
+            { key: 'executionPassProbability', label: 'Execution pass rate', type: 'number', min: 0, max: 1, step: 0.05, default: 0.95, section: 'Mock', tip: 'Random pass probability for mock execution' },
+            { key: 'validationPassProbability', label: 'Validation pass rate', type: 'number', min: 0, max: 1, step: 0.05, default: 0.95, section: 'Mock', tip: 'Random pass probability for mock validation' },
+            { key: 'maxFailures', label: 'Max retries', type: 'number', min: 1, max: 10, default: 3, section: 'Mock', tip: 'Max retries after task failure' },
+        ],
+        mockagent: [
             { key: 'executionPassProbability', label: 'Execution pass rate', type: 'number', min: 0, max: 1, step: 0.05, default: 0.95, section: 'Mock', tip: 'Random pass probability for mock execution' },
             { key: 'validationPassProbability', label: 'Validation pass rate', type: 'number', min: 0, max: 1, step: 0.05, default: 0.95, section: 'Mock', tip: 'Random pass probability for mock validation' },
             { key: 'maxFailures', label: 'Max retries', type: 'number', min: 1, max: 10, default: 3, section: 'Mock', tip: 'Max retries after task failure' },
@@ -240,7 +249,7 @@
         const isExecution = itemId === 'execution';
         const isMode = itemId === 'mode';
         const isPresetNav = itemId === 'preset';
-        const isModeOption = ['mock', 'llm', 'llmagent', 'agent'].includes(itemId);
+        const isModeOption = ['mock', 'mockagent', 'llm', 'llmagent', 'agent'].includes(itemId);
 
         const navItemId = isPreset ? 'preset' : (isModeOption ? 'mode' : itemId);
         document.querySelectorAll('.settings-nav-item').forEach(el => {

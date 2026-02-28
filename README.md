@@ -32,11 +32,11 @@ python -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001 --loop asyncio --http
 
 ### 3. Execution（执行）
 
-Task Agent 池并行执行就绪任务，每个任务执行后 Validate，实时状态推送。
+Task Agent 池并行执行就绪任务，每个任务执行后 Validate，实时状态推送。Thinking 区域展示 Plan/Execute 阶段、轮次、工具调用及参数摘要（如 `ReadFile(path: sandbox/notes.txt)`）。
 
 ## Agent 工作流
 
-**AI Mode** 可选 Mock / LLM / LLM+Agent / Agent。Multi Agent 叙事：Plan Agent + Task Agent，均支持 ReAct 式多轮工具调用。
+**AI Mode** 可选 Mock LLM / Mock Agent / LLM / LLM+Agent / Agent。Multi Agent 叙事：Plan Agent + Task Agent，均支持 ReAct 式多轮工具调用。
 
 ### Plan Agent
 
@@ -89,7 +89,7 @@ maars/
 
 ## 配置
 
-按 **Alt+Shift+S** 打开 **Settings**：Theme、DB Operation（Restore/Clear）、AI Mode（Mock/LLM/Agent）、Preset（Base URL、API Key、Model）、模式参数（Temperature、最大轮数等）。
+按 **Alt+Shift+S** 打开 **Settings**：Theme、DB Operation（Restore/Clear）、AI Mode（Mock LLM / Mock Agent / LLM / Agent）、Preset（Base URL、API Key、Model）、模式参数（Temperature、最大轮数等）。
 
 ## 文档
 
