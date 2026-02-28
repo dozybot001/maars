@@ -48,19 +48,19 @@ def _is_json_format(output_format: str) -> bool:
     return fmt.startswith("JSON") or "JSON" in fmt
 
 
-def _build_executor_messages(
+def _build_task_agent_messages(
     task_id: str,
     description: str,
     input_spec: Dict[str, Any],
     output_spec: Dict[str, Any],
     resolved_inputs: Dict[str, Any],
 ) -> tuple[list[dict], str]:
-    """Build system + user messages for single-turn executor."""
+    """Build system + user messages for single-turn Task Agent."""
     output_format = output_spec.get("format") or ""
     output_desc = output_spec.get("description") or ""
     input_desc = input_spec.get("description") or ""
 
-    system_prompt = """You are a research task executor. Your job is to complete a single atomic task and produce output in the exact format specified.
+    system_prompt = """You are a Task Agent. Your job is to complete a single atomic task and produce output in the exact format specified.
 
 Rules:
 1. Use only the provided input artifacts and task description.
@@ -96,8 +96,8 @@ Produce the output now. Output ONLY the result, no explanation."""
     return messages, output_format
 
 
-def _parse_executor_output(content: str, use_json_mode: bool) -> Any:
-    """Parse executor output (content) to final result."""
+def _parse_task_agent_output(content: str, use_json_mode: bool) -> Any:
+    """Parse Task Agent output (content) to final result."""
     content = (content or "").strip()
     if not content:
         raise ValueError("LLM returned empty response")
@@ -113,7 +113,7 @@ def _parse_executor_output(content: str, use_json_mode: bool) -> Any:
     return content
 
 
-def _get_executor_params(api_config: Dict[str, Any]) -> tuple[int, float]:
+def _get_task_agent_params(api_config: Dict[str, Any]) -> tuple[int, float]:
     """Return (max_turns, temperature) from modeConfig or defaults. Used for single-turn temperature."""
     mode_cfg = api_config.get("modeConfig") or {}
     agent_cfg = mode_cfg.get("agent") or {}
@@ -148,8 +148,8 @@ async def execute_task(
         return await _mock_execute(output_format, task_id, on_thinking)
 
     cfg = merge_phase_config(raw_cfg, "execute")
-    _, temperature = _get_executor_params(raw_cfg)
-    messages, output_format = _build_executor_messages(
+    _, temperature = _get_task_agent_params(raw_cfg)
+    messages, output_format = _build_task_agent_messages(
         task_id, description, input_spec, output_spec, resolved_inputs
     )
     use_json_mode = _is_json_format(output_format)
@@ -170,4 +170,4 @@ async def execute_task(
         response_format=response_format,
     )
     content = raw if isinstance(raw, str) else (raw.get("content") or "")
-    return _parse_executor_output(content, use_json_mode)
+    return _parse_task_agent_output(content, use_json_mode)

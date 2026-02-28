@@ -1,5 +1,5 @@
 """
-Agent tools for Planner: CheckAtomicity, Decompose, FormatTask, AddTasks, UpdateTask, GetPlan, GetNextTask, FinishPlan, ListSkills, LoadSkill, ReadSkillFile.
+Agent tools for Plan Agent: CheckAtomicity, Decompose, FormatTask, AddTasks, UpdateTask, GetPlan, GetNextTask, FinishPlan, ListSkills, LoadSkill, ReadSkillFile.
 OpenAI function-calling format. Used when planAgentMode=True.
 """
 
@@ -27,8 +27,8 @@ def _find_task_idx(all_tasks: List[Dict], task_id: str) -> int:
     return next((i for i, t in enumerate(all_tasks) if t.get("task_id") == task_id), -1)
 
 
-def _planner_list_skills() -> str:
-    """List Planner skills. Returns JSON string of [{name, description}, ...]."""
+def _plan_agent_list_skills() -> str:
+    """List Plan Agent skills. Returns JSON string of [{name, description}, ...]."""
     try:
         if not PLAN_SKILLS_ROOT.exists() or not PLAN_SKILLS_ROOT.is_dir():
             return orjson.dumps([]).decode("utf-8")
@@ -52,8 +52,8 @@ def _planner_list_skills() -> str:
         return f"Error listing skills: {e}"
 
 
-def _planner_load_skill(name: str) -> str:
-    """Load Planner skill SKILL.md content."""
+def _plan_agent_load_skill(name: str) -> str:
+    """Load Plan Agent skill SKILL.md content."""
     try:
         if not name or ".." in name or "/" in name or "\\" in name:
             return "Error: invalid skill name"
@@ -70,8 +70,8 @@ def _planner_load_skill(name: str) -> str:
         return f"Error loading skill: {e}"
 
 
-def _planner_read_skill_file(skill: str, path: str) -> str:
-    """Read file from Planner skill directory."""
+def _plan_agent_read_skill_file(skill: str, path: str) -> str:
+    """Read file from Plan Agent skill directory."""
     try:
         if not skill or ".." in skill or "/" in skill or "\\" in skill:
             return "Error: invalid skill name"
@@ -98,7 +98,7 @@ def _planner_read_skill_file(skill: str, path: str) -> str:
 
 
 # OpenAI function-calling tool definitions
-PLANNER_TOOLS = [
+PLAN_AGENT_TOOLS = [
     {
         "type": "function",
         "function": {
@@ -236,7 +236,7 @@ PLANNER_TOOLS = [
         "type": "function",
         "function": {
             "name": "ListSkills",
-            "description": "List available Planner Skills (decomposition patterns, research scoping, format specs). Use to discover skills before LoadSkill.",
+            "description": "List available Plan Agent Skills (decomposition patterns, research scoping, format specs). Use to discover skills before LoadSkill.",
             "parameters": {"type": "object", "properties": {}},
         },
     },
@@ -244,7 +244,7 @@ PLANNER_TOOLS = [
         "type": "function",
         "function": {
             "name": "LoadSkill",
-            "description": "Load a Planner skill's SKILL.md content. Use when you need reference for decomposition, scoping, or formatting.",
+            "description": "Load a Plan Agent skill's SKILL.md content. Use when you need reference for decomposition, scoping, or formatting.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -258,7 +258,7 @@ PLANNER_TOOLS = [
         "type": "function",
         "function": {
             "name": "ReadSkillFile",
-            "description": "Read a file from a Planner skill (references/, scripts/). Use after LoadSkill when you need a specific file.",
+            "description": "Read a file from a Plan Agent skill (references/, scripts/). Use after LoadSkill when you need a specific file.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -272,7 +272,7 @@ PLANNER_TOOLS = [
 ]
 
 
-async def execute_planner_tool(
+async def execute_plan_agent_tool(
     name: str,
     arguments: str,
     plan_state: Dict[str, Any],
@@ -288,7 +288,7 @@ async def execute_planner_tool(
     plan_id: Optional[str] = None,
 ) -> Tuple[bool, str]:
     """
-    Execute a planner tool by name. Returns (is_finish, result_str).
+    Execute a Plan Agent tool by name. Returns (is_finish, result_str).
     - is_finish: True when FinishPlan is called; caller should exit agent loop.
     - result_str: JSON string to put in tool message.
     """
@@ -421,15 +421,15 @@ async def execute_planner_tool(
             return False, f"Error: {e}"
 
     if name == "ListSkills":
-        return False, _planner_list_skills()
+        return False, _plan_agent_list_skills()
 
     if name == "LoadSkill":
         skill_name = args.get("name", "")
-        return False, _planner_load_skill(skill_name)
+        return False, _plan_agent_load_skill(skill_name)
 
     if name == "ReadSkillFile":
         skill = args.get("skill", "")
         path = args.get("path", "")
-        return False, _planner_read_skill_file(skill, path)
+        return False, _plan_agent_read_skill_file(skill, path)
 
     return False, f"Error: unknown tool '{name}'"

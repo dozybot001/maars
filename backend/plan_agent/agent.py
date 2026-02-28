@@ -1,6 +1,6 @@
 """
 Plan Agent - ReAct-style agent loop (planAgentMode=True).
-Uses CheckAtomicity, Decompose, FormatTask, etc. via PLANNER_TOOLS.
+Uses CheckAtomicity, Decompose, FormatTask, etc. via PLAN_AGENT_TOOLS.
 Multi Agent: Plan Agent (plan_agent) + Task Agent (task_agent).
 Agent 实现放在 plan_agent/，单轮 LLM 放在 plan_agent/llm/。
 """
@@ -10,7 +10,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from shared.llm_client import chat_completion as real_chat_completion, merge_phase_config
 
-from .agent_tools import PLANNER_TOOLS, execute_planner_tool
+from .agent_tools import PLAN_AGENT_TOOLS, execute_plan_agent_tool
 from .llm.executor import (
     MAX_PLAN_AGENT_TURNS,
     _get_prompt_cached,
@@ -64,7 +64,7 @@ async def run_plan_agent(
         "idea": idea,
     }
 
-    system_prompt = _get_prompt_cached("planner-agent-prompt.txt")
+    system_prompt = _get_prompt_cached("plan-agent-prompt.txt")
     user_message = f"**Idea:** {idea}\n\n**Root task:** task_id \"0\", description \"{root_task.get('description', '')}\"\n\nProcess all tasks until GetNextTask returns null, then call FinishPlan."
 
     messages = [
@@ -93,7 +93,7 @@ async def run_plan_agent(
             stream=False,
             temperature=temperature,
             response_format=None,
-            tools=PLANNER_TOOLS,
+            tools=PLAN_AGENT_TOOLS,
         )
 
         content: str = ""
@@ -151,7 +151,7 @@ async def run_plan_agent(
                     if asyncio.iscoroutine(r):
                         await r
                 try:
-                    is_finish, tool_result = await execute_planner_tool(
+                    is_finish, tool_result = await execute_plan_agent_tool(
                         name,
                         args,
                         plan_state,

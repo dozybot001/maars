@@ -7,14 +7,14 @@
     window.MAARS = window.MAARS || {};
 
     const AREA = {
-        decomposition: '.planner-tree-area',
-        execution: '.planner-execution-tree-area',
+        decomposition: '.plan-agent-tree-area',
+        execution: '.plan-agent-execution-tree-area',
     };
 
     const escapeHtml = (window.MAARS?.utils?.escapeHtml) || ((s) => (s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')));
 
-    let plannerTreeData = [];
-    let plannerLayout = null;
+    let planAgentTreeData = [];
+    let planAgentLayout = null;
 
     function getTreeContainer(areaSelector) {
         const area = document.querySelector(areaSelector);
@@ -100,8 +100,8 @@
         const tasks = (treeData || []).filter(t => t?.task_id);
 
         if (areaSelector === AREA.decomposition) {
-            plannerTreeData = treeData || [];
-            plannerLayout = layout || null;
+            planAgentTreeData = treeData || [];
+            planAgentLayout = layout || null;
         }
 
         ctx.tree.innerHTML = '';
@@ -188,8 +188,8 @@
 
     function clear(areaSelector) {
         if (areaSelector === AREA.decomposition) {
-            plannerTreeData = [];
-            plannerLayout = null;
+            planAgentTreeData = [];
+            planAgentLayout = null;
         }
         const ctx = getTreeContainer(areaSelector);
         if (!ctx) return;
@@ -199,7 +199,7 @@
         ctx.tree.style.minHeight = '';
     }
 
-    function renderPlannerTree(treeData, layout) {
+    function renderPlanAgentTree(treeData, layout) {
         if (!Array.isArray(treeData)) return;
         renderFull(treeData, layout, AREA.decomposition);
     }
@@ -364,8 +364,8 @@
         });
     }
 
-    function updatePlannerQualityBadge(score, comment) {
-        const badge = document.getElementById('plannerQualityBadge');
+    function updatePlanAgentQualityBadge(score, comment) {
+        const badge = document.getElementById('planAgentQualityBadge');
         if (!badge) return;
         if (score == null || score === undefined) {
             badge.style.display = 'none';
@@ -382,11 +382,11 @@
 
     window.MAARS.taskTree = {
         aggregateStatus,
-        renderPlannerTree,
+        renderPlanAgentTree,
         renderExecutionTree: (data, layout) => renderFull(data, layout, AREA.execution),
-        clearPlannerTree: () => { clear(AREA.decomposition); updatePlannerQualityBadge(null); },
+        clearPlanAgentTree: () => { clear(AREA.decomposition); updatePlanAgentQualityBadge(null); },
         clearExecutionTree: () => clear(AREA.execution),
         initClickHandlers,
-        updatePlannerQualityBadge,
+        updatePlanAgentQualityBadge,
     };
 })();

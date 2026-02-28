@@ -36,7 +36,7 @@
             if (stopPlanBtn) stopPlanBtn.style.display = '';
             planRunAbortController = new AbortController();
 
-            window.MAARS.taskTree?.clearPlannerTree();
+            window.MAARS.taskTree?.clearPlanAgentTree();
             window.MAARS.taskTree?.clearExecutionTree();
             if (window.MAARS?.thinking) window.MAARS.thinking.clear();
             const views = window.MAARS?.views;

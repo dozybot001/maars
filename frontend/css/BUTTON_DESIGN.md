@@ -52,13 +52,13 @@
 - 背景：`var(--bg-area-secondary)`
 
 ### close（关闭按钮）
-- 适用：`.close`, `.executor-output-modal-close`, `.task-detail-popover-close`
+- 适用：`.close`, `.task-agent-output-modal-close`, `.task-detail-popover-close`
 - 尺寸：32×32px
 - 边框：`1px solid var(--border-color)`
 - 背景：`transparent`，hover 时 `var(--btn-hover-bg)`
 
 ### expand（块内展开）
-- 适用：`.executor-output-block-expand`, `.btn-expand`
+- 适用：`.task-agent-output-block-expand`, `.btn-expand`
 - 边框：`1px solid var(--border-color)`
 - 背景：`transparent`，hover 时 `var(--btn-hover-bg)`
 

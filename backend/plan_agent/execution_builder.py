@@ -9,7 +9,7 @@ from shared.graph import get_ancestor_chain, get_parent_id, compute_task_stages
 
 
 def _is_atomic(task: Dict) -> bool:
-    """Task is atomic if it has both input and output (formatted by planner)."""
+    """Task is atomic if it has both input and output (formatted by Plan Agent)."""
     return bool(task.get("input") and task.get("output"))
 
 

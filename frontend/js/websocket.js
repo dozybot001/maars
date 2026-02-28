@@ -31,7 +31,7 @@
                 if (cacheNode) cacheNode.status = taskState.status;
                 views.state.previousTaskStates.set(taskState.task_id, taskState.status);
             });
-            const areas = document.querySelectorAll('.planner-tree-area, .planner-execution-tree-area');
+            const areas = document.querySelectorAll('.plan-agent-tree-area, .plan-agent-execution-tree-area');
             data.tasks.forEach(taskState => {
                 areas.forEach((treeArea) => {
                     if (!treeArea) return;
@@ -88,7 +88,7 @@
         const taskTree = window.MAARS?.taskTree;
         state.socket.on('plan-start', () => {
             if (thinking) thinking.clear();
-            taskTree?.clearPlannerTree();
+            taskTree?.clearPlanAgentTree();
         });
 
         state.socket.on('plan-thinking', (data) => {
@@ -97,13 +97,13 @@
         });
 
         state.socket.on('plan-tree-update', (data) => {
-            if (data.treeData) taskTree?.renderPlannerTree(data.treeData, data.layout);
+            if (data.treeData) taskTree?.renderPlanAgentTree(data.treeData, data.layout);
         });
 
         state.socket.on('plan-complete', (data) => {
-            if (data.treeData) taskTree?.renderPlannerTree(data.treeData, data.layout);
+            if (data.treeData) taskTree?.renderPlanAgentTree(data.treeData, data.layout);
             if (data.planId) cfg.setCurrentPlanId(data.planId);
-            taskTree?.updatePlannerQualityBadge(data.qualityScore, data.qualityComment);
+            taskTree?.updatePlanAgentQualityBadge(data.qualityScore, data.qualityComment);
             plan.resetPlanUI();
             if (thinking) thinking.applyHighlight();
             if (views?.generateExecutionLayout) views.generateExecutionLayout();
@@ -129,7 +129,7 @@
                     views.state.previousTaskStates.set(taskState.task_id, taskState.status);
                 });
                 data.tasks.forEach(taskState => {
-                    const areas = document.querySelectorAll('.planner-tree-area, .planner-execution-tree-area');
+                    const areas = document.querySelectorAll('.plan-agent-tree-area, .plan-agent-execution-tree-area');
                     areas.forEach((treeArea) => {
                     if (treeArea) {
                         const byId = treeArea.querySelectorAll(`[data-task-id="${taskState.task_id}"]`);

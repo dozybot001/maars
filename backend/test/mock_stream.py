@@ -1,7 +1,7 @@
 """
 Mock AI streaming simulation
-Simulates SSE-style reasoning chunks for frontend planner thinking display.
-Used by planner (mock-only mode).
+Simulates SSE-style reasoning chunks for frontend Plan Agent thinking display.
+Used by Plan Agent (mock-only mode).
 """
 
 import asyncio

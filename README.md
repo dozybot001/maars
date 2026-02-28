@@ -53,14 +53,17 @@ Task Agent 池并行执行就绪任务，每个任务执行后 Validate，实时
 
 ### Task Agent
 
-多轮调用工具完成任务，每个任务在独立沙箱中运行，可 LoadSkill 加载技能（markdown-reporter、json-utils 等）：
+多轮调用工具完成任务，每个任务在独立沙箱中运行，可 LoadSkill 加载技能（markdown-reporter、json-utils、task-output-validator 等）：
 
 | 工具 | 用途 |
 |------|------|
 | ReadArtifact | 读取依赖任务输出 |
 | ReadFile / WriteFile | 读写沙箱内文件 |
+| ReadSkillFile / RunSkillScript | 读取并执行技能脚本 |
 | ListSkills / LoadSkill | 加载 Executor 技能 |
 | Finish | 提交任务输出 |
+
+**验证**：LLM 模式下由系统调用 `llm/validation` 做 LLM 校验；Agent 模式下由 Agent 在 Finish 前通过 task-output-validator 技能自检。
 
 ## 项目结构
 
@@ -71,8 +74,9 @@ maars/
 │   ├── api/             # 路由、schemas、state
 │   ├── plan_agent/      # Plan Agent：atomicity → decompose → format（业务逻辑）
 │   │   └── llm/         # Plan Agent LLM 实现
-│   ├── task_agent/      # Task Agent：runner、execution、validation
-│   │   └── llm/         # Task Agent LLM 实现
+│   ├── task_agent/      # Task Agent：runner、execution、skills
+│   │   ├── llm/         # Task Agent LLM 实现（executor + validation）
+│   │   └── skills/      # task-output-validator、markdown-reporter 等
 │   ├── visualization/   # 分解树、执行图布局
 │   ├── shared/          # 共享模块：graph、llm_client、skill_utils、utils
 │   ├── db/              # 文件存储：db/{plan_id}/、settings.json

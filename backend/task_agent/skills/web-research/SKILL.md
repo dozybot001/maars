@@ -1,6 +1,6 @@
 ---
 name: web-research
-description: Conduct web research, gather information from multiple sources, and synthesize findings. Use when task involves searching, comparing sources, or aggregating information. Covers process, synthesis techniques, and output structure. Note: MAARS Executor uses provided artifacts and general knowledge—no live web search.
+description: Conduct web research, gather information from multiple sources, and synthesize findings. Use when task involves searching, comparing sources, or aggregating information. Covers process, synthesis techniques, and output structure. Note: MAARS Task Agent uses provided artifacts and general knowledge—no live web search.
 ---
 
 # Web Research
@@ -9,7 +9,7 @@ Guidelines for research tasks that involve gathering and synthesizing informatio
 
 ## MAARS Context
 
-**No live web search**: The Executor uses ReadArtifact (dependency outputs) and ReadFile (local files). Use provided artifacts and general knowledge. If the task expects external data (e.g. "search the web for X"), document assumptions and note that live search was not available.
+**No live web search**: The Task Agent uses ReadArtifact (dependency outputs) and ReadFile (local files). Use provided artifacts and general knowledge. If the task expects external data (e.g. "search the web for X"), document assumptions and note that live search was not available.
 
 ## Research Process
 

@@ -59,15 +59,15 @@
     --status-failed-text: #ff6666;
 
     /* ========== Status - Executor ========== */
-    --executor-idle-bg: #e8f5e9;
-    --executor-idle-border: #4caf50;
-    --executor-idle-text: #4caf50;
-    --executor-busy-bg: #fff3e0;
-    --executor-busy-border: #ff9800;
-    --executor-busy-text: #ff9800;
-    --executor-validating-bg: #e3f2fd;
-    --executor-validating-border: #2196f3;
-    --executor-validating-text: #2196f3;
+    --task-agent-idle-bg: #e8f5e9;
+    --task-agent-idle-border: #4caf50;
+    --task-agent-idle-text: #4caf50;
+    --task-agent-busy-bg: #fff3e0;
+    --task-agent-busy-border: #ff9800;
+    --task-agent-busy-text: #ff9800;
+    --task-agent-validating-bg: #e3f2fd;
+    --task-agent-validating-border: #2196f3;
+    --task-agent-validating-text: #2196f3;
 
     /* ========== Interactive ========== */
     --interactive-hover: #f7fafc;
@@ -171,15 +171,15 @@
     --status-failed-border: #ff6666;
     --status-failed-text: #ff9999;
 
-    --executor-idle-bg: #1b3d1f;
-    --executor-idle-border: #81c784;
-    --executor-idle-text: #81c784;
-    --executor-busy-bg: #5c3a00;
-    --executor-busy-border: #ffb74d;
-    --executor-busy-text: #ffb74d;
-    --executor-validating-bg: #1e3a5f;
-    --executor-validating-border: #64b5f6;
-    --executor-validating-text: #64b5f6;
+    --task-agent-idle-bg: #1b3d1f;
+    --task-agent-idle-border: #81c784;
+    --task-agent-idle-text: #81c784;
+    --task-agent-busy-bg: #5c3a00;
+    --task-agent-busy-border: #ffb74d;
+    --task-agent-busy-text: #ffb74d;
+    --task-agent-validating-bg: #1e3a5f;
+    --task-agent-validating-border: #64b5f6;
+    --task-agent-validating-text: #64b5f6;
 
     --interactive-hover: #252540;
     --interactive-active: #2d2d4a;
@@ -274,15 +274,15 @@
     --status-failed-border: #f87171;
     --status-failed-text: #fca5a5;
 
-    --executor-idle-bg: #0f2e14;
-    --executor-idle-border: #4ade80;
-    --executor-idle-text: #4ade80;
-    --executor-busy-bg: #3d2a00;
-    --executor-busy-border: #fbbf24;
-    --executor-busy-text: #fbbf24;
-    --executor-validating-bg: #0f2847;
-    --executor-validating-border: #60a5fa;
-    --executor-validating-text: #60a5fa;
+    --task-agent-idle-bg: #0f2e14;
+    --task-agent-idle-border: #4ade80;
+    --task-agent-idle-text: #4ade80;
+    --task-agent-busy-bg: #3d2a00;
+    --task-agent-busy-border: #fbbf24;
+    --task-agent-busy-text: #fbbf24;
+    --task-agent-validating-bg: #0f2847;
+    --task-agent-validating-border: #60a5fa;
+    --task-agent-validating-text: #60a5fa;
 
     --interactive-hover: #141414;
     --interactive-active: #1a1a1a;

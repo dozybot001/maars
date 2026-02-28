@@ -27,7 +27,7 @@ You receive these parameters in your prompt:
 ### Step 2: Examine Output Files
 
 1. List files in outputs_dir
-2. Read/examine each file relevant to the expectations. If outputs aren't plain text, use the inspection tools provided in your prompt — don't rely solely on what the transcript says the executor produced.
+2. Read/examine each file relevant to the expectations. If outputs aren't plain text, use the inspection tools provided in your prompt — don't rely solely on what the transcript says the Task Agent produced.
 3. Note contents, structure, and quality
 
 ### Step 3: Evaluate Each Assertion
@@ -61,7 +61,7 @@ This catches issues that predefined expectations might miss.
 ### Step 5: Read User Notes
 
 If `{outputs_dir}/user_notes.md` exists:
-1. Read it and note any uncertainties or issues flagged by the executor
+1. Read it and note any uncertainties or issues flagged by the Task Agent
 2. Include relevant concerns in the grading output
 3. These may reveal problems even when expectations pass
 
@@ -145,7 +145,7 @@ Write a JSON file with this structure:
     "transcript_chars": 3200
   },
   "timing": {
-    "executor_duration_seconds": 165.0,
+    "task_agent_duration_seconds": 165.0,
     "grader_duration_seconds": 26.0,
     "total_duration_seconds": 191.0
   },
@@ -194,19 +194,19 @@ Write a JSON file with this structure:
   - **failed**: Count of failed expectations
   - **total**: Total expectations evaluated
   - **pass_rate**: Fraction passed (0.0 to 1.0)
-- **execution_metrics**: Copied from executor's metrics.json (if available)
+- **execution_metrics**: Copied from Task Agent's metrics.json (if available)
   - **output_chars**: Total character count of output files (proxy for tokens)
   - **transcript_chars**: Character count of transcript
 - **timing**: Wall clock timing from timing.json (if available)
-  - **executor_duration_seconds**: Time spent in executor subagent
+  - **task_agent_duration_seconds**: Time spent in Task Agent subagent
   - **total_duration_seconds**: Total elapsed time for the run
 - **claims**: Extracted and verified claims from the output
   - **claim**: The statement being verified
   - **type**: "factual", "process", or "quality"
   - **verified**: Boolean - whether the claim holds
   - **evidence**: Supporting or contradicting evidence
-- **user_notes_summary**: Issues flagged by the executor
-  - **uncertainties**: Things the executor wasn't sure about
+- **user_notes_summary**: Issues flagged by the Task Agent
+  - **uncertainties**: Things the Task Agent wasn't sure about
   - **needs_review**: Items requiring human attention
   - **workarounds**: Places where the skill didn't work as expected
 - **eval_feedback**: Improvement suggestions for the evals (only when warranted)

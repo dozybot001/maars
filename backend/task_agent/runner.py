@@ -17,7 +17,7 @@ from .pools import worker_manager
 from .artifact_resolver import resolve_artifacts
 from .agent import run_task_agent
 from .llm.executor import execute_task
-from .validation import validate_task_output_with_llm
+from .llm.validation import validate_task_output_with_llm
 
 # Mock validation chunk delay (seconds), same as task execution for consistent streaming UX
 _MOCK_VALIDATOR_CHUNK_DELAY = 0.03
@@ -292,6 +292,7 @@ class ExecutionRunner:
                         abort_event=self.abort_event,
                         on_thinking=_on_thinking,
                         plan_id=self.plan_id or "",
+                        validation_spec=task.get("validation"),
                     )
                 else:
                     result = await execute_task(
@@ -337,10 +338,11 @@ class ExecutionRunner:
             self._broadcast_worker_states()
             self._update_task_status(task["task_id"], "validating")
 
-            # Validation: mock uses random; otherwise LLM validation
+            # Validation: mock uses random; LLM mode uses LLM validation; Agent mode validates via skill before Finish
             task_id = task["task_id"]
             output_spec = task.get("output") or {}
             use_mock = (self.api_config or {}).get("useMock", True)
+            exec_agent = (self.api_config or {}).get("taskAgentMode", False)
             if use_mock:
                 validation_passed = random.random() < self.VALIDATION_PASS_PROBABILITY
                 report = (
@@ -351,6 +353,14 @@ class ExecutionRunner:
                     "- Criterion 3: Alignment with spec ✓\n\n"
                     f"**Result: {'PASS' if validation_passed else 'FAIL'}**\n\n"
                     "(Mock validation mode)"
+                )
+            elif exec_agent:
+                # Agent mode: Agent validates via task-output-validator skill before Finish
+                validation_passed = True
+                report = (
+                    f"# Validating Task {task_id}\n\n"
+                    "Validated by Agent via task-output-validator skill before Finish.\n\n"
+                    "**Result: PASS**"
                 )
             else:
                 validation_spec = task.get("validation")

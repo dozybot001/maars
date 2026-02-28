@@ -1,5 +1,6 @@
 """
-Task output validation - LLM-based validation when not in mock mode.
+Task output validation - LLM-based validation. Used in LLM mode only.
+Agent mode uses task-output-validator skill instead.
 """
 
 import json
@@ -33,6 +34,7 @@ async def validate_task_output_with_llm(
     """
     Use LLM to validate task output against criteria.
     Returns (passed, report_markdown).
+    Called only in LLM mode; Agent mode uses task-output-validator skill.
     """
     content = _get_content_str(result)
     validation = validation_spec or {}

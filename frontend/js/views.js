@@ -35,7 +35,7 @@
     }
 
     function animateConnectionLines(taskId, color, direction) {
-        const area = document.querySelector('.planner-execution-tree-area');
+        const area = document.querySelector('.plan-agent-execution-tree-area');
         const svg = area?.querySelector('.tree-connection-lines');
         if (!svg) return;
         const paths = Array.from(svg.querySelectorAll('path.connection-line'));
@@ -72,8 +72,8 @@
         const stats = data.stats;
         const concurrent = (stats.busy ?? 0) + (stats.validating ?? 0);
         const max = stats.max ?? 7;
-        const concurrentEl = document.getElementById('executorConcurrent');
-        const maxEl = document.getElementById('executorMax');
+        const concurrentEl = document.getElementById('taskAgentConcurrent');
+        const maxEl = document.getElementById('taskAgentMax');
         if (concurrentEl) concurrentEl.textContent = concurrent;
         if (maxEl) maxEl.textContent = max;
     }

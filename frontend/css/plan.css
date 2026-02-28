@@ -31,7 +31,7 @@
     color: var(--text-muted);
 }
 
-.planner-thinking-tree-row {
+.plan-agent-thinking-tree-row {
     display: flex;
     gap: 0;
     margin-top: var(--gap);
@@ -42,7 +42,7 @@
     background: var(--bg-area-secondary);
 }
 
-.planner-thinking-tree-row .planner-thinking-area {
+.plan-agent-thinking-tree-row .plan-agent-thinking-area {
     flex: 1;
     min-width: 0;
     border: none;
@@ -57,7 +57,7 @@
     height: var(--main-content-height);
 }
 
-.planner-thinking-content {
+.plan-agent-thinking-content {
     flex: 1;
     margin: 0;
     padding: 12px 14px;
@@ -71,7 +71,7 @@
     overflow-anchor: none;
 }
 
-.planner-thinking-block {
+.plan-agent-thinking-block {
     height: 140px;
     min-height: 140px;
     display: flex;
@@ -84,16 +84,16 @@
     cursor: pointer;
     transition: var(--state-transition);
 }
-.planner-thinking-block.is-focused {
+.plan-agent-thinking-block.is-focused {
     border-color: var(--text-muted, #6b7280);
     box-shadow: 0 0 0 1px var(--text-muted, #6b7280);
 }
-.planner-thinking-block:last-child {
+.plan-agent-thinking-block:last-child {
     margin-bottom: 0;
 }
 
 /* Schedule message - simple text line, no border, no click */
-.planner-thinking-block--schedule {
+.plan-agent-thinking-block--schedule {
     height: auto;
     min-height: 0;
     margin-bottom: 4px;
@@ -102,13 +102,13 @@
     border: none;
     cursor: default;
 }
-.planner-thinking-block--schedule .planner-thinking-block-schedule-text {
+.plan-agent-thinking-block--schedule .plan-agent-thinking-block-schedule-text {
     font-size: 11px;
     color: var(--text-muted);
     font-family: var(--font-family);
 }
 
-.planner-thinking-block-header {
+.plan-agent-thinking-block-header {
     flex-shrink: 0;
     padding: 6px 10px;
     font-size: 11px;
@@ -117,7 +117,7 @@
     background: var(--bg-area-secondary);
     border-bottom: 1px solid var(--border-color);
 }
-.planner-thinking-block-body {
+.plan-agent-thinking-block-body {
     flex: 1;
     min-height: 0;
     overflow-y: hidden;
@@ -125,12 +125,12 @@
     padding: 8px 10px;
     cursor: pointer;
 }
-.planner-thinking-block.is-focused .planner-thinking-block-body {
+.plan-agent-thinking-block.is-focused .plan-agent-thinking-block-body {
     overflow-y: auto;
     cursor: default;
 }
 
-.planner-thinking-placeholder {
+.plan-agent-thinking-placeholder {
     position: absolute;
     top: 12px;
     left: 14px;
@@ -141,6 +141,6 @@
     font-style: italic;
     pointer-events: none;
 }
-.planner-thinking-area.has-content .planner-thinking-placeholder {
+.plan-agent-thinking-area.has-content .plan-agent-thinking-placeholder {
     display: none;
 }

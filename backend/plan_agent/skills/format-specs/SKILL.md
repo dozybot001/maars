@@ -1,6 +1,6 @@
 ---
 name: format-specs
-description: Guidelines for defining input/output specifications of atomic tasks. Use when formatting tasks (FormatTask) to ensure executor and validator have clear, checkable criteria. Apply when CheckAtomicity returns atomic=true.
+description: Guidelines for defining input/output specifications of atomic tasks. Use when formatting tasks (FormatTask) to ensure Task Agent and validator have clear, checkable criteria. Apply when CheckAtomicity returns atomic=true.
 ---
 
 # Format Specifications

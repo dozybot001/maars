@@ -126,7 +126,7 @@
 ```markdown
 ## 新增功能 (Added)
 
-- **Planner**：支持按阶段独立配置 LLM（atomicity/decompose/format）
+- **Plan Agent**：支持按阶段独立配置 LLM（atomicity/decompose/format）
 - **Monitor**：执行图新增 stage-based 网格布局，支持等价任务合并 (#78)
 
 ## 变更 (Changed)
@@ -135,7 +135,7 @@
 
 ## 修复 (Fixed)
 
-- 修复 Executor 池在任务失败时可能卡死的问题
+- 修复 Task Agent 池在任务失败时可能卡死的问题
 - 修复前端任务树在深层嵌套时的布局错位
 ```
 

@@ -2,7 +2,7 @@
  * Execution - Stats, chips, output blocks, modal
  */
 
-.executor-output-block {
+.task-agent-output-block {
     height: 140px;
     min-height: 140px;
     display: flex;
@@ -15,15 +15,15 @@
     cursor: pointer;
     transition: var(--state-transition);
 }
-.executor-output-block.is-focused {
+.task-agent-output-block.is-focused {
     border-color: var(--text-muted, #6b7280);
     box-shadow: 0 0 0 1px var(--text-muted, #6b7280);
 }
-.executor-output-block:last-child {
+.task-agent-output-block:last-child {
     margin-bottom: 0;
 }
 
-.executor-output-block-header {
+.task-agent-output-block-header {
     flex-shrink: 0;
     padding: 6px 10px;
     font-size: 11px;
@@ -36,7 +36,7 @@
     justify-content: space-between;
     gap: 6px;
 }
-.executor-output-block-body {
+.task-agent-output-block-body {
     flex: 1;
     min-height: 0;
     overflow-y: hidden;
@@ -44,12 +44,12 @@
     padding: 8px 10px;
     cursor: pointer;
 }
-.executor-output-block.is-focused .executor-output-block-body {
+.task-agent-output-block.is-focused .task-agent-output-block-body {
     overflow-y: auto;
     cursor: default;
 }
 
-.executor-stats {
+.task-agent-stats {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -58,17 +58,17 @@
 }
 
 
-.executor-stats-items {
+.task-agent-stats-items {
     display: flex;
     gap: 20px;
 }
 
-.executor-chips {
+.task-agent-chips {
     display: flex;
     gap: 6px;
 }
 
-.executor-chip {
+.task-agent-chip {
     width: 28px;
     height: 28px;
     border-radius: 6px;
@@ -83,25 +83,25 @@
     transition: var(--state-transition);
 }
 
-.executor-chip.executor-idle {
-    background: var(--executor-idle-bg);
-    border-color: var(--executor-idle-border);
-    color: var(--executor-idle-text);
+.task-agent-chip.task-agent-idle {
+    background: var(--task-agent-idle-bg);
+    border-color: var(--task-agent-idle-border);
+    color: var(--task-agent-idle-text);
 }
 
-.executor-chip.executor-busy {
-    background: var(--executor-busy-bg);
-    border-color: var(--executor-busy-border);
-    color: var(--executor-busy-text);
+.task-agent-chip.task-agent-busy {
+    background: var(--task-agent-busy-bg);
+    border-color: var(--task-agent-busy-border);
+    color: var(--task-agent-busy-text);
 }
 
-.executor-chip.executor-validating {
-    background: var(--executor-validating-bg);
-    border-color: var(--executor-validating-border);
-    color: var(--executor-validating-text);
+.task-agent-chip.task-agent-validating {
+    background: var(--task-agent-validating-bg);
+    border-color: var(--task-agent-validating-border);
+    color: var(--task-agent-validating-text);
 }
 
-.executor-chip.executor-failed {
+.task-agent-chip.task-agent-failed {
     background: var(--failure-bg);
     border-color: var(--failure-border);
     color: var(--failure-text);
@@ -131,19 +131,19 @@
 }
 
 .stat-value.stat-busy {
-    color: var(--executor-busy-text);
+    color: var(--task-agent-busy-text);
 }
 
 .stat-value.stat-validating {
-    color: var(--executor-validating-text);
+    color: var(--task-agent-validating-text);
 }
 
 .stat-value.stat-idle {
-    color: var(--executor-idle-text);
+    color: var(--task-agent-idle-text);
 }
 
 /* Execution Task Output fullscreen modal */
-.executor-output-modal {
+.task-agent-output-modal {
     display: none;
     position: fixed;
     inset: 0;
@@ -155,10 +155,10 @@
     padding: 24px 16px 48px;
     background: transparent;
 }
-.executor-output-modal.is-open {
+.task-agent-output-modal.is-open {
     display: flex;
 }
-.executor-output-modal-backdrop {
+.task-agent-output-modal-backdrop {
     position: fixed;
     inset: 0;
     background: var(--shadow-overlay);
@@ -166,12 +166,12 @@
     -webkit-backdrop-filter: blur(var(--modal-backdrop-blur));
     z-index: -1;
 }
-.executor-output-modal-dialog {
+.task-agent-output-modal-dialog {
     width: min(900px, 94vw);
     height: calc(100vh - 96px);
     background: var(--bg-area-primary);
 }
-.executor-output-modal-body {
+.task-agent-output-modal-body {
     font-size: 13px;
     line-height: 1.6;
     color: var(--text-secondary);

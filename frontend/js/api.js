@@ -62,8 +62,8 @@
 
         if (treePayload.treeData.length) {
             const taskTree = window.MAARS?.taskTree;
-            if (taskTree?.renderPlannerTree) taskTree.renderPlannerTree(treePayload.treeData, treePayload.layout);
-            if (plan?.qualityScore != null && taskTree?.updatePlannerQualityBadge) taskTree.updatePlannerQualityBadge(plan.qualityScore, plan.qualityComment);
+            if (taskTree?.renderPlanAgentTree) taskTree.renderPlanAgentTree(treePayload.treeData, treePayload.layout);
+            if (plan?.qualityScore != null && taskTree?.updatePlanAgentQualityBadge) taskTree.updatePlanAgentQualityBadge(plan.qualityScore, plan.qualityComment);
         }
 
         if (!execution || !execution.tasks?.length) {

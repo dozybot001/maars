@@ -19,7 +19,7 @@ from .agent_tools import TOOLS, execute_tool
 MAX_AGENT_TURNS = 15
 
 
-def _get_executor_params(api_config: Dict[str, Any]) -> tuple[int, float]:
+def _get_task_agent_params(api_config: Dict[str, Any]) -> tuple[int, float]:
     """Return (max_turns, temperature) from modeConfig or defaults."""
     mode_cfg = api_config.get("modeConfig") or {}
     agent_cfg = mode_cfg.get("agent") or {}
@@ -41,8 +41,8 @@ def _is_json_format(output_format: str) -> bool:
     return fmt.startswith("JSON") or "JSON" in fmt
 
 
-def _parse_executor_output(content: str, use_json_mode: bool) -> Any:
-    """Parse executor output (content) to final result."""
+def _parse_task_agent_output(content: str, use_json_mode: bool) -> Any:
+    """Parse Task Agent output (content) to final result."""
     content = (content or "").strip()
     if not content:
         raise ValueError("LLM returned empty response")
@@ -58,25 +58,31 @@ def _parse_executor_output(content: str, use_json_mode: bool) -> Any:
     return content
 
 
-def _build_executor_messages(
+def _build_task_agent_messages(
     task_id: str,
     description: str,
     input_spec: Dict[str, Any],
     output_spec: Dict[str, Any],
     resolved_inputs: Dict[str, Any],
+    validation_spec: Optional[Dict[str, Any]] = None,
 ) -> tuple[list[dict], str]:
-    """Build system + user messages for agent mode."""
+    """Build system + user messages for Task Agent mode."""
     output_format = output_spec.get("format") or ""
     output_desc = output_spec.get("description") or ""
     input_desc = input_spec.get("description") or ""
 
-    system_prompt = """You are a research task executor. Your job is to complete a single atomic task and produce output in the exact format specified.
+    validation_rule = ""
+    if validation_spec and (validation_spec.get("criteria") or validation_spec.get("optionalChecks")):
+        validation_rule = """
+5. **Validation (required when task has validation spec)**: Before calling Finish, you MUST validate your output. Load the task-output-validator skill, write output to sandbox (e.g. sandbox/output.json or sandbox/result.md), run its validate script with the validation criteria, fix any failures, then call Finish only when validation passes."""
+
+    system_prompt = f"""You are a Task Agent. Your job is to complete a single atomic task and produce output in the exact format specified.
 
 Rules:
 1. Use only the provided input artifacts and task description.
 2. Output must strictly conform to the specified format.
 3. For JSON: output valid JSON only, no extra text or markdown fences.
-4. For Markdown: output the document content directly.
+4. For Markdown: output the document content directly.{validation_rule}
 
 You have tools: ReadArtifact (read dependency task output), ReadFile (read files; use 'sandbox/X' for this task's sandbox), WriteFile (write to sandbox only), ListSkills, LoadSkill, ReadSkillFile (read skill's scripts/references), RunSkillScript (execute skill scripts, use {{sandbox}}/file for sandbox paths), Finish (submit final output).
 Use ListSkills to discover skills, LoadSkill when relevant. ReadSkillFile and RunSkillScript let you use skill capabilities (e.g. docx validate, pptx convert). When your output satisfies the output spec, you MUST call Finish with the result—do not output inline. For JSON format pass a valid JSON string; for Markdown pass the content string. All file I/O is scoped to the plan dir and this task's sandbox."""
@@ -87,6 +93,19 @@ Use ListSkills to discover skills, LoadSkill when relevant. ReadSkillFile and Ru
             inputs_str = orjson.dumps(resolved_inputs, option=orjson.OPT_INDENT_2).decode("utf-8")
         except (TypeError, ValueError):
             inputs_str = str(resolved_inputs)
+
+    validation_block = ""
+    if validation_spec and (validation_spec.get("criteria") or validation_spec.get("optionalChecks")):
+        criteria = validation_spec.get("criteria") or []
+        optional = validation_spec.get("optionalChecks") or []
+        criteria_text = "\n".join(f"- {c}" for c in criteria) if criteria else ""
+        optional_text = "\n".join(f"- [optional] {c}" for c in optional) if optional else ""
+        validation_block = f"""
+
+**Validation criteria (validate before Finish using task-output-validator skill):**
+{criteria_text}
+{optional_text}
+"""
 
     user_prompt = f"""**Task ID:** {task_id}
 **Description:** {description}
@@ -99,6 +118,7 @@ Use ListSkills to discover skills, LoadSkill when relevant. ReadSkillFile and Ru
 
 **Output description:** {output_desc}
 **Output format:** {output_format}
+{validation_block}
 
 Produce the output now. Output ONLY the result, no explanation."""
 
@@ -119,16 +139,17 @@ async def run_task_agent(
     abort_event: Optional[Any],
     on_thinking: Optional[Callable[[str, Optional[str], Optional[str]], None]],
     plan_id: str,
+    validation_spec: Optional[Dict[str, Any]] = None,
 ) -> Any:
     """ReAct-style Agent loop with ReadArtifact, ReadFile, Finish tools. Runs in isolated sandbox."""
     if plan_id and task_id:
         await ensure_sandbox_dir(plan_id, task_id)
-    messages, output_format = _build_executor_messages(
-        task_id, description, input_spec, output_spec, resolved_inputs
+    messages, output_format = _build_task_agent_messages(
+        task_id, description, input_spec, output_spec, resolved_inputs, validation_spec
     )
     use_json_mode = _is_json_format(output_format)
     cfg = merge_phase_config(api_config, "execute")
-    max_turns, temperature = _get_executor_params(api_config)
+    max_turns, temperature = _get_task_agent_params(api_config)
     turn = 0
 
     while turn < max_turns:
@@ -164,7 +185,7 @@ async def run_task_agent(
             tool_calls = result.get("tool_calls") or []
             if not tool_calls:
                 content = content or "(no content)"
-                return _parse_executor_output(content, use_json_mode)
+                return _parse_task_agent_output(content, use_json_mode)
 
             sig_from_any = None
             for tc in tool_calls:
@@ -223,7 +244,7 @@ async def run_task_agent(
                 return finished_output
             continue
 
-        return _parse_executor_output(content, use_json_mode)
+        return _parse_task_agent_output(content, use_json_mode)
 
     last = ""
     for m in reversed(messages):
@@ -232,4 +253,4 @@ async def run_task_agent(
             break
     if not last:
         raise ValueError(f"Agent reached max turns ({max_turns}) without producing output")
-    return _parse_executor_output(last, use_json_mode)
+    return _parse_task_agent_output(last, use_json_mode)

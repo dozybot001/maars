@@ -120,7 +120,7 @@ Output from the grader agent. Located at `<run-dir>/grading.json`.
     "transcript_chars": 3200
   },
   "timing": {
-    "executor_duration_seconds": 165.0,
+    "task_agent_duration_seconds": 165.0,
     "grader_duration_seconds": 26.0,
     "total_duration_seconds": 191.0
   },
@@ -152,17 +152,17 @@ Output from the grader agent. Located at `<run-dir>/grading.json`.
 **Fields:**
 - `expectations[]`: Graded expectations with evidence
 - `summary`: Aggregate pass/fail counts
-- `execution_metrics`: Tool usage and output size (from executor's metrics.json)
+- `execution_metrics`: Tool usage and output size (from Task Agent's metrics.json)
 - `timing`: Wall clock timing (from timing.json)
 - `claims`: Extracted and verified claims from the output
-- `user_notes_summary`: Issues flagged by the executor
+- `user_notes_summary`: Issues flagged by the Task Agent
 - `eval_feedback`: (optional) Improvement suggestions for the evals, only present when the grader identifies issues worth raising
 
 ---
 
 ## metrics.json
 
-Output from the executor agent. Located at `<run-dir>/outputs/metrics.json`.
+Output from the Task Agent. Located at `<run-dir>/outputs/metrics.json`.
 
 ```json
 {
@@ -205,9 +205,9 @@ Wall clock timing for a run. Located at `<run-dir>/timing.json`.
   "total_tokens": 84852,
   "duration_ms": 23332,
   "total_duration_seconds": 23.3,
-  "executor_start": "2026-01-15T10:30:00Z",
-  "executor_end": "2026-01-15T10:32:45Z",
-  "executor_duration_seconds": 165.0,
+  "task_agent_start": "2026-01-15T10:30:00Z",
+  "task_agent_end": "2026-01-15T10:32:45Z",
+  "task_agent_duration_seconds": 165.0,
   "grader_start": "2026-01-15T10:32:46Z",
   "grader_end": "2026-01-15T10:33:12Z",
   "grader_duration_seconds": 26.0
@@ -225,7 +225,7 @@ Output from Benchmark mode. Located at `benchmarks/<timestamp>/benchmark.json`.
   "metadata": {
     "skill_name": "pdf",
     "skill_path": "/path/to/pdf",
-    "executor_model": "claude-sonnet-4-20250514",
+    "task_agent_model": "claude-sonnet-4-20250514",
     "analyzer_model": "most-capable-model",
     "timestamp": "2026-01-15T10:30:00Z",
     "evals_run": [1, 2, 3],

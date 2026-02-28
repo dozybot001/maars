@@ -3,7 +3,7 @@
  */
 
 /* Tasks tree area */
-.planner-execution-tree-area {
+.plan-agent-execution-tree-area {
     overflow: hidden;
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
@@ -11,12 +11,12 @@
     box-shadow: var(--shadow-inset);
 }
 
-.planner-tree-area {
+.plan-agent-tree-area {
     overflow: hidden;
     background: var(--bg-area-secondary);
 }
 
-.planner-thinking-tree-row .planner-tree-area {
+.plan-agent-thinking-tree-row .plan-agent-tree-area {
     flex: 0 0 30%;
     width: 30%;
     min-width: 0;
@@ -81,7 +81,7 @@
     display: flex;
 }
 
-.tree-view-panel .planner-execution-tree-area {
+.tree-view-panel .plan-agent-execution-tree-area {
     flex: 1;
     min-height: 0;
     height: auto;
@@ -109,7 +109,7 @@
 }
 
 /* Output area: match tree-container structure (same as Decomposition/Execution) */
-.tree-view-panel.view-output .planner-output-area {
+.tree-view-panel.view-output .plan-agent-output-area {
     flex: 1;
     min-height: 0;
     min-width: 0;
@@ -121,7 +121,7 @@
     background: var(--bg-area-primary);
 }
 
-.tree-view-panel.view-output .executor-output-content {
+.tree-view-panel.view-output .task-agent-output-content {
     flex: 1;
     min-height: 0;
     font-size: 12px;
@@ -136,7 +136,7 @@
     box-sizing: border-box;
 }
 
-.planner-quality-badge {
+.plan-agent-quality-badge {
     position: absolute;
     bottom: 8px;
     right: 8px;
@@ -147,15 +147,15 @@
     font-weight: 600;
 }
 
-.planner-quality-badge.quality-high {
+.plan-agent-quality-badge.quality-high {
     color: var(--success-color, #22c55e);
 }
 
-.planner-quality-badge.quality-mid {
+.plan-agent-quality-badge.quality-mid {
     color: var(--warning-color, #eab308);
 }
 
-.planner-quality-badge.quality-low {
+.plan-agent-quality-badge.quality-low {
     color: var(--error-color, #ef4444);
 }
 

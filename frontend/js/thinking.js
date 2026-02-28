@@ -11,9 +11,9 @@
     const LARGE_CONTENT_CHARS = 6000;
 
     const PREFIX = 'thinking';
-    const CONTENT_EL = 'plannerThinkingContent';
-    const AREA_EL = 'plannerThinkingArea';
-    const BLOCK_CLASS = 'planner-thinking-block';
+    const CONTENT_EL = 'planAgentThinkingContent';
+    const AREA_EL = 'planAgentThinkingArea';
+    const BLOCK_CLASS = 'plan-agent-thinking-block';
 
     const state = window.MAARS.state || {};
     state[`${PREFIX}ThinkingBlocks`] = state[`${PREFIX}ThinkingBlocks`] || [];
@@ -204,16 +204,16 @@
     })();
 
     function renderOutput() {
-        const el = document.getElementById('executorOutputContent');
-        const area = document.getElementById('executorOutputArea');
+        const el = document.getElementById('taskAgentOutputContent');
+        const area = document.getElementById('taskAgentOutputArea');
         if (!el || !area) return;
         const outputs = state.taskOutputs;
         const keys = Object.keys(outputs).sort();
         const wasNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
         const savedScrollTops = {};
-        el.querySelectorAll('.executor-output-block').forEach((blockEl) => {
+        el.querySelectorAll('.task-agent-output-block').forEach((blockEl) => {
             const key = blockEl.getAttribute('data-task-id') || '';
-            const body = blockEl.querySelector('.executor-output-block-body');
+            const body = blockEl.querySelector('.task-agent-output-block-body');
             if (body) savedScrollTops[key] = body.scrollTop;
         });
         if (keys.length === 0) {
@@ -231,7 +231,7 @@
                 content = (raw || '') ? (typeof marked !== 'undefined' ? marked.parse(String(raw)) : String(raw)) : '';
             }
             if (content && typeof DOMPurify !== 'undefined') content = DOMPurify.sanitize(content);
-            html += `<div class="executor-output-block" data-task-id="${escapeHtml(taskId || '')}"><div class="executor-output-block-header">Task ${escapeHtml(taskId || '')}<button type="button" class="executor-output-block-expand" aria-label="Expand" title="Expand">⤢</button></div><div class="executor-output-block-body">${content}</div></div>`;
+            html += `<div class="task-agent-output-block" data-task-id="${escapeHtml(taskId || '')}"><div class="task-agent-output-block-header">Task ${escapeHtml(taskId || '')}<button type="button" class="task-agent-output-block-expand" aria-label="Expand" title="Expand">⤢</button></div><div class="task-agent-output-block-body">${content}</div></div>`;
         }
         try {
             el.innerHTML = html || '';
@@ -248,9 +248,9 @@
         }
         state.outputBlockUserScrolled = state.outputBlockUserScrolled || {};
         const lastKey = state.outputLastUpdatedKey || '';
-        el.querySelectorAll('.executor-output-block').forEach((blockEl) => {
+        el.querySelectorAll('.task-agent-output-block').forEach((blockEl) => {
             const key = blockEl.getAttribute('data-task-id') || '';
-            const body = blockEl.querySelector('.executor-output-block-body');
+            const body = blockEl.querySelector('.task-agent-output-block-body');
             if (!body) return;
             const shouldAutoScroll = key === lastKey && !state.outputBlockUserScrolled[key];
             if (shouldAutoScroll) requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
@@ -263,7 +263,7 @@
     }
 
     function initOutputScrollTracking() {
-        const el = document.getElementById('executorOutputContent');
+        const el = document.getElementById('taskAgentOutputContent');
         if (!el) return;
         el.addEventListener('scroll', () => {
             const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
@@ -280,11 +280,11 @@
 
     let _outputModalOpen = false;
     function openOutputModal(taskId, contentHtml, scrollTop) {
-        const modal = document.getElementById('executorOutputModal');
-        const titleEl = document.getElementById('executorOutputModalTitle');
-        const bodyEl = document.getElementById('executorOutputModalBody');
-        const closeBtn = document.getElementById('executorOutputModalClose');
-        const backdrop = modal?.querySelector('.executor-output-modal-backdrop');
+        const modal = document.getElementById('taskAgentOutputModal');
+        const titleEl = document.getElementById('taskAgentOutputModalTitle');
+        const bodyEl = document.getElementById('taskAgentOutputModalBody');
+        const closeBtn = document.getElementById('taskAgentOutputModalClose');
+        const backdrop = modal?.querySelector('.task-agent-output-modal-backdrop');
         if (!modal || !bodyEl) return;
         if (_outputModalOpen) return;
         _outputModalOpen = true;
@@ -314,7 +314,7 @@
     }
 
     function applyOutputHighlight() {
-        const el = document.getElementById('executorOutputContent');
+        const el = document.getElementById('taskAgentOutputContent');
         if (!el || typeof hljs === 'undefined') return;
         requestIdleCallback(() => {
             el.querySelectorAll('pre code').forEach((node) => { try { hljs.highlightElement(node); } catch (_) {} });
@@ -339,22 +339,22 @@
     }
 
     function initOutputAreaClick() {
-        const area = document.getElementById('executorOutputArea');
+        const area = document.getElementById('taskAgentOutputArea');
         if (!area) return;
         area.addEventListener('click', (e) => {
-            const expandBtn = e.target.closest('.executor-output-block-expand');
+            const expandBtn = e.target.closest('.task-agent-output-block-expand');
             if (expandBtn) {
                 e.stopPropagation();
-                const block = expandBtn.closest('.executor-output-block');
+                const block = expandBtn.closest('.task-agent-output-block');
                 if (block) {
-                    const bodyEl = block.querySelector('.executor-output-block-body');
+                    const bodyEl = block.querySelector('.task-agent-output-block-body');
                     openOutputModal(block.getAttribute('data-task-id') || '', bodyEl?.innerHTML || '', bodyEl?.scrollTop || 0);
                 }
                 return;
             }
-            const block = e.target.closest('.executor-output-block');
+            const block = e.target.closest('.task-agent-output-block');
             if (!block) return;
-            const allBlocks = area.querySelectorAll('.executor-output-block');
+            const allBlocks = area.querySelectorAll('.task-agent-output-block');
             const wasFocused = block.classList.contains('is-focused');
             allBlocks.forEach((b) => b.classList.remove('is-focused'));
             if (!wasFocused) block.classList.add('is-focused');
@@ -362,8 +362,8 @@
     }
 
     function initOutputModalDownload() {
-        const downloadBtn = document.getElementById('executorOutputModalDownload');
-        const modal = document.getElementById('executorOutputModal');
+        const downloadBtn = document.getElementById('taskAgentOutputModalDownload');
+        const modal = document.getElementById('taskAgentOutputModal');
         if (!downloadBtn || !modal) return;
         downloadBtn.addEventListener('click', (e) => {
             e.stopPropagation();

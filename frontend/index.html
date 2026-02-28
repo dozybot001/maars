@@ -145,62 +145,62 @@
                 <button id="executionBtn">Execute</button>
                 <button id="stopExecutionBtn" class="stop-btn" style="display: none;">Stop</button>
             </div>
-            <div class="executor-stats">
-                <div class="executor-stats-items">
+            <div class="task-agent-stats">
+                <div class="task-agent-stats-items">
                     <div class="stat-item">
                         <span class="stat-label">Concurrent:</span>
-                        <span class="stat-value" id="executorConcurrent">0</span>
+                        <span class="stat-value" id="taskAgentConcurrent">0</span>
                         <span class="stat-sep">/</span>
-                        <span class="stat-value" id="executorMax">7</span>
+                        <span class="stat-value" id="taskAgentMax">7</span>
                     </div>
                 </div>
             </div>
-            <div class="planner-thinking-tree-row">
-                <div class="planner-tree-area" data-tree-area="planner">
+            <div class="plan-agent-thinking-tree-row">
+                <div class="plan-agent-tree-area" data-tree-area="plan">
                     <div class="tree-view-tabs">
                         <button type="button" class="tree-view-tab active" data-view="decomposition" aria-pressed="true">Decomposition</button>
                         <button type="button" class="tree-view-tab" data-view="execution" aria-pressed="false">Execution</button>
                         <button type="button" class="tree-view-tab" data-view="output" aria-pressed="false">Output</button>
                     </div>
                     <div class="tree-view-panel view-decomposition active" data-view-panel="decomposition">
-                        <div class="planner-quality-badge" id="plannerQualityBadge" title="" style="display: none;"></div>
+                        <div class="plan-agent-quality-badge" id="planAgentQualityBadge" title="" style="display: none;"></div>
                         <div class="tree-container">
-                            <div class="tasks-tree planner-tasks-tree"></div>
+                            <div class="tasks-tree plan-agent-tasks-tree"></div>
                         </div>
                     </div>
                     <div class="tree-view-panel view-execution" data-view-panel="execution">
-                        <div class="planner-execution-tree-area" data-tree-area="execution">
+                        <div class="plan-agent-execution-tree-area" data-tree-area="execution">
                             <div class="tree-container">
-                                <div class="tasks-tree planner-execution-tree"></div>
+                                <div class="tasks-tree plan-agent-execution-tree"></div>
                             </div>
                         </div>
                     </div>
                     <div class="tree-view-panel view-output" data-view-panel="output">
-                        <div class="executor-output-area planner-output-area" id="executorOutputArea">
-                            <div class="executor-output-content markdown-body" id="executorOutputContent"></div>
+                        <div class="task-agent-output-area plan-agent-output-area" id="taskAgentOutputArea">
+                            <div class="task-agent-output-content markdown-body" id="taskAgentOutputContent"></div>
                         </div>
                     </div>
                 </div>
-                <div class="planner-thinking-area" id="plannerThinkingArea">
-                    <div class="planner-thinking-content markdown-body" id="plannerThinkingContent"></div>
-                    <div class="planner-thinking-placeholder" id="plannerThinkingPlaceholder">Thinking will appear here when generating plan or executing tasks...</div>
+                <div class="plan-agent-thinking-area" id="planAgentThinkingArea">
+                    <div class="plan-agent-thinking-content markdown-body" id="planAgentThinkingContent"></div>
+                    <div class="plan-agent-thinking-placeholder" id="planAgentThinkingPlaceholder">Thinking will appear here when generating plan or executing tasks...</div>
                 </div>
             </div>
         </main>
     </div>
 
     <!-- Task Output modal -->
-    <div id="executorOutputModal" class="executor-output-modal" aria-hidden="true">
-        <div class="executor-output-modal-backdrop"></div>
-        <div class="executor-output-modal-dialog">
-            <div class="executor-output-modal-header">
-                <span class="executor-output-modal-title" id="executorOutputModalTitle">Task Output</span>
-                <span class="executor-output-modal-actions">
-                    <button type="button" class="executor-output-modal-download" id="executorOutputModalDownload" aria-label="Download" title="Download"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16"/><path d="M7 15l5 5 5-5"/></svg></button>
-                    <button type="button" class="executor-output-modal-close" id="executorOutputModalClose" aria-label="Close">×</button>
+    <div id="taskAgentOutputModal" class="task-agent-output-modal" aria-hidden="true">
+        <div class="task-agent-output-modal-backdrop"></div>
+        <div class="task-agent-output-modal-dialog">
+            <div class="task-agent-output-modal-header">
+                <span class="task-agent-output-modal-title" id="taskAgentOutputModalTitle">Task Output</span>
+                <span class="task-agent-output-modal-actions">
+                    <button type="button" class="task-agent-output-modal-download" id="taskAgentOutputModalDownload" aria-label="Download" title="Download"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16"/><path d="M7 15l5 5 5-5"/></svg></button>
+                    <button type="button" class="task-agent-output-modal-close" id="taskAgentOutputModalClose" aria-label="Close">×</button>
                 </span>
             </div>
-            <div class="executor-output-modal-body markdown-body" id="executorOutputModalBody"></div>
+            <div class="task-agent-output-modal-body markdown-body" id="taskAgentOutputModalBody"></div>
         </div>
     </div>
 
