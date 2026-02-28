@@ -14,6 +14,8 @@ import orjson
 from db import DB_DIR, _validate_plan_id, get_sandbox_dir, get_task_artifact
 from shared.skill_utils import parse_skill_frontmatter
 
+from . import web_tools
+
 # RunSkillScript: allowed extensions, timeout (seconds, configurable via env)
 _RUN_SCRIPT_ALLOWED_EXT = (".py", ".sh", ".js")
 _RUN_SCRIPT_TIMEOUT = int(os.environ.get("MAARS_RUN_SCRIPT_TIMEOUT", "120"))
@@ -176,6 +178,45 @@ TOOLS = [
                     },
                 },
                 "required": ["skill", "script"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "WebSearch",
+            "description": "Search the web for information. Use for research tasks when you need current data, benchmarks, or official documentation. Returns title, URL, and snippet for each result. Prefer WebSearch then WebFetch for key URLs to cite sources.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search query (e.g. 'FastAPI performance benchmark RPS', 'Django vs Flask comparison 2024')",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Max results to return (default 5, max 10)",
+                        "default": 5,
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "WebFetch",
+            "description": "Fetch content from a URL. Use after WebSearch to get full page content for citations. Only http/https URLs; no localhost.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "Full URL to fetch (e.g. https://fastapi.tiangolo.com)",
+                    },
+                },
+                "required": ["url"],
             },
         },
     },
@@ -492,5 +533,16 @@ async def execute_tool(
         if ok:
             return val, ""
         return None, val  # val is error message
+
+    if name == "WebSearch":
+        query = args.get("query", "")
+        max_results = args.get("max_results", 5)
+        result = await web_tools.run_web_search(query, max_results)
+        return None, result
+
+    if name == "WebFetch":
+        url = args.get("url", "")
+        result = await web_tools.run_web_fetch(url)
+        return None, result
 
     return None, f"Error: unknown tool '{name}'"

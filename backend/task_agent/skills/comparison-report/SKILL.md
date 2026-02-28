@@ -10,9 +10,10 @@ Guidelines for producing comparison reports between two or more options.
 ## Output Structure
 
 1. **Criteria**: List the dimensions used for comparison (e.g. performance, ecosystem, learning curve).
-2. **Comparison Table**: Side-by-side comparison. Rows = criteria, columns = options.
+2. **Comparison Table**: Side-by-side comparison. Rows = criteria, columns = options. Use inline [Source] for metrics when citing.
 3. **Pros and Cons**: Per-option strengths and weaknesses.
 4. **Recommendation**: Clear conclusion with rationale. Map to scenarios when appropriate.
+5. **References**: **Required.** `## References` section listing all sources (artifact names, URLs, or "Official documentation" for general knowledge). Quantitative claims in the table must have attribution.
 
 ## Table Format
 
@@ -72,3 +73,4 @@ Guidelines for producing comparison reports between two or more options.
 - [ ] Criteria cover key dimensions
 - [ ] Table is complete (no empty cells without reason)
 - [ ] Recommendation supported by evidence
+- [ ] **## References section** present; quantitative metrics in table have source attribution

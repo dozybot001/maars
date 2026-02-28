@@ -38,14 +38,20 @@ When sources disagree:
 
 ## Citation Format
 
-- When sources are in input: `[Author, Year]` or `[Source 1]`, `[Source 2]`.
-- If no source metadata: use `[Task N output]` or similar.
+- **Inline**: `[Author, Year]`, `[Source 1]`, or `[Task N]` when from artifacts. Use for every factual or quantitative claim.
+- **Quantitative claims** (benchmarks, RPS, metrics): **must** include attribution—never state numbers without source.
+- **References section**: **Required** at end. List all sources:
+  - From artifacts: `[Task N] artifact_name - brief description`
+  - General knowledge: `[Official Docs] Framework - documentation` or `[Industry] benchmark description`
+  - With URL: `[Source Name](url) - description`
 - Be consistent throughout the document.
 
 ## Quality Checklist
 
 - [ ] Organized by theme, not just source list
 - [ ] Findings synthesized across sources
+- [ ] **Inline citations** for all factual/quantitative claims
+- [ ] **## References section** present and lists all sources
 - [ ] Agreements and conflicts noted
 - [ ] Gaps identified
 - [ ] Conclusions supported by synthesis

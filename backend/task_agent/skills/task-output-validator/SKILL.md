@@ -69,6 +69,7 @@ The script performs structural checks:
 
 - **JSON**: Valid JSON, required keys present, non-empty arrays/objects where specified
 - **Markdown**: Section headers (e.g. `## Summary`), table structure, pipe syntax
+- **References section**: `Document has ## References section` and `References section is non-empty` (for research reports)
 - **Generic**: Substring/keyword presence
 
 For semantic criteria (e.g. "content is complete"), verify manually before Finish. The script reports automatable checks; you judge the rest.

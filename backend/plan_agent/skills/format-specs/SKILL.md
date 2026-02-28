@@ -73,6 +73,8 @@ Guidelines for defining input/output/validation for atomic tasks. Apply when Che
 ```
 
 ### Markdown Output
+
+**Generic:**
 ```json
 {
   "output": {
@@ -82,9 +84,26 @@ Guidelines for defining input/output/validation for atomic tasks. Apply when Che
   "validation": {
     "criteria": [
       "Document has ## Summary section",
-      "Document has ## Findings section",
-      "All cited sources have [author, year] format"
+      "Document has ## Findings section"
     ]
+  }
+}
+```
+
+**Research/Comparison Report (add citation criteria):**
+```json
+{
+  "output": {
+    "artifact": "research_report",
+    "format": "Markdown document"
+  },
+  "validation": {
+    "criteria": [
+      "Document has ## Summary section",
+      "Document has ## References section",
+      "References section is non-empty"
+    ],
+    "optionalChecks": ["Quantitative claims include inline source attribution"]
   }
 }
 ```
@@ -116,6 +135,22 @@ Guidelines for defining input/output/validation for atomic tasks. Apply when Che
 | Comparison | `comparison_report`, `comparison_table` |
 | Experiment results | `experiment_results`, `benchmark_data` |
 | Analysis | `analysis_report`, `findings` |
+
+## Research Report Output (Citation Requirements)
+
+When the task produces a **research report**, **comparison report**, or **synthesis document** (e.g. "调研报告", "对比报告", "综合分析"), add validation criteria for source attribution:
+
+```json
+"validation": {
+  "criteria": [
+    "Document has ## References section",
+    "References section is non-empty"
+  ],
+  "optionalChecks": ["Quantitative claims include inline source attribution"]
+}
+```
+
+This ensures reports include citations and a References section, improving credibility.
 
 ## Anti-Patterns
 

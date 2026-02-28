@@ -59,11 +59,14 @@ Task Agent 池并行执行就绪任务，每个任务执行后 Validate，实时
 |------|------|
 | ReadArtifact | 读取依赖任务输出 |
 | ReadFile / WriteFile | 读写沙箱内文件 |
+| WebSearch / WebFetch | 网页搜索与 URL 抓取（调研任务可引用真实来源） |
 | ReadSkillFile / RunSkillScript | 读取并执行技能脚本 |
 | ListSkills / LoadSkill | 加载 Executor 技能 |
 | Finish | 提交任务输出 |
 
 **验证**：LLM 模式下由系统调用 `llm/validation` 做 LLM 校验；Agent 模式下由 Agent 在 Finish 前通过 task-output-validator 技能自检。
+
+**引用与来源**：调研/对比类报告需包含 `## References` 小节；Format 阶段会为研究任务自动加入引用校验。可选加载 source-attribution 技能强化引用规范。
 
 ## 项目结构
 

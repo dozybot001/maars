@@ -89,13 +89,32 @@ def _check_markdown(content: str, criteria: list[str]) -> tuple[bool, list[str]]
     for c in criteria:
         c_lower = c.lower()
         if "section" in c_lower or "has ##" in c_lower:
-            # e.g. "Document has ## Summary section"
+            # e.g. "Document has ## Summary section" or "References section is non-empty"
+            section = None
             m = re.search(r"##\s*([^\s]+)", c)
             if m:
                 section = m.group(1).strip()
+            elif "references" in c_lower and ("non-empty" in c_lower or "nonempty" in c_lower):
+                section = "References"
+            if section:
                 pattern = rf"^#{{1,6}}\s*{re.escape(section)}\s*$"
                 if re.search(pattern, content, re.MULTILINE | re.IGNORECASE):
-                    report.append(f"- {c}: PASS")
+                    # Check "References section is non-empty" if that's the criterion
+                    if "non-empty" in c_lower or "nonempty" in c_lower:
+                        # Extract content after ## Section until next ## or end
+                        ref_match = re.search(
+                            rf"^#{{1,6}}\s*{re.escape(section)}\s*$(.*?)(?=^#{{1,6}}\s|\Z)",
+                            content,
+                            re.MULTILINE | re.DOTALL | re.IGNORECASE,
+                        )
+                        body = (ref_match.group(1) if ref_match else "").strip()
+                        if body and len(body) > 10:
+                            report.append(f"- {c}: PASS")
+                        else:
+                            report.append(f"- {c}: FAIL (section '## {section}' is empty or too short)")
+                            all_passed = False
+                    else:
+                        report.append(f"- {c}: PASS")
                 else:
                     report.append(f"- {c}: FAIL (section '## {section}' not found)")
                     all_passed = False

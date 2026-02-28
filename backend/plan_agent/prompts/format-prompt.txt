@@ -36,7 +36,8 @@ Given an atomic task (task_id and description), output a JSON with clear **input
 1. **input**: What does this task need to start? Dependencies produce artifacts; list what this task consumes.
 2. **output**: What does this task produce? Be specific about artifact name and format.
 3. **validation**: List concrete, checkable criteria that align with the output format and content. The validator should know exactly what to check.
-4. Keep it concise. The Task Agent and validator should understand exactly what to do.
+4. **Research/Comparison reports**: When output is a Markdown research report, comparison report, or synthesis (e.g. 调研、对比、综合分析), include: "Document has ## References section" and "References section is non-empty" in criteria. This ensures source attribution for credibility.
+5. Keep it concise. The Task Agent and validator should understand exactly what to do.
 
 ### EXAMPLE
 **Input task:** task_id "1_1", description "确定文献检索关键词与数据库范围"

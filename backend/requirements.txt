@@ -8,3 +8,5 @@ orjson>=3.9.0
 json-repair>=0.7.0
 loguru>=0.7.0
 PyYAML>=6.0
+duckduckgo-search>=4.0
+httpx>=0.25.0

@@ -9,14 +9,17 @@ Guidelines for research tasks that involve gathering and synthesizing informatio
 
 ## MAARS Context
 
-**No live web search**: The Task Agent uses ReadArtifact (dependency outputs) and ReadFile (local files). Use provided artifacts and general knowledge. If the task expects external data (e.g. "search the web for X"), document assumptions and note that live search was not available.
+**Live web search available**: Use **WebSearch** to find current information, benchmarks, and documentation. Use **WebFetch** to retrieve full page content from URLs for citations. Combine with ReadArtifact for dependency outputs. When citing, include the URL from WebSearch/WebFetch results in your References section.
 
 ## Research Process
 
 1. **Define scope**: Clarify what information is needed, from which domains, and what format the output should take.
-2. **Gather sources**: Use ReadArtifact for dependency outputs; ReadFile for local files. Extract key points from each.
+2. **Gather sources**: Use **WebSearch** for external data (benchmarks, docs, comparisons); **WebFetch** for full page content from URLs; ReadArtifact for dependency outputs; ReadFile for local files. Extract key points from each.
 3. **Synthesize**: Combine findings. Note agreements, conflicts, and gaps. Use tables for side-by-side comparison.
-4. **Cite**: When referencing sources from input artifacts, include clear attribution (e.g. [Source Name], [Author, Year]).
+4. **Cite**: When referencing sources from input artifacts, include clear attribution. **Required formats**:
+   - Inline: `[Task N]` or `[Source Name]` for artifact-derived claims
+   - Quantitative claims (RPS, benchmarks, metrics): **must** have attribution—never state numbers without a source
+   - End of report: `## References` section listing all sources (artifact names, URLs if available, or "Official documentation" for general knowledge)
 
 ## Synthesis Techniques
 
@@ -30,10 +33,11 @@ Guidelines for research tasks that involve gathering and synthesizing informatio
 
 | Section | Purpose |
 |---------|---------|
-| Findings | Organized by topic or source. Use subsections. |
+| Findings | Organized by topic or source. Use subsections. Use inline [Source] for attribution. |
 | Summary | Key takeaways in bullet or paragraph form. |
 | Gaps | What could not be determined; limitations. |
 | Recommendations | Next steps, conclusions, or suggested actions. |
+| **References** | **Required.** List all sources: [Task N] artifact, [Official Docs] framework name, or [URL](link) when available. |
 
 ## Handling Conflicting Sources
 
@@ -53,7 +57,8 @@ When sources disagree:
 ## Quality Checklist
 
 - [ ] Findings organized logically
-- [ ] Sources attributed when from input artifacts
+- [ ] **All sources attributed**—inline [Source] for claims; no unsourced quantitative data
+- [ ] **## References section** present and non-empty
 - [ ] Summary captures main points
 - [ ] Gaps/limitations acknowledged when relevant
 - [ ] Recommendations actionable when appropriate

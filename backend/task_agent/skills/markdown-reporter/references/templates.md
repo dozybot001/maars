@@ -58,7 +58,7 @@
 
 ## Key Themes
 ### Theme 1
-[Synthesized findings across sources]
+[Synthesized findings across sources - use [Source] inline when citing]
 
 ### Theme 2
 [Synthesized findings across sources]
@@ -70,7 +70,7 @@
 [Implications and recommendations]
 
 ## References
-[Attribution when available]
+[Required: list all sources. Format: [Source Name](url) - description, or [Task N] artifact name]
 ```
 
 ## Technical Report
