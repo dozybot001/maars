@@ -38,9 +38,37 @@ python -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001 --loop asyncio --http
 
 Task Agent 池并行执行就绪任务，每个任务执行后 Validate，实时状态推送。Thinking 区域展示 Refine/Plan/Execute 阶段、轮次、工具调用及参数摘要（如 `ReadFile(path: sandbox/notes.txt)`）。
 
-## Agent 工作流
+## 三 Agent 工作流程
 
-**AI Mode** 可选 Mock LLM / Mock Agent / LLM / LLM+Agent / Agent。三个 Agent：Idea Agent（Refine）、Plan Agent、Task Agent。
+统一流程模型：**用户点击 → HTTP POST 触发 → 后端后台任务 → WebSocket 数据回传 → 前端更新 UI**。三个 Agent 均采用相同模式：HTTP 仅用于触发并立即返回 `{success, id}`，所有流式数据（thinking、tree、output）、完成状态与错误均通过 WebSocket 推送；前端不依赖 HTTP 响应，仅用 WebSocket 事件更新 UI。
+
+| Agent | 职责 | 触发 | 事件 |
+|-------|------|------|------|
+| **Idea Agent** | 关键词提取、arXiv 检索、Refined Idea 生成 | Refine 按钮 | idea-start / idea-thinking / idea-complete |
+| **Plan Agent** | 任务分解（atomicity → decompose → format → quality） | Plan 按钮 | plan-start / plan-thinking / plan-tree-update / plan-complete |
+| **Task Agent** | 原子任务执行与验证 | Execute 启动 | task-start / task-thinking / task-states-update / task-output / task-complete |
+
+三个 Agent 均支持 Stop 中止、流式 thinking、error 时按钮重置。
+
+## LLM / Agent 模式实现进度
+
+**AI Mode** 可选 Mock LLM / Mock Agent / LLM / LLM+Agent / Agent。
+
+| Agent | LLM 模式 | Agent 模式 |
+|-------|----------|------------|
+| **Idea Agent** | ✅ 单轮（关键词 + Refine），Mock 可用 | ❌ 未实现 |
+| **Plan Agent** | ✅ 单轮 atomicity/decompose/format/quality | ✅ ReAct 循环（CheckAtomicity、Decompose、FormatTask 等工具） |
+| **Task Agent** | ✅ 单轮执行 + LLM 验证 | ✅ ReAct 循环（ReadFile、WriteFile、WebSearch、Finish 等工具，task-output-validator 自检） |
+
+| AI Mode | Plan | Task |
+|---------|------|------|
+| Mock LLM | Mock | Mock LLM |
+| Mock Agent | Mock | Mock Agent |
+| LLM | LLM | LLM |
+| LLM+Agent | LLM | Agent |
+| Agent | Agent | Agent |
+
+## Agent 工作流（详细）
 
 ### Idea Agent
 
@@ -86,9 +114,11 @@ maars/
 │   ├── idea_agent/      # Idea Agent：关键词提取、arXiv 检索
 │   │   └── llm/         # Idea Agent LLM 实现
 │   ├── plan_agent/      # Plan Agent：atomicity → decompose → format（业务逻辑）
-│   │   └── llm/         # Plan Agent LLM 实现
+│   │   ├── llm/         # Plan Agent LLM 实现
+│   │   └── agent.py     # Plan Agent ReAct 模式
 │   ├── task_agent/      # Task Agent：runner、execution、skills
 │   │   ├── llm/         # Task Agent LLM 实现（executor + validation）
+│   │   └── agent.py     # Task Agent ReAct 模式
 │   │   └── skills/     # task-output-validator、markdown-reporter 等
 │   ├── visualization/   # 分解树、执行图布局
 │   ├── shared/          # 共享模块：graph、llm_client、skill_utils、utils
@@ -99,7 +129,7 @@ maars/
 
 ## 配置
 
-按 **Alt+Shift+S** 打开 **Settings**：Theme、DB Operation（Restore/Clear）、AI Mode（Mock LLM / Mock Agent / LLM / Agent）、Preset（Base URL、API Key、Model）、模式参数（Temperature、最大轮数等）。
+按 **Alt+Shift+S** 打开 **Settings**：Theme、DB Operation（Restore/Clear）、AI Mode（Mock LLM / Mock Agent / LLM / LLM+Agent / Agent）、Preset（Base URL、API Key、Model）、模式参数（Temperature、最大轮数等）。
 
 ## 文档
 
