@@ -59,7 +59,7 @@
             const argsDisplay = si.tool_args_preview || (si.tool_args ? truncateForDisplay(si.tool_args, 50) : null);
             parts.push(si.tool_name + (argsDisplay ? `(${argsDisplay})` : ''));
         }
-        return parts.join(' · ');
+        return parts.join(' | ');
     }
 
     function renderThinking(skipHighlight) {

@@ -53,7 +53,7 @@ flowchart LR
 | 有推理内容（非纯 JSON） | header + body（Markdown 渲染） |
 | 无推理（调度信息或纯 JSON） | header only（body 隐藏） |
 
-Header 格式统一：`source · operation · taskId · Turn N/M · tool_name(args)`，由 `_buildHeaderText(block)` 生成。
+Header 格式统一：`source | operation | taskId | Turn N/M | tool_name(args)`，由 `_buildHeaderText(block)` 生成。
 
 ### 2.2 判断规则
 
