@@ -82,6 +82,7 @@ maars/
 | 文档 | 说明 |
 | --- | --- |
 | [docs/README.md](docs/README.md) | 文档索引 |
+| [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) | 开发指南（架构、Skill 扩充与维护） |
 | [docs/workflow/](docs/workflow/) | 工作流说明 |
 | [docs/FRONTEND_SCRIPTS.md](docs/FRONTEND_SCRIPTS.md) | 前端脚本与模块依赖 |
 | [docs/RELEASE_NOTE_STANDARD.md](docs/RELEASE_NOTE_STANDARD.md) | Release Note 撰写标准 |

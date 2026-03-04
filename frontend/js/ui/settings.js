@@ -267,8 +267,6 @@
             try {
                 await api.restoreRecentPlan();
                 if (btn) { btn.textContent = 'Restored'; }
-                document.dispatchEvent(new CustomEvent('maars:idea-complete'));
-                document.dispatchEvent(new CustomEvent('maars:plan-complete'));
                 setTimeout(() => {
                     if (btn) { btn.disabled = false; btn.textContent = origText || 'Restore'; }
                 }, 1500);

@@ -3,7 +3,8 @@
 ## 文档索引
 
 | 文档 | 说明 |
-|------|------|
+| --- | --- |
+| [开发指南](DEVELOPMENT_GUIDE.md) | 底层架构、工作流、Skill 扩充与维护 |
 | [工作流文档](workflow/README.md) | 用户流程、四 Agent 流程、事件与模式 |
 | [设计文档](design/) | Agent 结构、区域职责、Thinking 区域设计 |
 | [前端脚本与模块依赖](FRONTEND_SCRIPTS.md) | 脚本加载顺序、模块依赖关系 |

@@ -318,6 +318,7 @@
         if (stopExecutionBtn) stopExecutionBtn.addEventListener('click', stopExecution);
         document.addEventListener('maars:idea-start', onIdeaStart);
         document.addEventListener('maars:plan-start', onPlanStart);
+        document.addEventListener('maars:task-start', () => clear());
         document.addEventListener('maars:plan-complete', onPlanComplete);
         document.addEventListener('maars:plan-complete', onPlanCompleteForLayout);
         document.addEventListener('maars:task-complete', onExecutionComplete);

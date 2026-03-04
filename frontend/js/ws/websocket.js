@@ -54,8 +54,8 @@
             document.dispatchEvent(new CustomEvent('maars:plan-complete', { detail: data }));
         });
 
-        state.socket.on('plan-error', () => {
-            document.dispatchEvent(new CustomEvent('maars:plan-error'));
+        state.socket.on('plan-error', (data) => {
+            document.dispatchEvent(new CustomEvent('maars:plan-error', { detail: { error: data?.error } }));
         });
 
         state.socket.on('paper-start', () => {});
