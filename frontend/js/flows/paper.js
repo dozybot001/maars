@@ -30,16 +30,8 @@
     }
 
     async function runGeneratePaper() {
-        let socket = window.MAARS?.state?.socket;
-        if (!socket || !socket.connected) {
-            window.MAARS.ws?.init();
-            await new Promise(resolve => setTimeout(resolve, 500));
-            socket = window.MAARS?.state?.socket;
-            if (!socket || !socket.connected) {
-                alert('WebSocket not connected. Please wait and try again.');
-                return;
-            }
-        }
+        const socket = await window.MAARS.ws?.requireConnected?.();
+        if (!socket) return;
         try {
             const { ideaId, planId } = await cfg.resolvePlanIds();
             if (!ideaId || !planId) {
@@ -51,7 +43,7 @@
             if (stopPaperBtn) stopPaperBtn.style.display = '';
             document.dispatchEvent(new CustomEvent('maars:paper-start'));
             document.dispatchEvent(new CustomEvent('maars:switch-view', { detail: { view: 'output' } }));
-            const response = await fetch(`${cfg.API_BASE_URL}/paper/run`, {
+            const response = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/paper/run`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ideaId, planId, format: 'markdown' }),

@@ -21,7 +21,14 @@
         if (plan) plan.init();
         if (task) task.init();
         if (paper) paper.init();
-        if (ws) ws.init();
+        (async () => {
+            try {
+                if (cfg?.ensureSession) await cfg.ensureSession();
+                if (ws) await ws.init();
+            } catch (_) {
+                /* ignore bootstrap failures */
+            }
+        })();
 
         const taskTree = window.MAARS?.taskTree;
         if (taskTree?.initClickHandlers) taskTree.initClickHandlers();

@@ -19,6 +19,15 @@
 
 Mock 与 LLM 共用同一 LLM 管道；Agent 模式单独走 ADK。
 
+## 会话隔离
+
+- 后端按 `sessionId` 维护独立运行上下文（Idea/Plan/Paper run state + Task `ExecutionRunner`）
+- `POST /api/session/init` 由后端签发 `sessionId + sessionToken`
+- WebSocket 连接通过 `auth.sessionId + auth.sessionToken` 进入对应 room
+- HTTP 请求通过 `X-MAARS-SESSION-ID + X-MAARS-SESSION-TOKEN` 绑定同一上下文
+- 事件发射按 room 定向，不再全局广播
+- 空闲会话按 TTL 自动回收（默认 7200 秒，可由 `MAARS_SESSION_IDLE_TTL_SECONDS` 配置）
+
 ## 结构
 
 | 目录 | 职责 |
@@ -44,3 +53,11 @@ layout ← visualization (读 db 数据，计算布局)
 ## 目录结构
 
 三个 Agent 保持统一目录结构，详见 [docs/design/agent-structure.md](../docs/design/agent-structure.md)。Skills 的 list/load/read 由 `shared/skill_utils` 统一提供。
+
+## 解耦要点
+
+1. **Skill I/O**：统一由 `shared/skill_utils` 提供，各 `agent_tools` 仅传入 `*_SKILLS_ROOT`
+2. **ADK 桥接**：工具格式转换、`ExecutorTool` 封装由 `shared/adk_bridge` 统一处理
+3. **ADK 运行时**：Runner 生命周期、事件循环、中止控制由 `shared/adk_runtime` 统一处理，减少三个 `adk_runner.py` 重复逻辑
+4. **Realtime 事件**：thinking 事件 payload 组装由 `shared/realtime` 统一处理，减少路由重复代码
+5. **LLM 调用**：单轮调用由 `shared/llm_client.chat_completion` 统一；Mock 由 `test/mock_stream.mock_chat_completion` 统一

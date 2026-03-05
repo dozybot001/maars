@@ -3,7 +3,7 @@
 import asyncio
 import time
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from loguru import logger
 from fastapi.responses import JSONResponse
 
@@ -19,6 +19,7 @@ from shared.idea_utils import get_idea_text
 from visualization import build_layout_from_execution, compute_decomposition_layout
 from plan_agent.index import run_plan
 from shared.reflection import reflection_loop
+from shared.realtime import build_thinking_emitter
 
 from ..schemas import PlanLayoutRequest, PlanRunRequest
 from .. import state as api_state
@@ -32,14 +33,15 @@ def _tree_update_payload(plan):
 
 
 @router.post("/layout")
-async def set_plan_layout(body: PlanLayoutRequest):
+async def set_plan_layout(body: PlanLayoutRequest, request: Request):
     """设置 Task Agent Execution 阶段的可视化布局（execution graph）。"""
+    _, session = await api_state.require_session(request)
     execution = body.execution
     idea_id = body.idea_id or DEFAULT_IDEA_ID
     plan_id = body.plan_id
     layout = build_layout_from_execution(execution)
     try:
-        api_state.runner.set_layout(layout, idea_id=idea_id, plan_id=plan_id, execution=execution)
+        session.runner.set_layout(layout, idea_id=idea_id, plan_id=plan_id, execution=execution)
     except ValueError as e:
         return JSONResponse(status_code=409, content={"error": str(e)})
     return {"layout": layout}
@@ -67,33 +69,25 @@ async def get_plan_tree(idea_id: str = Query("test", alias="ideaId"), plan_id: s
 
 
 @router.post("/stop")
-async def stop_plan():
+async def stop_plan(request: Request):
     """停止 Plan Agent：发送中止信号，取消任务，立即推送 plan-error 以便前端恢复 UI。"""
-    state = api_state.plan_run_state
-    if state and state.abort_event:
-        state.abort_event.set()
-    if state and state.run_task and not state.run_task.done():
-        state.run_task.cancel()
-    _emit_plan_error("Plan Agent stopped by user")
+    session_id, session = await api_state.require_session(request)
+    await api_state.stop_run_state(
+        session_id,
+        session.plan_run_state,
+        error_event="plan-error",
+        error_message="Plan Agent stopped by user",
+        emit_when_idle=True,
+    )
     return {"success": True}
 
 
-def _emit_plan_error(err_msg: str) -> None:
-    """统一发送 plan-error，供 Plan Agent 停止或异常时使用。"""
-    try:
-        api_state.sio.emit("plan-error", {"error": err_msg})
-    except Exception as e:
-        logger.warning("plan-error emit failed: %s", e)
-
-
-async def _run_plan_inner(body: PlanRunRequest, idea_id: str, plan_id: str):
+async def _run_plan_inner(body: PlanRunRequest, idea_id: str, plan_id: str, session_id: str, state):
     """后台执行 plan 生成，通过 WebSocket 回传数据。与 idea/task 统一：HTTP 仅触发。"""
-    state = api_state.plan_run_state
     async with state.lock:
         if state.abort_event:
             state.abort_event.set()
         state.abort_event = asyncio.Event()
-        state.abort_event.clear()
         abort_event = state.abort_event
 
     try:
@@ -113,32 +107,31 @@ async def _run_plan_inner(body: PlanRunRequest, idea_id: str, plan_id: str):
         }
         await save_plan(plan, idea_id, plan_id)
 
-        await api_state.sio.emit("plan-start")
+        await api_state.emit(session_id, "plan-start", {})
 
         if plan["tasks"]:
-            await api_state.sio.emit("plan-tree-update", _tree_update_payload(plan))
+            await api_state.emit(session_id, "plan-tree-update", _tree_update_payload(plan))
 
         def on_tasks_batch(children, parent_task, all_tasks):
             if abort_event and abort_event.is_set():
                 return
             plan["tasks"] = all_tasks
             if plan["tasks"]:
-                asyncio.create_task(api_state.sio.emit("plan-tree-update", _tree_update_payload(plan)))
+                api_state.emit_background(session_id, "plan-tree-update", _tree_update_payload(plan))
+
+        _on_thinking_emit = build_thinking_emitter(
+            api_state.sio,
+            event_name="plan-thinking",
+            source="plan",
+            default_operation="Decompose",
+            room=session_id,
+            warning_label="plan-thinking",
+        )
 
         async def on_thinking(chunk, task_id=None, operation=None, schedule_info=None):
             if abort_event and abort_event.is_set():
                 return
-            payload = {"chunk": chunk, "source": "plan"}
-            if task_id is not None:
-                payload["taskId"] = task_id
-            if operation is not None:
-                payload["operation"] = operation
-            if schedule_info is not None:
-                payload["scheduleInfo"] = schedule_info
-            try:
-                await api_state.sio.emit("plan-thinking", payload)
-            except Exception as e:
-                logger.warning("plan-thinking emit failed: %s", e)
+            await _on_thinking_emit(chunk, task_id, operation, schedule_info)
 
         result = await run_plan(
             plan, None, on_thinking, abort_event, on_tasks_batch,
@@ -193,27 +186,35 @@ async def _run_plan_inner(body: PlanRunRequest, idea_id: str, plan_id: str):
                 "bestScore": reflection_data.get("best_score", 0),
                 "skillsCreated": [s["name"] for s in reflection_data.get("skills_created", [])],
             }
-        await api_state.sio.emit("plan-complete", complete_payload)
+        await api_state.emit(session_id, "plan-complete", complete_payload)
     except asyncio.CancelledError:
-        _emit_plan_error("Plan Agent stopped by user")
+        await api_state.emit_safe(
+            session_id,
+            "plan-error",
+            {"error": "Plan Agent stopped by user"},
+            warning_label="plan-error emit (cancel)",
+        )
     except Exception as e:
         err_msg = str(e)
         logger.warning("Plan run error: %s", err_msg)
-        _emit_plan_error("Plan Agent stopped by user" if "Aborted" in err_msg else err_msg)
+        await api_state.emit_safe(
+            session_id,
+            "plan-error",
+            {"error": "Plan Agent stopped by user" if "Aborted" in err_msg else err_msg},
+            warning_label="plan-error emit",
+        )
     finally:
         async with state.lock:
             if state.abort_event is abort_event:
                 state.abort_event = None
-        if state:
-            state.run_task = None
+        state.run_task = None
 
 
 @router.post("/run")
-async def run_plan_route(body: PlanRunRequest):
+async def run_plan_route(body: PlanRunRequest, request: Request):
     """立即返回，数据由 WebSocket plan-complete 回传。与 idea/task 统一。"""
-    state = api_state.plan_run_state
-    if state is None:
-        return JSONResponse(status_code=503, content={"error": "API not initialized"})
+    session_id, session = await api_state.require_session(request)
+    state = session.plan_run_state
     if state.run_task and not state.run_task.done():
         return JSONResponse(status_code=409, content={"error": "Plan run already in progress"})
 
@@ -226,6 +227,6 @@ async def run_plan_route(body: PlanRunRequest):
         return JSONResponse(status_code=400, content={"error": "Idea not found. Please Refine first to create an idea."})
 
     plan_id = f"plan_{int(time.time() * 1000)}"
-    state.run_task = asyncio.create_task(_run_plan_inner(body, idea_id, plan_id))
+    state.run_task = asyncio.create_task(_run_plan_inner(body, idea_id, plan_id, session_id, state))
 
-    return {"success": True, "ideaId": idea_id, "planId": plan_id}
+    return {"success": True, "ideaId": idea_id, "planId": plan_id, "sessionId": session_id}

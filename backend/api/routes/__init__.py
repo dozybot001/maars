@@ -6,22 +6,19 @@
 
 from fastapi import FastAPI
 
-from . import db, execution, idea, paper, plan, plans, settings, status
-from ..state import PlanRunState, IdeaRunState, PaperRunState, init_api_state
+from . import db, execution, idea, paper, plan, plans, session, settings, status
+from ..state import init_api_state
 
 
 def register_routes(
     app: FastAPI,
     sio,
-    run_runner,
-    plan_run_state: PlanRunState,
-    idea_run_state: IdeaRunState,
-    paper_run_state: PaperRunState,
 ):
     """Register all API routers."""
-    init_api_state(sio, run_runner, plan_run_state, idea_run_state, paper_run_state)
+    init_api_state(sio)
 
     app.include_router(db.router, prefix="/api/db", tags=["db"])
+    app.include_router(session.router, prefix="/api/session", tags=["session"])
     app.include_router(plan.router, prefix="/api/plan", tags=["plan-agent"])
     app.include_router(plans.router, prefix="/api/plans", tags=["plans"])
     app.include_router(execution.router, prefix="/api/execution", tags=["task-execution"])

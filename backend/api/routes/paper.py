@@ -2,67 +2,45 @@
 
 import asyncio
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
 
 from db import get_effective_config, get_plan, list_plan_outputs
 from paper_agent import run_paper_agent
+from shared.realtime import build_thinking_emitter
 
 from .. import state as api_state
 from ..schemas import PaperRunRequest
 
 router = APIRouter()
 
-
-
-
-def _make_on_thinking(sio):
-    """构造 on_thinking 回调，通过 WebSocket 推送 paper-thinking 事件。"""
-
-    async def on_thinking(
-        chunk: str,
-        task_id=None,
-        operation=None,
-        schedule_info=None,
-    ):
-        if not chunk and schedule_info is None:
-            return
-        if not sio:
-            return
-        payload = {
-            "chunk": chunk or "",
-            "source": "paper",
-            "taskId": task_id,
-            "operation": operation or "Paper",
-        }
-        if schedule_info is not None:
-            payload["scheduleInfo"] = schedule_info
-        try:
-            await sio.emit("paper-thinking", payload)
-        except Exception as e:
-            logger.warning("paper-thinking emit failed: %s", e)
-
-    return on_thinking
-
-
-async def _run_paper_inner(idea_id: str, plan_id: str, format_type: str, abort_event=None):
+async def _run_paper_inner(session_id: str, state, idea_id: str, plan_id: str, format_type: str, abort_event=None):
     """后台执行论文生成，通过 WebSocket 回传数据。"""
     config = await get_effective_config()
-    sio = getattr(api_state, "sio", None)
-    on_thinking = _make_on_thinking(sio) if sio else None
+    on_thinking = build_thinking_emitter(
+        api_state.sio,
+        event_name="paper-thinking",
+        source="paper",
+        default_operation="Paper",
+        room=session_id,
+        warning_label="paper-thinking",
+    )
 
     plan = await get_plan(idea_id, plan_id)
     if not plan or not plan.get("tasks"):
-        if sio:
-            await sio.emit("paper-error", {"error": "Plan not found or empty."})
+        await api_state.emit_safe(
+            session_id,
+            "paper-error",
+            {"error": "Plan not found or empty."},
+            warning_label="paper-error emit",
+        )
         return
 
     outputs = await list_plan_outputs(idea_id, plan_id)
 
     try:
-        if sio:
-            await sio.emit("paper-start", {})
+        await api_state.emit(session_id, "paper-start", {})
 
         content = await run_paper_agent(
             plan=plan,
@@ -73,40 +51,39 @@ async def _run_paper_inner(idea_id: str, plan_id: str, format_type: str, abort_e
             abort_event=abort_event,
         )
 
-        if sio:
-            await sio.emit("paper-complete", {
-                "ideaId": idea_id,
-                "planId": plan_id,
-                "content": content,
-                "format": format_type or "markdown",
-            })
+        await api_state.emit(session_id, "paper-complete", {
+            "ideaId": idea_id,
+            "planId": plan_id,
+            "content": content,
+            "format": format_type or "markdown",
+        })
     except asyncio.CancelledError:
-        try:
-            if sio:
-                await sio.emit("paper-error", {"error": "Paper Agent stopped by user"})
-        except Exception as emit_err:
-            logger.warning("paper-error emit (cancel) failed: %s", emit_err)
+        await api_state.emit_safe(
+            session_id,
+            "paper-error",
+            {"error": "Paper Agent stopped by user"},
+            warning_label="paper-error emit (cancel)",
+        )
         raise
     except Exception as e:
         logger.warning("Paper Agent error: %s", e)
-        try:
-            if sio:
-                await sio.emit("paper-error", {"error": str(e)})
-        except Exception as emit_err:
-            logger.warning("paper-error emit failed: %s", emit_err)
+        await api_state.emit_safe(
+            session_id,
+            "paper-error",
+            {"error": str(e)},
+            warning_label="paper-error emit",
+        )
         raise
     finally:
-        state = getattr(api_state, "paper_run_state", None)
-        if state:
-            state.run_task = None
-            state.abort_event = None
+        api_state.clear_run_state(state)
 
 
 @router.post("/run")
-async def run_paper_route(body: PaperRunRequest):
+async def run_paper_route(body: PaperRunRequest, request: Request):
     """Generate paper draft. 立即返回，数据由 WebSocket paper-complete 回传。"""
-    state = getattr(api_state, "paper_run_state", None)
-    if state and state.run_task and not state.run_task.done():
+    session_id, session = await api_state.require_session(request)
+    state = session.paper_run_state
+    if state.run_task and not state.run_task.done():
         return JSONResponse(status_code=409, content={"error": "Paper Agent already in progress"})
 
     idea_id = (body.idea_id or "").strip()
@@ -122,28 +99,22 @@ async def run_paper_route(body: PaperRunRequest):
     if format_type not in ("markdown", "latex"):
         format_type = "markdown"
 
-    if state:
-        state.abort_event = asyncio.Event()
-        state.abort_event.clear()
-        state.run_task = asyncio.create_task(
-            _run_paper_inner(idea_id, plan_id, format_type, abort_event=state.abort_event)
-        )
+    state.abort_event = asyncio.Event()
+    state.run_task = asyncio.create_task(
+        _run_paper_inner(session_id, state, idea_id, plan_id, format_type, abort_event=state.abort_event)
+    )
 
-    return {"success": True, "ideaId": idea_id, "planId": plan_id}
+    return {"success": True, "ideaId": idea_id, "planId": plan_id, "sessionId": session_id}
 
 
 @router.post("/stop")
-async def stop_paper():
+async def stop_paper(request: Request):
     """停止 Paper Agent。"""
-    state = getattr(api_state, "paper_run_state", None)
-    if state and state.abort_event:
-        state.abort_event.set()
-    if state and state.run_task and not state.run_task.done():
-        state.run_task.cancel()
-        try:
-            sio = getattr(api_state, "sio", None)
-            if sio:
-                await sio.emit("paper-error", {"error": "Paper Agent stopped by user"})
-        except Exception as e:
-            logger.warning("paper-error emit (stop) failed: %s", e)
+    session_id, session = await api_state.require_session(request)
+    await api_state.stop_run_state(
+        session_id,
+        session.paper_run_state,
+        error_event="paper-error",
+        error_message="Paper Agent stopped by user",
+    )
     return {"success": True}

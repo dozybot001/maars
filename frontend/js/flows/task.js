@@ -110,12 +110,15 @@
         document.dispatchEvent(new CustomEvent('maars:switch-view', { detail: { view: 'execution' } }));
         startExecutionUI();
         try {
-            const socket = window.MAARS?.state?.socket;
+            let socket = window.MAARS?.state?.socket;
             if (!socket || !socket.connected) {
-                window.MAARS.ws?.init();
-                await new Promise(resolve => setTimeout(resolve, 500));
+                socket = await window.MAARS.ws?.requireConnected?.();
+                if (!socket || !socket.connected) {
+                    resetExecutionButtons();
+                    return;
+                }
             }
-            const response = await fetch(`${cfg.API_BASE_URL}/execution/run`, {
+            const response = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/execution/run`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ideaId, planId })
@@ -147,7 +150,7 @@
     async function generateExecutionLayout() {
         try {
             const { ideaId, planId } = await cfg.resolvePlanIds();
-            const genRes = await fetch(`${cfg.API_BASE_URL}/execution/generate-from-plan`, {
+            const genRes = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/execution/generate-from-plan`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ideaId, planId })
@@ -159,7 +162,7 @@
                 alert('No atomic tasks. Plan first.');
                 return;
             }
-            const response = await fetch(`${cfg.API_BASE_URL}/plan/layout`, {
+            const response = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/plan/layout`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ execution: execData, ideaId, planId })

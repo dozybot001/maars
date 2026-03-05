@@ -203,7 +203,9 @@
         }
 
         document.addEventListener('keydown', (e) => {
-            if (e.altKey && e.shiftKey && e.key === 'S') {
+            // Alt+Shift+S (Win/Linux) or Cmd+Shift+S (Mac)
+            const mod = e.altKey || e.metaKey;
+            if (mod && e.shiftKey && e.key === 'S') {
                 e.preventDefault();
                 openSettingsModal();
             }

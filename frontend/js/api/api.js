@@ -14,7 +14,7 @@
     async function loadExecution() {
         try {
             const { ideaId, planId } = await cfg.resolvePlanIds();
-            const response = await fetch(`${cfg.API_BASE_URL}/execution?ideaId=${encodeURIComponent(ideaId)}&planId=${encodeURIComponent(planId)}`);
+            const response = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/execution?ideaId=${encodeURIComponent(ideaId)}&planId=${encodeURIComponent(planId)}`);
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Failed to load execution');
             return data.execution || null;
@@ -26,7 +26,7 @@
 
     async function fetchStatus() {
         try {
-            const res = await fetch(`${cfg.API_BASE_URL}/status`);
+            const res = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/status`);
             if (!res.ok) return { hasIdea: false, hasPlan: false };
             const data = await res.json();
             return { hasIdea: !!data.hasIdea, hasPlan: !!data.hasPlan };
@@ -36,7 +36,7 @@
     }
 
     async function clearDb() {
-        const res = await fetch(`${cfg.API_BASE_URL}/db/clear`, { method: 'POST' });
+        const res = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/db/clear`, { method: 'POST' });
         if (!res.ok) throw new Error('Failed to clear DB');
         return await res.json();
     }
@@ -44,7 +44,7 @@
     async function restoreRecentPlan() {
         document.dispatchEvent(new CustomEvent('maars:restore-start'));
 
-        const plansRes = await fetch(`${cfg.API_BASE_URL}/plans`);
+        const plansRes = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/plans`);
         const plansData = await plansRes.json();
         const items = plansData.items || [];
         if (items.length === 0) {
@@ -55,10 +55,10 @@
         cfg.setCurrentPlanId(planId);
 
         const [planRes, treeRes, execRes, ideaRes] = await Promise.all([
-            fetch(`${cfg.API_BASE_URL}/plan?ideaId=${encodeURIComponent(ideaId)}&planId=${encodeURIComponent(planId)}`),
-            fetch(`${cfg.API_BASE_URL}/plan/tree?ideaId=${encodeURIComponent(ideaId)}&planId=${encodeURIComponent(planId)}`),
-            fetch(`${cfg.API_BASE_URL}/execution?ideaId=${encodeURIComponent(ideaId)}&planId=${encodeURIComponent(planId)}`),
-            fetch(`${cfg.API_BASE_URL}/idea?ideaId=${encodeURIComponent(ideaId)}`),
+            cfg.fetchWithSession(`${cfg.API_BASE_URL}/plan?ideaId=${encodeURIComponent(ideaId)}&planId=${encodeURIComponent(planId)}`),
+            cfg.fetchWithSession(`${cfg.API_BASE_URL}/plan/tree?ideaId=${encodeURIComponent(ideaId)}&planId=${encodeURIComponent(planId)}`),
+            cfg.fetchWithSession(`${cfg.API_BASE_URL}/execution?ideaId=${encodeURIComponent(ideaId)}&planId=${encodeURIComponent(planId)}`),
+            cfg.fetchWithSession(`${cfg.API_BASE_URL}/idea?ideaId=${encodeURIComponent(ideaId)}`),
         ]);
         const planData = await planRes.json();
         const treeData = await treeRes.json();
@@ -71,7 +71,7 @@
         let execution = execData.execution;
 
         if (!execution || !execution.tasks?.length) {
-            const genRes = await fetch(`${cfg.API_BASE_URL}/execution/generate-from-plan`, {
+            const genRes = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/execution/generate-from-plan`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ideaId, planId }),
@@ -83,7 +83,7 @@
 
         let layout = null;
         if (execution?.tasks?.length) {
-            const layoutRes = await fetch(`${cfg.API_BASE_URL}/plan/layout`, {
+            const layoutRes = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/plan/layout`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ execution, ideaId, planId }),
@@ -96,7 +96,7 @@
             layout = layoutData.layout;
         }
 
-        const outRes = await fetch(`${cfg.API_BASE_URL}/plan/outputs?ideaId=${encodeURIComponent(ideaId)}&planId=${encodeURIComponent(planId)}`);
+        const outRes = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/plan/outputs?ideaId=${encodeURIComponent(ideaId)}&planId=${encodeURIComponent(planId)}`);
         const outData = await outRes.json();
         const outputs = outData.outputs || {};
 
@@ -118,7 +118,7 @@
 
     async function retryTask(taskId) {
         const { ideaId, planId } = await cfg.resolvePlanIds();
-        const response = await fetch(`${cfg.API_BASE_URL}/execution/retry-task`, {
+        const response = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/execution/retry-task`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ taskId, ideaId, planId }),
@@ -136,13 +136,13 @@
         const routes = { idea: '/idea/stop', plan: '/plan/stop', task: '/execution/stop', paper: '/paper/stop' };
         const path = routes[agent];
         if (!path) return;
-        const res = await fetch(`${cfg.API_BASE_URL}${path}`, { method: 'POST' });
+        const res = await cfg.fetchWithSession(`${cfg.API_BASE_URL}${path}`, { method: 'POST' });
         if (!res.ok) throw new Error('Failed to stop');
         return res.json();
     }
 
     async function refineIdea(idea, limit) {
-        const response = await fetch(`${cfg.API_BASE_URL}/idea/collect`, {
+        const response = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/idea/collect`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ idea: idea || '', limit: limit || 10 }),
@@ -157,7 +157,7 @@
 
     async function resumeFromTask(taskId) {
         const { ideaId, planId } = await cfg.resolvePlanIds();
-        const response = await fetch(`${cfg.API_BASE_URL}/execution/run`, {
+        const response = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/execution/run`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ideaId, planId, resumeFromTaskId: taskId }),

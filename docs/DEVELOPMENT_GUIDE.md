@@ -75,8 +75,19 @@ Mock 与 LLM 共用 LLM 管道；Agent 模式单独走 Google ADK。
 | `shared/llm_client` | chat_completion、merge_phase_config |
 | `shared/skill_utils` | list_skills、load_skill、read_skill_file |
 | `shared/adk_bridge` | ExecutorTool、create_executor_tools、prepare_api_env |
+| `shared/adk_runtime` | run_adk_agent_loop、Runner 生命周期、中止控制、finish 解析 |
+| `shared/realtime` | build_thinking_emitter、thinking 事件 payload 组装 |
 | `shared/reflection` | self_evaluate、generate_skill、reflection_loop、save_learned_skill |
 | `shared/constants` | REFLECT_MAX_ITERATIONS、REFLECT_QUALITY_THRESHOLD 等 |
+
+### 1.6 会话隔离
+
+- 后端按 `sessionId` 维护独立运行上下文（Idea/Plan/Paper run state + Task ExecutionRunner）
+- `POST /api/session/init` 签发 `sessionId + sessionToken`
+- WebSocket 通过 `auth.sessionId + auth.sessionToken` 进入对应 room
+- HTTP 通过 `X-MAARS-SESSION-ID + X-MAARS-SESSION-TOKEN` 绑定同一会话
+- 事件按 room 定向发射，避免多用户串流
+- 空闲会话按 TTL 自动回收（`MAARS_SESSION_IDLE_TTL_SECONDS`）
 
 ---
 

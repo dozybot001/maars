@@ -30,8 +30,9 @@ _MOCK_VALIDATOR_CHUNK_DELAY = 0.03
 
 
 class ExecutionRunner:
-    def __init__(self, sio: Any):
+    def __init__(self, sio: Any, session_id: Optional[str] = None):
         self.sio = sio
+        self.session_id = session_id
         self._worker_lock = asyncio.Lock()
         self.is_running = False
         self.running_tasks: Set[str] = set()
@@ -75,7 +76,7 @@ class ExecutionRunner:
         """Emit event to all clients (fire-and-forget)."""
         if hasattr(self.sio, "emit"):
             try:
-                asyncio.create_task(self.sio.emit(event, data))
+                asyncio.create_task(self.sio.emit(event, data, to=self.session_id))
             except RuntimeError:
                 pass
 
@@ -83,7 +84,7 @@ class ExecutionRunner:
         """Emit event and await; use for order-sensitive events (e.g. thinking chunks)."""
         if hasattr(self.sio, "emit"):
             try:
-                await self.sio.emit(event, data)
+                await self.sio.emit(event, data, to=self.session_id)
             except Exception as e:
                 logger.warning("%s emit failed: %s", event, e)
 
@@ -119,7 +120,6 @@ class ExecutionRunner:
                 raise ValueError("No execution layout cache found. Please generate layout first.")
             self.is_running = True
         self.abort_event = asyncio.Event()
-        self.abort_event.clear()
         self._idea_text = ""
         if self.idea_id:
             try:
@@ -328,7 +328,6 @@ class ExecutionRunner:
             task_id = task["task_id"]
             output_spec = task.get("output") or {}
             use_mock = (self.api_config or {}).get("taskUseMock", True)
-            exec_agent = (self.api_config or {}).get("taskAgentMode", False)
             if use_mock:
                 validation_passed = random.random() < self.VALIDATION_PASS_PROBABILITY
                 report = (
@@ -339,17 +338,6 @@ class ExecutionRunner:
                     "- Criterion 3: Alignment with spec ✓\n\n"
                     f"**Result: {'PASS' if validation_passed else 'FAIL'}**\n\n"
                     "(Mock validation mode)"
-                )
-            elif exec_agent:
-                validation_spec = task.get("validation")
-                validation_passed, report = await validate_task_output_with_llm(
-                    result,
-                    output_spec,
-                    task_id,
-                    validation_spec=validation_spec,
-                    api_config=self.api_config,
-                    abort_event=self.abort_event,
-                    on_thinking=_on_thinking,
                 )
             else:
                 validation_spec = task.get("validation")

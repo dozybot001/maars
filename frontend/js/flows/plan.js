@@ -22,16 +22,8 @@
 
     async function generatePlan() {
         const idea = (ideaInput?.value || '').trim();
-        let socket = window.MAARS?.state?.socket;
-        if (!socket || !socket.connected) {
-            window.MAARS.ws?.init();
-            await new Promise(resolve => setTimeout(resolve, 500));
-            socket = window.MAARS?.state?.socket;
-            if (!socket || !socket.connected) {
-                alert('WebSocket not connected. Please wait and try again.');
-                return;
-            }
-        }
+        const socket = await window.MAARS.ws?.requireConnected?.();
+        if (!socket) return;
 
         try {
             isPlanRunning = true;
@@ -40,7 +32,7 @@
             document.dispatchEvent(new CustomEvent('maars:plan-start'));
             document.dispatchEvent(new CustomEvent('maars:switch-view', { detail: { view: 'decomposition' } }));
             const ideaId = cfg.getCurrentIdeaId?.() || null;
-            const response = await fetch(`${cfg.API_BASE_URL}/plan/run`, {
+            const response = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/plan/run`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ idea, ideaId: ideaId || undefined }),

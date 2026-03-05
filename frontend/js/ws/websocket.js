@@ -15,7 +15,7 @@
         if (!cfg?.resolvePlanIds) return;
         try {
             const { ideaId, planId } = await cfg.resolvePlanIds();
-            const res = await fetch(`${cfg.API_BASE_URL}/execution/status?ideaId=${encodeURIComponent(ideaId)}&planId=${encodeURIComponent(planId)}`);
+            const res = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/execution/status?ideaId=${encodeURIComponent(ideaId)}&planId=${encodeURIComponent(planId)}`);
             const data = await res.json();
             if (!data.tasks?.length) return;
             document.dispatchEvent(new CustomEvent('maars:execution-sync', { detail: data }));
@@ -24,71 +24,101 @@
         }
     }
 
-    function init() {
-        if (state.socket && state.socket.connected) return;
-        state.socket = io(cfg.WS_URL, { reconnection: true, reconnectionAttempts: 10, reconnectionDelay: 1000 });
-
-        state.socket.on('connect', () => {
+    function bindSocketEvents(socket) {
+        socket.on('connect', () => {
             console.log('WebSocket connected');
             syncExecutionStateOnConnect();
         });
-        state.socket.on('disconnect', () => console.log('WebSocket disconnected'));
+        socket.on('disconnect', () => console.log('WebSocket disconnected'));
 
-        state.socket.on('plan-start', () => {});
-        state.socket.on('idea-start', () => {});
+        socket.on('plan-start', () => {});
+        socket.on('idea-start', () => {});
 
-        state.socket.on('idea-error', (data) => {
+        socket.on('idea-error', (data) => {
             document.dispatchEvent(new CustomEvent('maars:idea-error', { detail: { error: data?.error } }));
         });
-        state.socket.on('idea-complete', (data) => {
+        socket.on('idea-complete', (data) => {
             document.dispatchEvent(new CustomEvent('maars:idea-complete', { detail: data }));
         });
 
-        window.MAARS?.wsHandlers?.thinking?.register(state.socket);
+        window.MAARS?.wsHandlers?.thinking?.register(socket);
 
-        state.socket.on('plan-tree-update', (data) => {
+        socket.on('plan-tree-update', (data) => {
             document.dispatchEvent(new CustomEvent('maars:plan-tree-update', { detail: data }));
         });
 
-        state.socket.on('plan-complete', (data) => {
+        socket.on('plan-complete', (data) => {
             document.dispatchEvent(new CustomEvent('maars:plan-complete', { detail: data }));
         });
 
-        state.socket.on('plan-error', (data) => {
+        socket.on('plan-error', (data) => {
             document.dispatchEvent(new CustomEvent('maars:plan-error', { detail: { error: data?.error } }));
         });
 
-        state.socket.on('paper-start', () => {});
-        state.socket.on('paper-complete', (data) => {
+        socket.on('paper-start', () => {});
+        socket.on('paper-complete', (data) => {
             document.dispatchEvent(new CustomEvent('maars:paper-complete', { detail: data }));
         });
-        state.socket.on('paper-error', (data) => {
+        socket.on('paper-error', (data) => {
             document.dispatchEvent(new CustomEvent('maars:paper-error', { detail: { error: data?.error } }));
         });
 
-        state.socket.on('execution-layout', (data) => {
+        socket.on('execution-layout', (data) => {
             document.dispatchEvent(new CustomEvent('maars:execution-layout', { detail: data }));
         });
 
-        state.socket.on('task-start', () => {});
+        socket.on('task-start', () => {});
 
-        state.socket.on('task-states-update', (data) => {
+        socket.on('task-states-update', (data) => {
             document.dispatchEvent(new CustomEvent('maars:task-states-update', { detail: data }));
         });
 
-        state.socket.on('task-output', (data) => {
+        socket.on('task-output', (data) => {
             document.dispatchEvent(new CustomEvent('maars:task-output', { detail: data }));
         });
 
-        state.socket.on('task-error', (data) => {
+        socket.on('task-error', (data) => {
             document.dispatchEvent(new CustomEvent('maars:task-error', { detail: data }));
         });
 
-        state.socket.on('task-complete', (data) => {
+        socket.on('task-complete', (data) => {
             console.log(`Execution complete: ${data.completed}/${data.total} tasks completed`);
             document.dispatchEvent(new CustomEvent('maars:task-complete', { detail: data }));
         });
     }
 
-    window.MAARS.ws = { init };
+    async function init() {
+        if (state.socket && state.socket.connected) return;
+        const creds = await cfg.ensureSession?.();
+        state.socket = io(cfg.WS_URL, {
+            reconnection: true,
+            reconnectionAttempts: 10,
+            reconnectionDelay: 1000,
+            auth: {
+                sessionId: creds?.sessionId || cfg.getSessionId?.(),
+                sessionToken: creds?.sessionToken || cfg.getSessionToken?.(),
+            },
+        });
+        bindSocketEvents(state.socket);
+    }
+
+    async function ensureConnected(timeoutMs = 4000) {
+        if (state.socket && state.socket.connected) return state.socket;
+        await init();
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < timeoutMs) {
+            if (state.socket && state.socket.connected) return state.socket;
+            await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        return state.socket;
+    }
+
+    async function requireConnected(timeoutMs = 4000) {
+        const socket = await ensureConnected(timeoutMs);
+        if (socket && socket.connected) return socket;
+        alert('WebSocket not connected. Please wait and try again.');
+        return null;
+    }
+
+    window.MAARS.ws = { init, ensureConnected, requireConnected };
 })();

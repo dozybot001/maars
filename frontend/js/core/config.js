@@ -11,7 +11,80 @@
     const WS_URL = (typeof window !== 'undefined' && window.location) ? window.location.origin : 'http://localhost:3001';
     const IDEA_ID_KEY = 'maars-idea-id';
     const PLAN_ID_KEY = 'maars-plan-id';
+    const SESSION_ID_KEY = 'maars-session-id';
+    const SESSION_TOKEN_KEY = 'maars-session-token';
     const THEMES = ['light', 'dark', 'black'];
+    let memorySessionId = null;
+    let memorySessionToken = null;
+    let sessionInitPromise = null;
+
+    function getStoredSessionId() {
+        try { return sessionStorage.getItem(SESSION_ID_KEY) || ''; } catch (_) { return memorySessionId || ''; }
+    }
+
+    function getStoredSessionToken() {
+        try { return sessionStorage.getItem(SESSION_TOKEN_KEY) || ''; } catch (_) { return memorySessionToken || ''; }
+    }
+
+    function saveSessionCredentials(sessionId, sessionToken) {
+        memorySessionId = sessionId || null;
+        memorySessionToken = sessionToken || null;
+        try {
+            if (sessionId) sessionStorage.setItem(SESSION_ID_KEY, sessionId);
+            if (sessionToken) sessionStorage.setItem(SESSION_TOKEN_KEY, sessionToken);
+        } catch (_) { /* ignore */ }
+    }
+
+    function getSessionId() {
+        return getStoredSessionId();
+    }
+
+    function getSessionToken() {
+        return getStoredSessionToken();
+    }
+
+    async function ensureSession(forceRefresh = false) {
+        if (!forceRefresh) {
+            const existingId = getStoredSessionId();
+            const existingToken = getStoredSessionToken();
+            if (existingId && existingToken) {
+                return { sessionId: existingId, sessionToken: existingToken };
+            }
+        }
+        if (sessionInitPromise) return sessionInitPromise;
+
+        sessionInitPromise = (async () => {
+            const response = await fetch(`${API_BASE_URL}/session/init`, { method: 'POST' });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.sessionId || !data.sessionToken) {
+                throw new Error(data.error || data.detail || 'Failed to initialize session');
+            }
+            saveSessionCredentials(data.sessionId, data.sessionToken);
+            return { sessionId: data.sessionId, sessionToken: data.sessionToken };
+        })();
+
+        try {
+            return await sessionInitPromise;
+        } finally {
+            sessionInitPromise = null;
+        }
+    }
+
+    function withSessionHeaders(headers, credentials) {
+        const merged = new Headers(headers || {});
+        const sid = credentials?.sessionId || getSessionId();
+        const token = credentials?.sessionToken || getSessionToken();
+        if (sid) merged.set('X-MAARS-SESSION-ID', sid);
+        if (token) merged.set('X-MAARS-SESSION-TOKEN', token);
+        return merged;
+    }
+
+    async function fetchWithSession(input, init) {
+        const creds = await ensureSession();
+        const options = { ...(init || {}) };
+        options.headers = withSessionHeaders(options.headers, creds);
+        return fetch(input, options);
+    }
 
     function getCurrentIdeaId() {
         try {
@@ -38,7 +111,7 @@
         const storedPlan = getCurrentPlanId();
         if (storedPlan && storedPlan.startsWith('plan_')) return storedPlan;
         try {
-            const res = await fetch(`${API_BASE_URL}/plans`);
+            const res = await fetchWithSession(`${API_BASE_URL}/plans`);
             const data = await res.json();
             const items = data.items || [];
             if (items.length > 0) {
@@ -56,7 +129,7 @@
         const storedPlan = getCurrentPlanId();
         if (storedPlan && storedPlan.startsWith('plan_')) return { ideaId: storedIdea, planId: storedPlan };
         try {
-            const res = await fetch(`${API_BASE_URL}/plans`);
+            const res = await fetchWithSession(`${API_BASE_URL}/plans`);
             const data = await res.json();
             const items = data.items || [];
             if (items.length > 0) {
@@ -72,14 +145,14 @@
     }
 
     async function fetchSettings() {
-        const res = await fetch(`${API_BASE_URL}/settings`, { cache: 'no-store' });
+        const res = await fetchWithSession(`${API_BASE_URL}/settings`, { cache: 'no-store' });
         if (!res.ok) throw new Error(`Settings ${res.status}`);
         const data = await res.json();
         return data.settings != null ? data.settings : {};
     }
 
     async function saveSettings(settings) {
-        const res = await fetch(`${API_BASE_URL}/settings`, {
+        const res = await fetchWithSession(`${API_BASE_URL}/settings`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(settings || {})
@@ -93,9 +166,16 @@
         WS_URL,
         IDEA_ID_KEY,
         PLAN_ID_KEY,
+        SESSION_ID_KEY,
+        SESSION_TOKEN_KEY,
         THEMES,
         getCurrentIdeaId,
         getCurrentPlanId,
+        getSessionId,
+        getSessionToken,
+        ensureSession,
+        withSessionHeaders,
+        fetchWithSession,
         setCurrentIdeaId,
         setCurrentPlanId,
         resolvePlanId,

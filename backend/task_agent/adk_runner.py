@@ -3,23 +3,21 @@ Task Agent - Google ADK 驱动实现。
 当 taskAgentMode=True 时使用，替代自实现 ReAct 循环。
 """
 
-import asyncio
 import json
 import re
-import uuid
 from typing import Any, Callable, Dict, Optional
 
 import json_repair
-from google.adk import Agent, Runner
-from google.genai import types
-from google.adk.sessions import InMemorySessionService
-from loguru import logger
 
 from db import ensure_sandbox_dir
 from shared.adk_bridge import (
     create_executor_tools,
     get_model_for_adk,
     prepare_api_env,
+)
+from shared.adk_runtime import (
+    build_tool_args_preview,
+    run_adk_agent_loop,
 )
 from shared.constants import TASK_AGENT_MAX_TURNS
 
@@ -160,119 +158,49 @@ async def run_task_agent_adk(
 Produce the output now. You may reason first; when ready, call Finish with the result."""
 
     model = get_model_for_adk(api_config)
-    agent = Agent(
+
+    def _on_tool_call(name: str, args: dict, turn_count: int):
+        return on_thinking_fn(
+            "",
+            task_id=task_id,
+            operation="Execute",
+            schedule_info={
+                "turn": turn_count,
+                "max_turns": TASK_AGENT_MAX_TURNS,
+                "tool_name": name,
+                "tool_args": build_tool_args_preview(args),
+                "tool_args_preview": None,
+                "operation": "Execute",
+                "task_id": task_id,
+            },
+        )
+
+    def _on_text(text: str, turn_count: int):
+        return on_thinking_fn(
+            text,
+            task_id=task_id,
+            operation="Execute",
+            schedule_info={
+                "turn": turn_count,
+                "max_turns": TASK_AGENT_MAX_TURNS,
+                "operation": "Execute",
+                "task_id": task_id,
+            },
+        )
+
+    await run_adk_agent_loop(
+        app_name="maars_task",
+        agent_name="task_agent",
         model=model,
-        name="task_agent",
         instruction=system_prompt,
         tools=tools,
+        user_message=user_message,
+        max_turns=TASK_AGENT_MAX_TURNS,
+        abort_event=abort_event,
+        abort_message="Task Agent aborted",
+        on_tool_call=_on_tool_call,
+        on_text=_on_text,
     )
-
-    session_service = InMemorySessionService()
-    runner = Runner(
-        agent=agent,
-        app_name="maars_task",
-        session_service=session_service,
-        auto_create_session=True,
-    )
-
-    user_msg = types.Content(
-        role="user",
-        parts=[types.Part.from_text(text=user_message)],
-    )
-
-    turn_count = 0
-
-    async def _run_with_abort():
-        nonlocal turn_count
-        async for event in runner.run_async(
-            user_id="maars_user",
-            session_id=str(uuid.uuid4()),
-            new_message=user_msg,
-        ):
-            if abort_event and abort_event.is_set():
-                raise asyncio.CancelledError("Task Agent aborted")
-
-            turn_count += 1
-            if turn_count > TASK_AGENT_MAX_TURNS:
-                break
-
-            if event.content and event.content.parts:
-                fc = getattr(event, "get_function_calls", None)
-                fr = getattr(event, "get_function_responses", None)
-                if fc and callable(fc):
-                    calls = fc()
-                else:
-                    calls = []
-                if fr and callable(fr):
-                    responses = fr()
-                else:
-                    responses = []
-
-                if calls:
-                    for c in calls:
-                        name = getattr(c, "name", None) or ""
-                        args = getattr(c, "args", None) or {}
-                        if on_thinking_fn:
-                            args_preview = json.dumps(args, ensure_ascii=False)
-                            if len(args_preview) > 200:
-                                args_preview = args_preview[:200] + "..."
-                            r = on_thinking_fn(
-                                "",
-                                task_id=task_id,
-                                operation="Execute",
-                                schedule_info={
-                                    "turn": turn_count,
-                                    "max_turns": TASK_AGENT_MAX_TURNS,
-                                    "tool_name": name,
-                                    "tool_args": args_preview,
-                                    "tool_args_preview": None,
-                                    "operation": "Execute",
-                                    "task_id": task_id,
-                                },
-                            )
-                            if asyncio.iscoroutine(r):
-                                await r
-
-                elif not responses:
-                    for part in event.content.parts:
-                        text = getattr(part, "text", None) or ""
-                        if text and on_thinking_fn:
-                            r = on_thinking_fn(
-                                text,
-                                task_id=task_id,
-                                operation="Execute",
-                                schedule_info={
-                                    "turn": turn_count,
-                                    "max_turns": TASK_AGENT_MAX_TURNS,
-                                    "operation": "Execute",
-                                    "task_id": task_id,
-                                },
-                            )
-                            if asyncio.iscoroutine(r):
-                                await r
-
-        try:
-            await runner.close()
-        except Exception as e:
-            logger.debug("Runner close: %s", e)
-
-    try:
-        run_task = asyncio.create_task(_run_with_abort())
-        if abort_event:
-            while not run_task.done():
-                await asyncio.sleep(0.3)
-                if abort_event.is_set():
-                    run_task.cancel()
-                    try:
-                        await run_task
-                    except asyncio.CancelledError:
-                        pass
-                    raise asyncio.CancelledError("Task Agent aborted")
-            await run_task
-        else:
-            await run_task
-    except asyncio.CancelledError:
-        raise
 
     if task_output[0] is not None:
         return task_output[0]

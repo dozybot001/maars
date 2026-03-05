@@ -2,7 +2,7 @@
 
 import asyncio
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, Query, Request
 from loguru import logger
 from fastapi.responses import JSONResponse
 
@@ -14,6 +14,26 @@ from .. import state as api_state
 from ..schemas import ExecutionRequest, ExecutionRetryRequest, ExecutionRunRequest
 
 router = APIRouter()
+
+
+def _start_execution_background(
+    session_id: str,
+    runner,
+    config: dict,
+    *,
+    resume_from_task_id: str | None = None,
+) -> None:
+    async def run():
+        try:
+            await runner.start_execution(
+                api_config=config,
+                resume_from_task_id=resume_from_task_id,
+            )
+        except Exception as e:
+            logger.exception("Error in execution: {}", e)
+            await api_state.emit(session_id, "task-error", {"error": str(e)})
+
+    asyncio.create_task(run())
 
 
 @router.post("/generate-from-plan")
@@ -37,9 +57,10 @@ async def get_execution_route(idea_id: str = Query("test", alias="ideaId"), plan
 
 
 @router.get("/status")
-async def get_execution_status(idea_id: str = Query(..., alias="ideaId"), plan_id: str = Query(..., alias="planId")):
+async def get_execution_status(request: Request, idea_id: str = Query(..., alias="ideaId"), plan_id: str = Query(..., alias="planId")):
     """Task Agent Execution 阶段当前状态。WebSocket 重连时前端用于同步。"""
-    runner = api_state.runner
+    _, session = await api_state.require_session(request)
+    runner = session.runner
     if not runner.idea_id or runner.idea_id != idea_id or not runner.plan_id or runner.plan_id != plan_id:
         return {"running": False, "tasks": [], "stats": get_stats()}
     task_states = [{"task_id": t["task_id"], "status": t["status"]} for t in (runner.chain_cache or [])]
@@ -51,11 +72,11 @@ async def get_execution_status(idea_id: str = Query(..., alias="ideaId"), plan_i
 
 
 @router.post("/run")
-async def run_execution(body: ExecutionRunRequest | None = Body(default=None)):
+async def run_execution(request: Request, body: ExecutionRunRequest | None = Body(default=None)):
     """启动 Task Agent Execution 阶段。立即返回；错误由 WebSocket task-error 推送。
     resumeFromTaskId：仅重置该任务及下游，从该任务恢复执行。"""
-    runner = api_state.runner
-    sio = api_state.sio
+    session_id, session = await api_state.require_session(request)
+    runner = session.runner
 
     # P0: Idempotency - reject if already running
     if runner.is_running:
@@ -82,33 +103,28 @@ async def run_execution(body: ExecutionRunRequest | None = Body(default=None)):
 
     config = await get_effective_config()
     resume_from_task_id = body.resume_from_task_id if body else None
-
-    async def run():
-        try:
-            await runner.start_execution(
-                api_config=config,
-                resume_from_task_id=resume_from_task_id,
-            )
-        except Exception as e:
-            logger.exception("Error in execution: {}", e)
-            await sio.emit("task-error", {"error": str(e)})
-
-    asyncio.create_task(run())
-    return {"success": True, "message": "Task Agent Execution started"}
+    _start_execution_background(
+        session_id,
+        runner,
+        config,
+        resume_from_task_id=resume_from_task_id,
+    )
+    return {"success": True, "message": "Task Agent Execution started", "sessionId": session_id}
 
 
 @router.post("/stop")
-async def stop_execution():
+async def stop_execution(request: Request):
     """停止 Task Agent Execution 阶段：发送中止信号，取消任务，释放 worker。"""
-    await api_state.runner.stop_async()
+    _, session = await api_state.require_session(request)
+    await session.runner.stop_async()
     return {"success": True}
 
 
 @router.post("/retry-task")
-async def retry_task(body: ExecutionRetryRequest):
+async def retry_task(request: Request, body: ExecutionRetryRequest):
     """Task Agent Execution 阶段：重试单个失败任务。运行中则原地重试；否则从该任务恢复执行。"""
-    runner = api_state.runner
-    sio = api_state.sio
+    session_id, session = await api_state.require_session(request)
+    runner = session.runner
     task_id = body.task_id
 
     if task_id not in (t.get("task_id") for t in (runner.chain_cache or [])):
@@ -133,16 +149,10 @@ async def retry_task(body: ExecutionRetryRequest):
         if plan_id and runner.plan_id and runner.plan_id != plan_id:
             return JSONResponse(status_code=409, content={"error": "planId mismatch"})
         config = await get_effective_config()
-
-        async def run():
-            try:
-                await runner.start_execution(
-                    api_config=config,
-                    resume_from_task_id=task_id,
-                )
-            except Exception as e:
-                logger.exception("Error in execution: {}", e)
-                await sio.emit("task-error", {"error": str(e)})
-
-        asyncio.create_task(run())
-        return {"success": True, "message": "Execution started from task"}
+        _start_execution_background(
+            session_id,
+            runner,
+            config,
+            resume_from_task_id=task_id,
+        )
+        return {"success": True, "message": "Execution started from task", "sessionId": session_id}

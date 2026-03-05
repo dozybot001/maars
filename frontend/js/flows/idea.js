@@ -46,16 +46,8 @@
 
     async function runRefine() {
         const idea = (ideaInput?.value || '').trim();
-        let socket = window.MAARS?.state?.socket;
-        if (!socket || !socket.connected) {
-            window.MAARS.ws?.init();
-            await new Promise(resolve => setTimeout(resolve, 500));
-            socket = window.MAARS?.state?.socket;
-            if (!socket || !socket.connected) {
-                alert('WebSocket not connected. Please wait and try again.');
-                return;
-            }
-        }
+        const socket = await window.MAARS.ws?.requireConnected?.();
+        if (!socket) return;
         try {
             isRefining = true;
             refineIdeaBtn.disabled = true;

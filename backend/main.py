@@ -14,8 +14,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from api import PlanRunState, IdeaRunState, PaperRunState, register_routes
-from task_agent import ExecutionRunner
+from api import register_routes
+from api import state as api_state
 
 # Socket.io
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
@@ -36,21 +36,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Plan Agent run state (abort event, run task, lock)
-plan_run_state = PlanRunState()
-plan_run_state.lock = asyncio.Lock()
-
-# Idea Agent run state
-idea_run_state = IdeaRunState()
-
-# Paper Agent run state
-paper_run_state = PaperRunState()
-
-# Task Agent Execution 阶段 runner
-runner = ExecutionRunner(sio)
-
 # Register API routes (Idea, Plan, Task, Paper, ...)
-register_routes(app, sio, runner, plan_run_state, idea_run_state, paper_run_state)
+register_routes(app, sio)
 
 
 # Disable cache for static files (dev: always fetch latest)
@@ -94,11 +81,20 @@ if FRONTEND_DIR.exists():
 # Socket.io events
 @sio.event
 async def connect(sid, environ, auth):
-    logger.info("Client connected: %s", sid)
+    try:
+        session_id = api_state.resolve_socket_session_id(auth)
+    except ValueError as e:
+        logger.warning("Socket auth rejected sid=%s error=%s", sid, e)
+        raise ConnectionRefusedError(str(e))
+    api_state.bind_socket_to_session(sid, session_id)
+    await sio.enter_room(sid, session_id)
+    await api_state.get_or_create_session_state(session_id)
+    logger.info("Client connected: %s session=%s", sid, session_id)
 
 
 @sio.event
-def disconnect(sid):
+async def disconnect(sid):
+    await api_state.unbind_socket(sid)
     logger.info("Client disconnected: %s", sid)
 
 

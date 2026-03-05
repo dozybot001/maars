@@ -51,7 +51,7 @@ Settings → AI Config 中切换。Paper Agent 的 Agent 模式待开发。
 
 ## 配置
 
-**Alt+Shift+S** 打开 Settings：
+**Alt+Shift+S** (Win/Linux) 或 **Cmd+Shift+S** (Mac) 打开 Settings：
 
 - **Theme** — 主题
 - **AI Config** — Agent 模式、Idea RAG、Self-Reflection、API Preset
