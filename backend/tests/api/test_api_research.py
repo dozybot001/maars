@@ -68,3 +68,27 @@ def test_run_research_pipeline_mock(client, session_headers, use_mock_agents):
     assert 'execution' in final
     assert 'outputs' in final
     assert 'paper' in final
+
+
+def test_stop_and_retry_research_pipeline(client, session_headers, use_mock_agents):
+    c = client.post('/api/research', headers=session_headers, json={'prompt': 'Stop/retry prompt'})
+    assert c.status_code == 200
+    rid = c.json()['researchId']
+
+    run = client.post(f'/api/research/{rid}/run', headers=session_headers, json={'format': 'markdown'})
+    assert run.status_code in (200, 409)
+
+    stop = client.post(f'/api/research/{rid}/stop', headers=session_headers)
+    assert stop.status_code == 200
+    stop_payload = stop.json() or {}
+    assert stop_payload.get('success') is True
+
+    # Retry should be accepted (may finish fast in mock mode).
+    retry = client.post(f'/api/research/{rid}/retry', headers=session_headers, json={'format': 'markdown'})
+    assert retry.status_code in (200, 409)
+
+    # Ensure research can still be fetched and is well-formed.
+    g = client.get(f'/api/research/{rid}', headers=session_headers)
+    assert g.status_code == 200
+    data = g.json()
+    assert (data.get('research') or {}).get('researchId') == rid

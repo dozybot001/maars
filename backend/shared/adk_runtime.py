@@ -5,6 +5,7 @@ Centralizes runner lifecycle, event loop, abort handling, and finish payload par
 
 import asyncio
 import json
+import time
 import uuid
 from typing import Any, Callable, Dict, Optional
 
@@ -13,6 +14,8 @@ from google.adk import Agent, Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 from loguru import logger
+
+from shared.constants import ADK_IDLE_TIMEOUT_SECONDS
 
 ToolCallHook = Callable[[str, Dict[str, Any], int], Any]
 ToolResponseHook = Callable[[str, Any, int], Any]
@@ -63,6 +66,7 @@ async def run_adk_agent_loop(
     on_text: Optional[TextHook] = None,
     user_id: str = "maars_user",
     session_id: Optional[str] = None,
+    idle_timeout_seconds: Optional[int] = None,
 ) -> int:
     """
     Run one ADK agent session and invoke hooks for tool calls/responses and model text.
@@ -86,20 +90,57 @@ async def run_adk_agent_loop(
     )
     effective_session_id = session_id or str(uuid.uuid4())
     turn_count = 0
+    event_count = 0
+    idle_timeout = max(5, int(idle_timeout_seconds or ADK_IDLE_TIMEOUT_SECONDS))
+    started_at = time.monotonic()
 
     async def _run() -> None:
-        nonlocal turn_count
+        nonlocal turn_count, event_count
         try:
-            async for event in runner.run_async(
+            event_iter = runner.run_async(
                 user_id=user_id,
                 session_id=effective_session_id,
                 new_message=new_message,
-            ):
+            ).__aiter__()
+
+            while True:
+                try:
+                    event = await asyncio.wait_for(anext(event_iter), timeout=idle_timeout)
+                except StopAsyncIteration:
+                    logger.info(
+                        "ADK loop finished agent={} turns={} events={} elapsed_ms={}",
+                        agent_name,
+                        turn_count,
+                        event_count,
+                        int((time.monotonic() - started_at) * 1000),
+                    )
+                    break
+                except asyncio.TimeoutError as e:
+                    logger.warning(
+                        "ADK loop idle timeout agent={} turns={} events={} idle_timeout_s={} elapsed_ms={}",
+                        agent_name,
+                        turn_count,
+                        event_count,
+                        idle_timeout,
+                        int((time.monotonic() - started_at) * 1000),
+                    )
+                    raise TimeoutError(
+                        f"{agent_name} idle for more than {idle_timeout} seconds while waiting for the next ADK event"
+                    ) from e
+
                 if abort_event and abort_event.is_set():
                     raise asyncio.CancelledError(abort_message)
 
+                event_count += 1
                 turn_count += 1
                 if turn_count > max_turns:
+                    logger.warning(
+                        "ADK loop reached max turns agent={} max_turns={} events={} elapsed_ms={}",
+                        agent_name,
+                        max_turns,
+                        event_count,
+                        int((time.monotonic() - started_at) * 1000),
+                    )
                     break
 
                 if not event.content or not event.content.parts:
@@ -114,6 +155,13 @@ async def run_adk_agent_loop(
                     for call in calls:
                         name = getattr(call, "name", None) or ""
                         args = getattr(call, "args", None) or {}
+                        logger.info(
+                            "ADK tool call agent={} turn={} tool={} args_preview={}",
+                            agent_name,
+                            turn_count,
+                            name,
+                            build_tool_args_preview(args),
+                        )
                         if on_tool_call:
                             await _maybe_await(on_tool_call(name, args, turn_count))
                     continue
@@ -122,6 +170,16 @@ async def run_adk_agent_loop(
                     for response in responses:
                         name = getattr(response, "name", None) or ""
                         payload = getattr(response, "response", None)
+                        payload_preview = str(payload)
+                        if len(payload_preview) > 220:
+                            payload_preview = payload_preview[:220] + "..."
+                        logger.info(
+                            "ADK tool response agent={} turn={} tool={} payload_preview={}",
+                            agent_name,
+                            turn_count,
+                            name,
+                            payload_preview,
+                        )
                         if on_tool_response:
                             await _maybe_await(on_tool_response(name, payload, turn_count))
                     continue
@@ -130,6 +188,13 @@ async def run_adk_agent_loop(
                     for part in event.content.parts:
                         text = getattr(part, "text", None) or ""
                         if text:
+                            preview = text if len(text) <= 220 else text[:220] + "..."
+                            logger.info(
+                                "ADK text agent={} turn={} text_preview={}",
+                                agent_name,
+                                turn_count,
+                                preview,
+                            )
                             await _maybe_await(on_text(text, turn_count))
         finally:
             try:

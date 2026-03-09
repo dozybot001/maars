@@ -7,6 +7,7 @@ Task Agent 含两阶段：Execution（执行原子任务）→ Validation（验�
 import asyncio
 import os
 import random
+import time
 from typing import Any, Dict, List, Optional, Set
 
 from loguru import logger
@@ -210,9 +211,12 @@ class ExecutionRunner:
     async def _execute_tasks(self) -> None:
         initial_ready = self._get_ready_tasks()
         logger.info(
-            "Found {} initial ready tasks out of {} total tasks",
+            "Execution start idea_id={} plan_id={} initial_ready={} total_tasks={} ready_ids={}",
+            self.idea_id,
+            self.plan_id,
             len(initial_ready),
             len(self.chain_cache),
+            [t.get("task_id") for t in initial_ready],
         )
 
         for task in initial_ready:
@@ -225,7 +229,21 @@ class ExecutionRunner:
             self.task_tasks[task["task_id"]] = asyncio.create_task(run_with_error_handling())
 
         # Event-driven: wait for completion (task completion triggers _schedule_ready_tasks)
+        last_heartbeat = time.monotonic()
         while self.is_running and (len(self.completed_tasks) < len(self.chain_cache) or len(self.running_tasks) > 0):
+            now = time.monotonic()
+            if now - last_heartbeat >= 5:
+                logger.info(
+                    "Execution heartbeat idea_id={} plan_id={} completed={} running={} pending={} running_ids={} pending_ids={}",
+                    self.idea_id,
+                    self.plan_id,
+                    len(self.completed_tasks),
+                    len(self.running_tasks),
+                    len(self.pending_tasks),
+                    sorted(self.running_tasks),
+                    sorted(list(self.pending_tasks))[:12],
+                )
+                last_heartbeat = now
             await asyncio.sleep(0.1)
 
         logger.info(
@@ -241,6 +259,15 @@ class ExecutionRunner:
     async def _execute_task(self, task: Dict) -> None:
         if not self.is_running:
             return
+        logger.info(
+            "Task start task_id={} deps={} status={} running={} completed={} pending={}",
+            task.get("task_id"),
+            task.get("dependencies") or [],
+            task.get("status") or "undone",
+            len(self.running_tasks),
+            len(self.completed_tasks),
+            len(self.pending_tasks),
+        )
         slot_id = None
         retry_count = 0
         while self.is_running and slot_id is None and retry_count < 50:
@@ -250,12 +277,13 @@ class ExecutionRunner:
                 await asyncio.sleep(min(0.1 + retry_count * 0.02, 0.5))
                 retry_count += 1
                 if retry_count % 5 == 0:
+                    logger.info("Task waiting for worker task_id={} retries={} running_ids={}", task["task_id"], retry_count, sorted(self.running_tasks))
                     self._broadcast_worker_states()
             else:
                 break
 
         if slot_id is None:
-            logger.warning("Failed to acquire slot for task %s after %d retries", task["task_id"], retry_count)
+            logger.warning("Failed to acquire slot for task {} after {} retries", task["task_id"], retry_count)
             self.completed_tasks.add(task["task_id"])
             self.running_tasks.discard(task["task_id"])
             self.pending_tasks.discard(task["task_id"])
@@ -265,6 +293,7 @@ class ExecutionRunner:
             return
 
         self.running_tasks.add(task["task_id"])
+        logger.info("Task acquired worker task_id={} slot_id={}", task["task_id"], slot_id)
         self._update_task_status(task["task_id"], "doing")
         self._broadcast_worker_states()
 
@@ -275,6 +304,12 @@ class ExecutionRunner:
                 raise ValueError(f"Task {task['task_id']} has no output spec")
             try:
                 resolved_inputs = await resolve_artifacts(task, self.task_map, self.idea_id or "", self.plan_id or "")
+                logger.info(
+                    "Task resolved inputs task_id={} input_keys={} output_keys={}",
+                    task["task_id"],
+                    sorted(list((resolved_inputs or {}).keys())) if isinstance(resolved_inputs, dict) else type(resolved_inputs).__name__,
+                    sorted(list((output_spec or {}).keys())),
+                )
 
                 async def _on_thinking(chunk: str, task_id: Optional[str] = None, operation: Optional[str] = None, schedule_info: Optional[dict] = None) -> None:
                     payload: dict = {"chunk": chunk, "source": "task", "taskId": task_id, "operation": operation or "Execute"}
@@ -317,23 +352,31 @@ class ExecutionRunner:
                 self._emit("task-output", {"taskId": task["task_id"], "output": result})
                 execution_passed = True
             except Exception as exec_err:
-                logger.warning("LLM execution failed for task %s: %s", task["task_id"], exec_err)
+                logger.exception("LLM execution failed for task {}", task["task_id"])
                 execution_passed = False
 
             if not execution_passed:
                 self._update_task_status(task["task_id"], "execution-failed")
                 failure_count = self.task_failure_count.get(task["task_id"], 0)
                 self.task_failure_count[task["task_id"]] = failure_count + 1
+                logger.warning(
+                    "Task execution failed task_id={} attempt={}/{}",
+                    task["task_id"],
+                    failure_count + 1,
+                    self.MAX_FAILURES,
+                )
                 async with self._worker_lock:
                     worker_manager["release_worker_by_task_id"](task["task_id"])
                 self._broadcast_worker_states()
                 await asyncio.sleep(1.0)
                 if failure_count < self.MAX_FAILURES - 1:
+                    logger.info("Task retry scheduled task_id={} next_attempt={}", task["task_id"], failure_count + 2)
                     self.running_tasks.discard(task["task_id"])
                     self.completed_tasks.discard(task["task_id"])
                     await self._execute_task(task)
                     return
                 else:
+                    logger.warning("Task rollback after repeated execution failure task_id={}", task["task_id"])
                     self.running_tasks.discard(task["task_id"])
                     self.completed_tasks.discard(task["task_id"])
                     await self._rollback_task(task)
@@ -384,6 +427,12 @@ class ExecutionRunner:
                 )
 
             await asyncio.sleep(0.1)
+            logger.info(
+                "Task validation result task_id={} passed={} report_chars={}",
+                task_id,
+                validation_passed,
+                len(report or ""),
+            )
 
             if validation_passed:
                 await self._reflect_on_task(task, result, _on_thinking)
@@ -394,16 +443,24 @@ class ExecutionRunner:
                 self._update_task_status(task["task_id"], "validation-failed")
                 failure_count = self.task_failure_count.get(task["task_id"], 0)
                 self.task_failure_count[task["task_id"]] = failure_count + 1
+                logger.warning(
+                    "Task validation failed task_id={} attempt={}/{}",
+                    task_id,
+                    failure_count + 1,
+                    self.MAX_FAILURES,
+                )
                 await asyncio.sleep(1.0)
                 async with self._worker_lock:
                     worker_manager["release_worker_by_task_id"](task["task_id"])
                 self._broadcast_worker_states()
                 if failure_count < self.MAX_FAILURES - 1:
+                    logger.info("Task retry after validation failure task_id={} next_attempt={}", task_id, failure_count + 2)
                     self.running_tasks.discard(task["task_id"])
                     self.completed_tasks.discard(task["task_id"])
                     await self._execute_task(task)
                     return
                 else:
+                    logger.warning("Task rollback after repeated validation failure task_id={}", task_id)
                     self.running_tasks.discard(task["task_id"])
                     self.completed_tasks.discard(task["task_id"])
                     await self._rollback_task(task)
@@ -420,6 +477,7 @@ class ExecutionRunner:
         self.pending_tasks.discard(task["task_id"])
         self._update_task_status(task["task_id"], "done")
         self.task_failure_count.pop(task["task_id"], None)
+        logger.info("Task complete task_id={} completed={} remaining_pending={}", task["task_id"], len(self.completed_tasks), len(self.pending_tasks))
 
         dependents = self.reverse_dependency_index.get(task["task_id"], [])
         candidates = set(dependents)
@@ -432,6 +490,9 @@ class ExecutionRunner:
                 pt = self.task_map.get(task_id)
                 if pt and self._are_dependencies_satisfied(pt):
                     candidates.add(task_id)
+
+        if candidates:
+            logger.info("Task schedule next ready candidates={}", sorted(candidates))
 
         self._schedule_ready_tasks([self.task_map[id] for id in candidates if self.task_map.get(id)])
 
@@ -596,6 +657,7 @@ class ExecutionRunner:
                 status = full.get("status") or t.get("status") or "undone"
                 self.chain_cache.append({
                     "task_id": tid,
+                    "title": full.get("title") or t.get("title"),
                     "dependencies": t.get("dependencies") or [],
                     "status": status,
                     "description": full.get("description") or t.get("description"),

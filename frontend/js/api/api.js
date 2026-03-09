@@ -203,6 +203,26 @@
         return data;
     }
 
+    async function stopResearch(researchId) {
+        const res = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/research/${encodeURIComponent(researchId)}/stop`, {
+            method: 'POST',
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || data.detail || 'Failed to stop research');
+        return data;
+    }
+
+    async function retryResearch(researchId) {
+        const res = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/research/${encodeURIComponent(researchId)}/retry`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ format: 'markdown' }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || data.detail || 'Failed to retry research');
+        return data;
+    }
+
     window.MAARS.api = {
         loadExampleIdea,
         loadExecution,
@@ -217,5 +237,7 @@
         listResearches,
         getResearch,
         runResearch,
+        stopResearch,
+        retryResearch,
     };
 })();

@@ -91,22 +91,28 @@
 
     function getCurrentIdeaId() {
         try {
-            return localStorage.getItem(IDEA_ID_KEY) || 'test';
-        } catch (_) { return 'test'; }
+            return localStorage.getItem(IDEA_ID_KEY) || '';
+        } catch (_) { return ''; }
     }
 
     function getCurrentPlanId() {
         try {
-            return localStorage.getItem(PLAN_ID_KEY) || 'test';
-        } catch (_) { return 'test'; }
+            return localStorage.getItem(PLAN_ID_KEY) || '';
+        } catch (_) { return ''; }
     }
 
     function setCurrentIdeaId(id) {
-        try { localStorage.setItem(IDEA_ID_KEY, id); } catch (_) {}
+        try {
+            if (!id) localStorage.removeItem(IDEA_ID_KEY);
+            else localStorage.setItem(IDEA_ID_KEY, id);
+        } catch (_) {}
     }
 
     function setCurrentPlanId(id) {
-        try { localStorage.setItem(PLAN_ID_KEY, id); } catch (_) {}
+        try {
+            if (!id) localStorage.removeItem(PLAN_ID_KEY);
+            else localStorage.setItem(PLAN_ID_KEY, id);
+        } catch (_) {}
     }
 
     function getCurrentResearchId() {
@@ -126,32 +132,34 @@
         const storedIdea = getCurrentIdeaId();
         const storedPlan = getCurrentPlanId();
         if (storedPlan && storedPlan.startsWith('plan_')) return storedPlan;
+        if (getCurrentResearchId()) return storedPlan || '';
         try {
             const res = await fetchWithSession(`${API_BASE_URL}/plans`);
             const data = await res.json();
             const items = data.items || [];
             if (items.length > 0) {
                 const first = items[0];
-                setCurrentIdeaId(first.ideaId || 'test');
-                setCurrentPlanId(first.planId || 'test');
-                return first.planId || 'test';
+                setCurrentIdeaId(first.ideaId || '');
+                setCurrentPlanId(first.planId || '');
+                return first.planId || '';
             }
         } catch (_) {}
-        return storedPlan || 'test';
+        return storedPlan || '';
     }
 
     async function resolvePlanIds() {
         const storedIdea = getCurrentIdeaId();
         const storedPlan = getCurrentPlanId();
         if (storedPlan && storedPlan.startsWith('plan_')) return { ideaId: storedIdea, planId: storedPlan };
+        if (getCurrentResearchId()) return { ideaId: storedIdea, planId: storedPlan };
         try {
             const res = await fetchWithSession(`${API_BASE_URL}/plans`);
             const data = await res.json();
             const items = data.items || [];
             if (items.length > 0) {
                 const first = items[0];
-                const ideaId = first.ideaId || 'test';
-                const planId = first.planId || 'test';
+                const ideaId = first.ideaId || '';
+                const planId = first.planId || '';
                 setCurrentIdeaId(ideaId);
                 setCurrentPlanId(planId);
                 return { ideaId, planId };

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MAARS · Research Detail</title>
+    <title>Research · Detail</title>
     <script>
         (function() {
             document.documentElement.setAttribute('data-theme', 'black');
@@ -29,13 +29,6 @@
     </aside>
 
     <div class="container">
-        <header class="page-header">
-            <div class="header-title">
-                <h1>MAARS</h1>
-                <p class="subtitle">Multi-Agent Automated Research System</p>
-            </div>
-        </header>
-
         <div id="settingsModal" class="modal">
             <div class="modal-content modal-content--settings">
                 <div id="settingsForm" class="settings-form">
@@ -232,15 +225,34 @@
                 <div class="research-topbar">
                     <div class="research-breadcrumb" id="researchBreadcrumb">Research</div>
                     <h2 class="research-title" id="researchTitle">Research</h2>
-                    <nav class="research-stage-progress" aria-label="Research stages">
-                        <button type="button" class="research-stage-btn" id="stageBtnRefine" data-stage="refine" aria-disabled="true" disabled>Refine</button>
-                        <button type="button" class="research-stage-btn" id="stageBtnPlan" data-stage="plan" aria-disabled="true" disabled>Plan</button>
-                        <button type="button" class="research-stage-btn" id="stageBtnExecute" data-stage="execute" aria-disabled="true" disabled>Execute</button>
-                        <button type="button" class="research-stage-btn" id="stageBtnPaper" data-stage="paper" aria-disabled="true" disabled>Paper</button>
-                    </nav>
+                    <div class="research-stage-row">
+                        <nav class="research-stage-progress" aria-label="Research pipeline stages">
+                            <button type="button" class="research-stage-btn" id="stageBtnRefine" data-stage="refine" aria-disabled="true" disabled>Refine</button>
+                            <button type="button" class="research-stage-btn" id="stageBtnPlan" data-stage="plan" aria-disabled="true" disabled>Plan</button>
+                            <button type="button" class="research-stage-btn" id="stageBtnExecute" data-stage="execute" aria-disabled="true" disabled>Execute</button>
+                            <button type="button" class="research-stage-btn" id="stageBtnPaper" data-stage="paper" aria-disabled="true" disabled>Paper</button>
+                        </nav>
+                        <div class="research-runtime-actions" aria-label="Research controls">
+                            <button type="button" class="btn-danger" id="researchPauseBtn">Pause</button>
+                            <button type="button" class="btn-default" id="researchRetryBtn">Retry</button>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="plan-agent-thinking-tree-row" id="researchDetailHost">
+                <div class="research-stage-panel" id="researchPanelRefine" data-stage-panel="refine" aria-label="Refine stage">
+                    <div class="research-stage-panel-inner">
+                        <div class="research-stage-card">
+                            <div class="research-stage-card-header">Refine Result</div>
+                            <div class="research-stage-card-body markdown-body" id="researchRefineLogic">—</div>
+                        </div>
+                        <details class="research-appendix" id="researchRefineAppendix">
+                            <summary class="research-appendix-summary">Appendix · References</summary>
+                            <div class="research-appendix-body markdown-body" id="researchRefineReferences">—</div>
+                        </details>
+                    </div>
+                </div>
+
+                <div class="plan-agent-thinking-tree-row research-stage-panel" id="researchDetailHost" data-stage-panel="workbench" aria-label="Plan and Execute workbench">
                     <div class="plan-agent-tree-area" data-tree-area="plan">
                         <div class="tree-view-tabs">
                             <button type="button" class="tree-view-tab active" data-view="decomposition" aria-pressed="true">Decomposition</button>
@@ -266,9 +278,24 @@
                             </div>
                         </div>
                     </div>
+                    <div class="research-execute-splitter" id="researchExecuteSplitter" role="separator" aria-orientation="vertical" aria-label="Resize execution layout"></div>
                     <div class="plan-agent-thinking-area" id="planAgentThinkingArea">
                         <div class="plan-agent-thinking-content markdown-body" id="planAgentThinkingContent"></div>
                         <div class="plan-agent-thinking-placeholder" id="planAgentThinkingPlaceholder">Thinking shows reasoning; Output shows final artifacts.</div>
+
+                        <div class="research-execute-stream" id="researchExecuteStream" hidden>
+                            <div class="research-execute-stream-header">Execution Stream</div>
+                            <div class="research-execute-stream-body" id="researchExecuteStreamBody">—</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="research-stage-panel" id="researchPanelPaper" data-stage-panel="paper" aria-label="Paper stage">
+                    <div class="research-stage-panel-inner">
+                        <div class="research-stage-card research-stage-card--fill">
+                            <div class="research-stage-card-header">Paper</div>
+                            <div class="research-stage-card-body markdown-body" id="researchPaperBody">—</div>
+                        </div>
                     </div>
                 </div>
             </section>

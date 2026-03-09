@@ -39,6 +39,9 @@
                     let data = null;
                     try { data = e?.data ? JSON.parse(e.data) : null; } catch (_) { data = null; }
                     const source = (data && data.source) || sourceFromEvent(eventName);
+                    try {
+                        document.dispatchEvent(new CustomEvent(`maars:${eventName}`, { detail: data || {} }));
+                    } catch (_) {}
                     thinking.appendChunk(
                         (data && data.chunk) || '',
                         data && data.taskId,

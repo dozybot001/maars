@@ -3,7 +3,7 @@
 This module intentionally stores JSON blobs (idea/plan/execution/artifacts) as TEXT.
 It is designed to replace the previous file-based DB implementation.
 
-Settings remain file-based in db/settings.json.
+Settings are SQLite-backed via `settings` table.
 """
 
 from __future__ import annotations
@@ -165,6 +165,15 @@ async def init_sqlite() -> None:
                 """
             )
             await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS settings (
+                    settings_key TEXT PRIMARY KEY,
+                    data TEXT NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+                """
+            )
+            await db.execute(
                 "CREATE INDEX IF NOT EXISTS idx_plans_updated ON plans(updated_at DESC)"
             )
             await db.execute(
@@ -194,6 +203,27 @@ async def _db() -> AsyncIterator[aiosqlite.Connection]:
 
 
 # --- idea ---
+
+
+async def get_settings(settings_key: str = "global") -> dict:
+    async with _db() as db:
+        async with db.execute("SELECT data FROM settings WHERE settings_key = ?", (settings_key,)) as cur:
+            row = await cur.fetchone()
+        if not row:
+            return {}
+        return _json_loads(row["data"]) or {}
+
+
+async def save_settings(data: dict, settings_key: str = "global") -> dict:
+    payload = _json_dumps(data or {})
+    async with _db() as db:
+        await db.execute(
+            "INSERT INTO settings(settings_key, data, updated_at) VALUES(?,?,?) "
+            "ON CONFLICT(settings_key) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at",
+            (settings_key, payload, _now()),
+        )
+        await db.commit()
+    return {"success": True}
 
 
 async def get_idea(idea_id: str) -> dict | None:

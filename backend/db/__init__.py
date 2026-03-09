@@ -1,7 +1,6 @@
 """Database Module.
 
-Storage is SQLite-backed (see `db/sqlite_backend.py`). Settings remain file-based
-in `db/settings.json` for now.
+Storage is SQLite-backed (see `db/sqlite_backend.py`), including settings.
 """
 
 import asyncio
@@ -9,7 +8,6 @@ import re
 import shutil
 from pathlib import Path
 
-import aiofiles
 import orjson
 from loguru import logger
 
@@ -19,6 +17,7 @@ DB_DIR = Path(__file__).parent
 DEFAULT_IDEA_ID = "test"
 DEFAULT_PLAN_ID = "test"
 SETTINGS_FILE = "settings.json"
+_SETTINGS_KEY = "global"
 
 
 def _validate_idea_id(idea_id: str) -> None:
@@ -230,17 +229,22 @@ def _resolve_config(raw: dict) -> dict:
 
 
 async def get_settings() -> dict:
-    """Get full settings from db/settings.json. For frontend and other modules."""
-    file_path = DB_DIR / SETTINGS_FILE
+    """Get full settings from SQLite. One-time legacy import from settings.json if needed."""
+    settings = await sqlite_backend.get_settings(_SETTINGS_KEY)
+    if settings:
+        return settings
+
+    legacy_file = DB_DIR / SETTINGS_FILE
+    if not legacy_file.exists():
+        return {}
     try:
-        async with aiofiles.open(file_path, "rb") as f:
-            data = await f.read()
-            return orjson.loads(data)
-    except FileNotFoundError:
-        return {}
-    except orjson.JSONDecodeError as e:
-        logger.warning("Invalid JSON in %s: %s", file_path, e)
-        return {}
+        data = orjson.loads(legacy_file.read_bytes())
+        if isinstance(data, dict) and data:
+            await sqlite_backend.save_settings(data, _SETTINGS_KEY)
+            return data
+    except Exception as e:
+        logger.warning("Failed legacy settings import from %s: %s", legacy_file, e)
+    return {}
 
 
 async def get_effective_config() -> dict:
@@ -250,14 +254,8 @@ async def get_effective_config() -> dict:
 
 
 async def save_settings(settings: dict) -> dict:
-    """Save settings to db/settings.json. Atomic write to avoid corruption."""
-    file_path = DB_DIR / SETTINGS_FILE
-    tmp_path = file_path.with_suffix(file_path.suffix + ".tmp")
-    content = orjson.dumps(settings or {}, option=orjson.OPT_INDENT_2).decode("utf-8")
-    async with aiofiles.open(tmp_path, "w", encoding="utf-8") as f:
-        await f.write(content)
-    tmp_path.replace(file_path)
-    return {"success": True}
+    """Save settings to SQLite."""
+    return await sqlite_backend.save_settings(settings or {}, _SETTINGS_KEY)
 
 
 async def get_plan(idea_id: str, plan_id: str):
@@ -318,7 +316,7 @@ async def save_ai_response(idea_id: str, plan_id: str, response_type: str, key: 
 
 
 async def clear_db() -> dict:
-    """Clear DB: remove all idea folders (and their plans). Keeps settings.json."""
+    """Clear DB runtime artifacts (ideas/plans/execution/research/papers). Keeps settings."""
     removed = []
     # Clear sqlite data first
     await sqlite_backend.clear_all_data()
