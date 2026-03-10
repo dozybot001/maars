@@ -195,7 +195,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "RunSkillScript",
-            "description": "Execute a script from a skill. Use for docx/pptx/xlsx validation, conversion, etc. Script runs from skill dir. Use {{sandbox}}/filename in args for sandbox file paths (e.g. {{sandbox}}/output.docx).",
+            "description": "Execute a script from a skill. Use for docx/pptx/xlsx validation, conversion, etc. Script runs from skill dir. Use [[sandbox]]/filename in args for sandbox file paths (e.g. [[sandbox]]/output.docx).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -210,7 +210,7 @@ TOOLS = [
                     "args": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Command-line args. Use {{sandbox}}/file.docx for sandbox file paths.",
+                        "description": "Command-line args. Use [[sandbox]]/file.docx for sandbox file paths.",
                     },
                 },
                 "required": ["skill", "script"],
@@ -381,7 +381,7 @@ async def run_run_skill_script(
     execution_run_id: str = "",
     docker_container_name: str = "",
 ) -> str:
-    """Execute RunSkillScript. Runs script from skill dir. {{sandbox}} in args replaced with sandbox path."""
+    """Execute RunSkillScript. Runs script from skill dir. [[sandbox]] or {{sandbox}} in args are replaced with sandbox path."""
     try:
         skill_dir, err = _get_skill_dir(skill)
         if err:
@@ -403,7 +403,7 @@ async def run_run_skill_script(
         sandbox_dir = _get_task_root_dir(idea_id, plan_id, task_id, execution_run_id)
         sandbox_str = str(sandbox_dir.resolve())
         resolved_args = [
-            a.replace("{{sandbox}}", sandbox_str) if isinstance(a, str) else str(a)
+            (a.replace("[[sandbox]]", sandbox_str).replace("{{sandbox}}", sandbox_str) if isinstance(a, str) else str(a))
             for a in (args or [])
         ]
 

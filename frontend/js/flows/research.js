@@ -559,61 +559,171 @@
             return;
         }
 
-        messages.forEach((message) => {
-            const taskId = String(message.taskId || '').trim();
-            const wrap = document.createElement('div');
-            wrap.className = `research-execute-message research-execute-message--${message.kind || 'assistant'}`;
+        // Group messages by task
+        const taskMessages = new Map();
+        messages.forEach((msg) => {
+            const taskId = msg.taskId || 'system';
+            if (!taskMessages.has(taskId)) {
+                taskMessages.set(taskId, []);
+            }
+            taskMessages.get(taskId).push(msg);
+        });
 
-            const meta = document.createElement('div');
-            meta.className = 'research-execute-message-meta';
+        // Render each task as a collapsible card
+        executeState.order.forEach((taskId) => {
+            if (!taskMessages.has(taskId)) return;
+            const msgs = taskMessages.get(taskId);
+            const meta = _getTaskMetaById(taskId) || {};
+            const status = executeState.statuses.get(taskId) || meta.status || 'undone';
+            const statusTone = _statusTone(status);
 
-            if (taskId) {
-                const taskEl = document.createElement('span');
-                taskEl.className = 'research-execute-message-task';
-                taskEl.textContent = taskId;
-                meta.appendChild(taskEl);
+            // Task card container
+            const cardEl = document.createElement('div');
+            cardEl.className = `research-execute-task-card research-execute-task-card--${statusTone}`;
+            cardEl.setAttribute('data-task-id', taskId);
+
+            // Task header (clickable for expand/collapse)
+            const headerEl = document.createElement('div');
+            headerEl.className = 'research-execute-task-header';
+
+            // Expand/Collapse toggle
+            const toggleEl = document.createElement('button');
+            toggleEl.className = 'research-execute-task-toggle';
+            toggleEl.innerHTML = '▶';
+            toggleEl.setAttribute('aria-label', 'Toggle task details');
+            toggleEl.type = 'button';
+            headerEl.appendChild(toggleEl);
+
+            // Status indicator
+            const dotEl = document.createElement('span');
+            dotEl.className = `research-execute-status-dot is-${statusTone}`;
+            headerEl.appendChild(dotEl);
+
+            // Task title and description (main content)
+            const titleWrapEl = document.createElement('div');
+            titleWrapEl.style.flex = '1 1 auto';
+            titleWrapEl.style.minWidth = '0';
+            titleWrapEl.style.display = 'flex';
+            titleWrapEl.style.flexDirection = 'column';
+            titleWrapEl.style.gap = '4px';
+            
+            const titleEl = document.createElement('div');
+            titleEl.className = 'research-execute-task-title';
+            titleEl.textContent = meta.title || taskId;
+            titleWrapEl.appendChild(titleEl);
+
+            // Current operation (thinking message)
+            const thinkingMsg = msgs.find((m) => m.kind === 'assistant' && m.title?.includes(taskId));
+            if (thinkingMsg) {
+                const opEl = document.createElement('div');
+                opEl.className = 'research-execute-task-operation';
+                const opText = String(thinkingMsg.title || '').split('·').slice(1).join('·').trim();
+                opEl.textContent = opText ? `— ${opText}` : '';
+                titleWrapEl.appendChild(opEl);
             }
 
-            const kindEl = document.createElement('span');
-            kindEl.className = 'research-execute-message-kind';
-            kindEl.textContent = message.kind === 'output'
-                ? 'Output'
-                : message.kind === 'error'
-                    ? 'Error'
-                    : message.kind === 'system'
-                        ? 'System'
-                        : 'Step';
-            meta.appendChild(kindEl);
+            headerEl.appendChild(titleWrapEl);
 
-            wrap.appendChild(meta);
+            // Status label
+            const labelEl = document.createElement('span');
+            labelEl.className = 'research-execute-task-status-label';
+            labelEl.textContent = _statusLabel(status);
+            headerEl.appendChild(labelEl);
+
+            cardEl.appendChild(headerEl);
+
+            // Task details (collapsible)
+            const detailsEl = document.createElement('div');
+            detailsEl.className = 'research-execute-task-details';
+            let isExpanded = false;
+
+            const contentEl = document.createElement('div');
+            contentEl.className = 'research-execute-task-content';
+
+            // Add all messages for this task
+            msgs.forEach((msg) => {
+                const msgEl = document.createElement('div');
+                msgEl.className = `research-execute-message research-execute-message--${msg.kind || 'assistant'}`;
+
+                const metaEl = document.createElement('div');
+                metaEl.className = 'research-execute-message-meta';
+                if (msg.kind && msg.kind !== 'system') {
+                    const kindEl = document.createElement('span');
+                    kindEl.className = 'research-execute-message-kind';
+                    kindEl.textContent = msg.kind === 'output'
+                        ? 'Output'
+                        : msg.kind === 'error'
+                            ? 'Error'
+                            : msg.kind === 'system'
+                                ? 'System'
+                                : 'Think';
+                    metaEl.appendChild(kindEl);
+                }
+                msgEl.appendChild(metaEl);
+
+                const bubbleEl = document.createElement('div');
+                bubbleEl.className = 'research-execute-message-bubble';
+
+                if (msg.title) {
+                    const titleEl = document.createElement('div');
+                    titleEl.className = 'research-execute-message-title';
+                    titleEl.textContent = msg.title;
+                    bubbleEl.appendChild(titleEl);
+                }
+
+                const bodyEl = document.createElement('div');
+                bodyEl.className = 'research-execute-message-body';
+                const bodyText = String(msg.body || '').trim() || '—';
+                bodyEl.textContent = bodyText.length > 6000 ? bodyText.slice(-6000) : bodyText;
+                bubbleEl.appendChild(bodyEl);
+
+                msgEl.appendChild(bubbleEl);
+                contentEl.appendChild(msgEl);
+            });
+
+            detailsEl.appendChild(contentEl);
+            cardEl.appendChild(detailsEl);
+
+            // Toggle handler
+            toggleEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                isExpanded = !isExpanded;
+                toggleEl.style.transform = isExpanded ? 'rotate(90deg)' : 'rotate(0deg)';
+                detailsEl.style.display = isExpanded ? 'block' : 'none';
+            });
+
+            // Initially collapsed
+            detailsEl.style.display = 'none';
+            headerEl.addEventListener('click', () => {
+                isExpanded = !isExpanded;
+                toggleEl.style.transform = isExpanded ? 'rotate(90deg)' : 'rotate(0deg)';
+                detailsEl.style.display = isExpanded ? 'block' : 'none';
+            });
+
+            executeStreamBodyEl.appendChild(cardEl);
+        });
+
+        // Render system messages
+        const systemMsgs = messages.filter((m) => !m.taskId || m.kind === 'system');
+        systemMsgs.forEach((msg) => {
+            const wrap = document.createElement('div');
+            wrap.className = `research-execute-message research-execute-message--${msg.kind || 'system'}`;
 
             const bubble = document.createElement('div');
             bubble.className = 'research-execute-message-bubble';
 
-            if (message.title) {
+            if (msg.title) {
                 const titleEl = document.createElement('div');
                 titleEl.className = 'research-execute-message-title';
-                titleEl.textContent = message.title;
+                titleEl.textContent = msg.title;
                 bubble.appendChild(titleEl);
             }
 
             const bodyEl = document.createElement('div');
             bodyEl.className = 'research-execute-message-body';
-            const bodyText = String(message.body || '').trim() || '—';
+            const bodyText = String(msg.body || '').trim() || '—';
             bodyEl.textContent = bodyText.length > 6000 ? bodyText.slice(-6000) : bodyText;
             bubble.appendChild(bodyEl);
-
-            if (message.status) {
-                const statusEl = document.createElement('div');
-                statusEl.className = 'research-execute-message-status';
-                const dot = document.createElement('span');
-                dot.className = `research-execute-status-dot is-${_statusTone(message.status)}`;
-                const label = document.createElement('span');
-                label.textContent = _statusLabel(message.status);
-                statusEl.appendChild(dot);
-                statusEl.appendChild(label);
-                bubble.appendChild(statusEl);
-            }
 
             wrap.appendChild(bubble);
             executeStreamBodyEl.appendChild(wrap);
@@ -1045,6 +1155,34 @@
             }
         });
 
+        document.addEventListener('maars:task-started', (e) => {
+            const d = e?.detail || {};
+            const taskId = String(d.taskId || d.task_id || '').trim();
+            if (!taskId) return;
+
+            _ensureTaskInOrder(taskId);
+            _upsertTaskMeta({
+                task_id: taskId,
+                title: String(d.title || d.description || taskId).trim() || taskId,
+                description: String(d.description || '').trim() || '',
+                status: 'doing',
+            });
+            
+            const meta = _getTaskMetaById(taskId) || {};
+            _appendExecuteMessage({
+                taskId,
+                kind: 'system',
+                title: `${taskId} started`,
+                body: meta.description || 'Task execution started',
+                status: 'doing',
+                dedupeKey: `started:${taskId}`,
+            });
+
+            if (activeStage === 'execute') {
+                renderExecuteStream();
+            }
+        });
+
         document.addEventListener('maars:task-output', (e) => {
             const d = e?.detail || {};
             const taskId = String(d.taskId || d.task_id || '').trim();
@@ -1060,6 +1198,35 @@
                 body: outputText,
                 status: executeState.statuses.get(taskId) || meta.status || '',
             });
+            if (activeStage === 'execute') {
+                renderExecuteStream();
+            }
+        });
+
+        document.addEventListener('maars:task-completed', (e) => {
+            const d = e?.detail || {};
+            const taskId = String(d.taskId || d.task_id || '').trim();
+            if (!taskId) return;
+
+            executeState.statuses.set(taskId, 'done');
+            const meta = _getTaskMetaById(taskId) || {};
+            const validated = !!d.validated;
+            const report = String(d.validationReport || '').trim();
+
+            let body = 'Task completed successfully.';
+            if (validated && report) {
+                body = report.length > 500 ? `${report.slice(0, 500)}...` : report;
+            }
+
+            _appendExecuteMessage({
+                taskId,
+                kind: 'system',
+                title: `${taskId} ${validated ? 'validated' : 'completed'}`,
+                body,
+                status: 'done',
+                dedupeKey: `completed:${taskId}`,
+            });
+
             if (activeStage === 'execute') {
                 renderExecuteStream();
             }

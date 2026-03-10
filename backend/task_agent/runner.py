@@ -338,6 +338,16 @@ class ExecutionRunner:
         self._update_task_status(task["task_id"], "doing")
         self._broadcast_worker_states()
 
+        # Emit task-started event with task details
+        self._emit("task-started", {
+            "taskId": task["task_id"],
+            "title": task.get("description", task["task_id"]),
+            "description": task.get("description", ""),
+            "dependencies": task.get("dependencies") or [],
+            "inputKeys": list((task.get("input") or {}).keys()),
+            "outputKeys": list((task.get("output") or {}).keys()),
+        })
+
         try:
             input_spec = task.get("input") or {}
             output_spec = task.get("output") or {}
@@ -482,6 +492,14 @@ class ExecutionRunner:
                 async with self._worker_lock:
                     worker_manager["release_worker_by_task_id"](task["task_id"])
                 self._broadcast_worker_states()
+                
+                # Emit task-completed event with validation result
+                self._emit("task-completed", {
+                    "taskId": task["task_id"],
+                    "validated": True,
+                    "validationReport": report[:500] if report else "",  # Truncate long reports
+                    "status": "done",
+                })
             else:
                 self._update_task_status(task["task_id"], "validation-failed")
                 failure_count = self.task_failure_count.get(task["task_id"], 0)

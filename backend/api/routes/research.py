@@ -111,6 +111,26 @@ async def get_research_route(research_id: str, request: Request):
     }
 
 
+@router.delete("/{research_id}")
+async def delete_research_route(research_id: str, request: Request):
+    await api_state.require_session(request)
+    research = await get_research(research_id)
+    if not research:
+        return JSONResponse(status_code=404, content={"error": "Research not found"})
+
+    # stop in-memory runner if this research is running in current process
+    for (sid, rid), entry in list(_RUNNING.items()):
+        if rid != research_id:
+            continue
+        task = entry.get("task")
+        if task and not task.done():
+            task.cancel()
+        _RUNNING.pop((sid, rid), None)
+
+    await delete_research_cascade(research_id)
+    return {"success": True, "researchId": research_id}
+
+
 def _next_stage(stage: str) -> str | None:
     order = ["refine", "plan", "execute", "paper"]
     s = _normalize_stage(stage)

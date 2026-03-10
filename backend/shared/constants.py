@@ -30,7 +30,7 @@ TEMP_DETERMINISTIC = 0.0
 # SearchArxiv, EvaluatePapers, FilterPapers, AnalyzePapers, RefineIdea, ValidateRefinedIdea, FinishIdea)
 IDEA_AGENT_MAX_TURNS = 50
 PLAN_AGENT_MAX_TURNS = 30
-TASK_AGENT_MAX_TURNS = 15
+TASK_AGENT_MAX_TURNS = 30
 ADK_IDLE_TIMEOUT_SECONDS = int(os.getenv("MAARS_ADK_IDLE_TIMEOUT_SECONDS", "45"))
 
 # ── Plan LLM 并发 / 重试 ────────────────────────────────────────

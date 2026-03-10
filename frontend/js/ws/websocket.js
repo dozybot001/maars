@@ -97,6 +97,12 @@
         onJsonEvent('task-error', (data) => {
             document.dispatchEvent(new CustomEvent('maars:task-error', { detail: data || {} }));
         });
+        onJsonEvent('task-started', (data) => {
+            document.dispatchEvent(new CustomEvent('maars:task-started', { detail: data || {} }));
+        });
+        onJsonEvent('task-completed', (data) => {
+            document.dispatchEvent(new CustomEvent('maars:task-completed', { detail: data || {} }));
+        });
         onJsonEvent('task-complete', (data) => {
             if (data?.completed != null && data?.total != null) {
                 console.log(`Execution complete: ${data.completed}/${data.total} tasks completed`);

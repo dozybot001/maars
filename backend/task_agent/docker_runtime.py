@@ -17,6 +17,15 @@ DOCKER_COMMAND_TIMEOUT = int(os.getenv("MAARS_DOCKER_COMMAND_TIMEOUT", "120"))
 _DOCKER_KEEPALIVE_CMD = "trap : TERM INT; while sleep 3600; do :; done"
 
 
+def _bootstrap_keepalive_cmd(*, plan_mount: str, run_mount: str) -> str:
+    return (
+        f"mkdir -p {shlex.quote(run_mount)} && "
+        f"ln -sfn {shlex.quote(run_mount)} /workdir && "
+        f"ln -sfn {shlex.quote(plan_mount)} /plan && "
+        f"{_DOCKER_KEEPALIVE_CMD}"
+    )
+
+
 def _docker_bin() -> str:
     return shutil.which("docker") or ""
 
@@ -103,6 +112,12 @@ async def ensure_execution_container(
     if not docker:
         raise RuntimeError("Docker CLI not found in PATH")
 
+    run_dir = run_dir.resolve()
+    plan_dir = plan_dir.resolve()
+    skills_dir = skills_dir.resolve()
+    run_dir.mkdir(parents=True, exist_ok=True)
+    plan_dir.mkdir(parents=True, exist_ok=True)
+
     image_name = (image or DEFAULT_DOCKER_IMAGE).strip() or DEFAULT_DOCKER_IMAGE
     container_name = build_container_name(execution_run_id)
 
@@ -133,6 +148,10 @@ async def ensure_execution_container(
             "planDir": str(plan_dir),
         }
 
+    db_root_dir = plan_dir.parent.parent.resolve()
+    plan_mount_path = f"/dbroot/{plan_dir.relative_to(db_root_dir).as_posix()}"
+    run_mount_path = f"/dbroot/{run_dir.relative_to(db_root_dir).as_posix()}"
+
     run_cmd = [
         docker,
         "run",
@@ -142,15 +161,15 @@ async def ensure_execution_container(
         "--workdir",
         "/workdir",
         "--mount",
-        f"type=bind,src={run_dir},dst=/workdir",
-        "--mount",
-        f"type=bind,src={plan_dir},dst=/plan,readonly",
+        f"type=bind,src={db_root_dir},dst=/dbroot",
         "--mount",
         f"type=bind,src={skills_dir},dst=/skills,readonly",
+        "--mount",
+        "type=tmpfs,dst=/tmp",
         image_name,
         "sh",
         "-lc",
-        _DOCKER_KEEPALIVE_CMD,
+        _bootstrap_keepalive_cmd(plan_mount=plan_mount_path, run_mount=run_mount_path),
     ]
     created = await _run_docker_cmd(run_cmd, timeout=40)
     if not created["ok"]:
@@ -208,7 +227,7 @@ async def run_skill_script_in_container(
     script_path = f"/skills/{skill}/{script_rel_path.lstrip('/')}"
     workspace_dir = f"/workdir/{task_id}/workspace"
     resolved_args = [
-        str(a).replace("{{sandbox}}", workspace_dir)
+        str(a).replace("[[sandbox]]", workspace_dir).replace("{{sandbox}}", workspace_dir)
         for a in (args or [])
     ]
     if ext == ".py":
