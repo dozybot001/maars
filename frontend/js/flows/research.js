@@ -115,6 +115,18 @@
         renderStageButtons();
     }
 
+    function _isStagePrerequisiteCompleted(stage) {
+        const order = ['refine', 'plan', 'execute', 'paper'];
+        const idx = order.indexOf(String(stage || '').trim());
+        if (idx <= 0) return true;
+        for (let i = 0; i < idx; i += 1) {
+            const prev = order[i];
+            const prevStatus = String(stageStatusDetails?.[prev]?.status || 'idle').trim() || 'idle';
+            if (prevStatus !== 'completed') return false;
+        }
+        return true;
+    }
+
     function renderStageButtons(activeStage) {
         const order = ['refine', 'plan', 'execute', 'paper'];
         const current = String(activeStage || '').trim() || String(window.MAARS?.researchCurrentStage || '') || 'refine';
@@ -150,9 +162,10 @@
             const isRunningSelf = status === 'running';
             const hasOtherRunning = !!runningStage && runningStage !== stage;
             const blocked = hasOtherRunning;
-            if (actions?.run) actions.run.disabled = blocked;
-            if (actions?.resume) actions.resume.disabled = blocked || !(status === 'stopped' || status === 'failed');
-            if (actions?.retry) actions.retry.disabled = blocked || !(stageStarted || status === 'failed' || status === 'stopped');
+            const prereqOk = _isStagePrerequisiteCompleted(stage);
+            if (actions?.run) actions.run.disabled = blocked || !prereqOk;
+            if (actions?.resume) actions.resume.disabled = blocked || !prereqOk || !(status === 'stopped' || status === 'failed');
+            if (actions?.retry) actions.retry.disabled = blocked || !prereqOk || !(stageStarted || status === 'failed' || status === 'stopped');
             if (actions?.stop) actions.stop.disabled = blocked || !isRunningSelf;
         });
     }
@@ -460,21 +473,21 @@
         let title = `${id} · ${op}`;
         if (toolName) title += ` · ${toolName}`;
 
-        const dedupeKey = `thinking:${id}:${op}`;
-        const idx = executeState.messages.findIndex((m) => m?.dedupeKey === dedupeKey);
         const bodyText = Number.isFinite(turn) && Number.isFinite(maxTurns)
             ? `[${turn}/${maxTurns}] ${text}`
             : text;
 
-        if (idx >= 0) {
-            const prev = executeState.messages[idx] || {};
-            executeState.messages[idx] = {
-                ...prev,
-                at: Date.now(),
-                title,
-                body: bodyText,
-                status: executeState.statuses.get(id) || prev.status || 'doing',
-            };
+        const last = executeState.messages[executeState.messages.length - 1];
+        if (
+            last
+            && last.taskId === id
+            && last.kind === 'assistant'
+            && String(last.title || '') === title
+            && String(last.body || '') === bodyText
+        ) {
+            const nextRepeat = Number(last.repeatCount || 1) + 1;
+            last.repeatCount = nextRepeat;
+            last.at = Date.now();
             return;
         }
 
@@ -484,7 +497,7 @@
             title,
             body: bodyText,
             status: executeState.statuses.get(id) || 'doing',
-            dedupeKey,
+            repeatCount: 1,
         });
     }
 
@@ -637,7 +650,7 @@
                 titleWrapEl.appendChild(titleEl);
 
                 // Current operation (thinking message)
-                const thinkingMsg = msgs.find((m) => m.kind === 'assistant' && m.title?.includes(taskId));
+                const thinkingMsg = [...msgs].reverse().find((m) => m.kind === 'assistant' && m.title?.includes(taskId));
                 if (thinkingMsg) {
                     const opEl = document.createElement('div');
                     opEl.className = 'research-execute-task-operation';
@@ -691,7 +704,8 @@
                     if (msg.title) {
                         const titleEl = document.createElement('div');
                         titleEl.className = 'research-execute-message-title';
-                        titleEl.textContent = msg.title;
+                        const repeatCount = Number(msg.repeatCount || 1);
+                        titleEl.textContent = repeatCount > 1 ? `${msg.title} ×${repeatCount}` : msg.title;
                         bubbleEl.appendChild(titleEl);
                     }
 
@@ -1018,6 +1032,11 @@
             if (!btn) return;
             btn.addEventListener('click', async () => {
                 if (!researchId) return;
+                if (action !== 'stop' && !_isStagePrerequisiteCompleted(stage)) {
+                    alert(`Cannot start ${stage} stage before previous stage is completed.`);
+                    renderStageStatusDetails();
+                    return;
+                }
                 btn.disabled = true;
                 try {
                     await handler();
@@ -1141,17 +1160,8 @@
                 const nextStatus = String(t.status || '');
                 const prevStatus = executeState.statuses.get(id) || '';
                 executeState.statuses.set(id, nextStatus);
-                if (nextStatus && nextStatus !== prevStatus) {
-                    const meta = _getTaskMetaById(id) || {};
-                    _appendExecuteMessage({
-                        taskId: id,
-                        kind: nextStatus === 'execution-failed' || nextStatus === 'validation-failed' ? 'error' : 'assistant',
-                        title: meta.title || id,
-                        body: meta.description || `${id} status changed.`,
-                        status: nextStatus,
-                        dedupeKey: `status:${id}:${nextStatus}`,
-                    });
-                }
+                // Only update status map, don't add duplicate description messages
+                // Task descriptions are shown in task-started event, status changes are shown in status labels
             });
             if (activeStage === 'execute') {
                 renderExecuteStream();

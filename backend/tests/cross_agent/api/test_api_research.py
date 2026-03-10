@@ -92,3 +92,28 @@ def test_stop_and_retry_research_pipeline(client, session_headers, use_mock_agen
     assert g.status_code == 200
     data = g.json()
     assert (data.get('research') or {}).get('researchId') == rid
+
+
+def test_stage_run_blocks_when_predecessor_not_completed(client, session_headers):
+    c = client.post('/api/research', headers=session_headers, json={'prompt': 'Prerequisite gating prompt'})
+    assert c.status_code == 200
+    rid = c.json()['researchId']
+
+    # Fresh research is at refine/idle; execute must be blocked.
+    run_execute = client.post(
+        f'/api/research/{rid}/stage/execute/run',
+        headers=session_headers,
+        json={'format': 'markdown'},
+    )
+    assert run_execute.status_code == 400
+    err = (run_execute.json() or {}).get('error', '')
+    assert 'Cannot start' in err
+    assert 'plan' in err
+
+    # Paper must also be blocked while execute is not completed.
+    run_paper = client.post(
+        f'/api/research/{rid}/stage/paper/run',
+        headers=session_headers,
+        json={'format': 'markdown'},
+    )
+    assert run_paper.status_code == 400

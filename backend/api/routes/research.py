@@ -56,6 +56,34 @@ def _normalize_stage(stage: str) -> str:
     return s if s in ("refine", "plan", "execute", "paper") else "refine"
 
 
+def _completed_rank(research: dict | None) -> int:
+    r = research or {}
+    stage = _normalize_stage(str(r.get("stage") or "refine"))
+    status = str(r.get("stageStatus") or "idle").strip().lower()
+    rank = _stage_rank(stage)
+    if status == "completed":
+        return rank
+    return rank - 1
+
+
+def _check_stage_prerequisites(research: dict | None, target_stage: str) -> str | None:
+    """Return error message if target stage cannot start because predecessors are not completed."""
+    stage = _normalize_stage(target_stage)
+    target_rank = _stage_rank(stage)
+    if target_rank <= 0:
+        return None
+
+    completed = _completed_rank(research)
+    required = target_rank - 1
+    if completed < required:
+        order = ["refine", "plan", "execute", "paper"]
+        need_stage = order[required]
+        cur_stage = _normalize_stage(str((research or {}).get("stage") or "refine"))
+        cur_status = str((research or {}).get("stageStatus") or "idle").strip().lower() or "idle"
+        return f"Cannot start '{stage}' before '{need_stage}' is completed (current: {cur_stage} · {cur_status})."
+    return None
+
+
 def _make_research_id() -> str:
     return f"research_{int(time.time() * 1000)}"
 
@@ -438,6 +466,9 @@ async def run_research_stage_route(research_id: str, stage: str, body: ResearchR
     research = await get_research(research_id)
     if not research:
         return JSONResponse(status_code=404, content={"error": "Research not found"})
+    prereq_err = _check_stage_prerequisites(research, stage)
+    if prereq_err:
+        return JSONResponse(status_code=400, content={"error": prereq_err})
     if _is_session_busy(session_id):
         return JSONResponse(status_code=409, content={"error": "Another research pipeline is already running in this session"})
     paper_format = (body.format or "markdown").lower().strip()
@@ -461,6 +492,9 @@ async def resume_research_stage_route(research_id: str, stage: str, body: Resear
     research = await get_research(research_id)
     if not research:
         return JSONResponse(status_code=404, content={"error": "Research not found"})
+    prereq_err = _check_stage_prerequisites(research, stage)
+    if prereq_err:
+        return JSONResponse(status_code=400, content={"error": prereq_err})
     if _is_session_busy(session_id):
         return JSONResponse(status_code=409, content={"error": "Another research pipeline is already running in this session"})
     paper_format = (body.format or "markdown").lower().strip()
@@ -484,6 +518,9 @@ async def retry_research_stage_route(research_id: str, stage: str, body: Researc
     research = await get_research(research_id)
     if not research:
         return JSONResponse(status_code=404, content={"error": "Research not found"})
+    prereq_err = _check_stage_prerequisites(research, stage)
+    if prereq_err:
+        return JSONResponse(status_code=400, content={"error": prereq_err})
     if _is_session_busy(session_id):
         return JSONResponse(status_code=409, content={"error": "Another research pipeline is already running in this session"})
     paper_format = (body.format or "markdown").lower().strip()
