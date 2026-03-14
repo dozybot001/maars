@@ -425,7 +425,8 @@
     color: var(--text-secondary);
 }
 
-.settings-field input {
+.settings-field input,
+.settings-field select {
     padding: 10px 12px;
     font-size: 13px;
     border: 1px solid var(--border-color);
@@ -435,7 +436,8 @@
     transition: border-color 0.18s, box-shadow 0.18s;
 }
 
-.settings-field input:focus {
+.settings-field input:focus,
+.settings-field select:focus {
     outline: none;
     border-color: var(--accent-primary-border);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary-border) 18%, transparent);
@@ -505,6 +507,10 @@
     margin-top: 12px;
     padding-top: 12px;
     border-top: 1px solid var(--border-color);
+}
+
+.settings-literature-source-row {
+    margin-top: 12px;
 }
 
 /* Self-Reflection controls */

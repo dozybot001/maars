@@ -10,8 +10,9 @@ from typing import Any, Callable, Dict, Optional
 import orjson
 import json_repair
 
-from shared.constants import TEMP_TASK_EXECUTE
+from shared.constants import MAX_FORMAT_REPAIR_ATTEMPTS, TEMP_RETRY, TEMP_TASK_EXECUTE
 from shared.llm_client import chat_completion, merge_phase_config
+from shared.structured_output import generate_with_repair
 from test.mock_stream import mock_chat_completion
 
 TASK_DIR = Path(__file__).resolve().parent.parent
@@ -45,14 +46,10 @@ def _load_mock_response(response_type: str, task_id: str, use_json_mode: bool) -
     return {"content": content_str, "reasoning": entry.get("reasoning", "")}
 
 
-async def _run_mock_execute(
-    task_id: str,
-    output_format: str,
-    on_thinking: Optional[Callable] = None,
-) -> Any:
+async def _run_mock_execute(task_id: str, output_format: str, on_thinking: Optional[Callable] = None) -> Any:
     """Mock 执行：从 execute.json 加载，使用 mock_chat_completion 流式输出。供 executor 与 agent 共用。"""
-    use_json_mode = _is_json_format(output_format)
-    mock = _load_mock_response(RESPONSE_TYPE, task_id, use_json_mode)
+    mode = _get_output_mode(output_format)
+    mock = _load_mock_response(RESPONSE_TYPE, task_id, mode == "json")
     if not mock:
         raise ValueError(f"No mock data for {RESPONSE_TYPE}/{task_id}")
     stream = on_thinking is not None
@@ -68,7 +65,7 @@ async def _run_mock_execute(
         effective_on_thinking,
         stream=stream,
     )
-    return _parse_task_agent_output(content or "", use_json_mode)
+    return _parse_task_agent_output(content or "", output_format)
 
 
 def _is_json_format(output_format: str) -> bool:
@@ -76,6 +73,40 @@ def _is_json_format(output_format: str) -> bool:
         return False
     fmt = output_format.strip().upper()
     return fmt.startswith("JSON") or "JSON" in fmt
+
+
+def _is_markdown_format(output_format: str) -> bool:
+    fmt = (output_format or "").strip().lower()
+    return "markdown" in fmt or fmt in {"md", "text", "plain text", "plain-text"}
+
+
+def _requires_structured_payload(output_format: str) -> bool:
+    fmt = (output_format or "").strip().lower()
+    structured_tokens = (
+        "array",
+        "object",
+        "dict",
+        "dictionary",
+        "table",
+        "csv",
+        "list",
+        "matrix",
+        "tensor",
+        "time-series",
+        "timeseries",
+        "time series",
+    )
+    return any(token in fmt for token in structured_tokens)
+
+
+def _get_output_mode(output_format: str) -> str:
+    if _is_json_format(output_format):
+        return "json"
+    if _is_markdown_format(output_format):
+        return "markdown"
+    if _requires_structured_payload(output_format):
+        return "structured"
+    return "markdown"
 
 
 def _build_task_agent_messages(
@@ -99,6 +130,9 @@ Rules:
 3. You may reason first (1-3 sentences); this will be shown as your thinking process.
 4. For JSON: output reasoning first, then the JSON in a ```json``` code block.
 5. For Markdown: output reasoning first, then a blank line, then the document content."""
+
+    if _requires_structured_payload(output_format) and not _is_json_format(output_format):
+        system_prompt += "\n6. For array/object/table/time-series outputs, return a structured JSON payload that points to the generated artifact and includes key metadata; do not return a prose-only summary."
 
     inputs_str = "No input artifacts."
     if resolved_inputs:
@@ -132,12 +166,13 @@ Produce the output now. You may reason first; then output the result."""
     return messages, output_format
 
 
-def _parse_task_agent_output(content: str, use_json_mode: bool) -> Any:
+def _parse_task_agent_output(content: str, output_format: str) -> Any:
     """Parse Task Agent output (content) to final result. 支持 reasoning + 结果的格式。"""
     content = (content or "").strip()
     if not content:
         raise ValueError("LLM returned empty response")
-    if use_json_mode:
+    mode = _get_output_mode(output_format)
+    if mode in ("json", "structured"):
         cleaned = content
         m = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned)
         if m:
@@ -148,9 +183,15 @@ def _parse_task_agent_output(content: str, use_json_mode: bool) -> Any:
             if obj_match:
                 cleaned = obj_match.group(0)
         try:
-            return json_repair.loads(cleaned)
+            parsed = json_repair.loads(cleaned)
         except Exception as e:
             raise ValueError(f"Failed to parse JSON from LLM response: {e}") from e
+        if mode == "structured":
+            if isinstance(parsed, str):
+                raise ValueError("Structured output must be JSON object/array, not a prose string")
+            if isinstance(parsed, dict) and set(parsed.keys()) == {"content"} and isinstance(parsed.get("content"), str):
+                raise ValueError("Structured output must not be a prose-only content wrapper")
+        return parsed
     # Markdown: 若前面有 reasoning（短于 300 字），取第一个 \n\n 之后的内容作为文档
     if "\n\n" in content and len(content.split("\n\n", 1)[0]) < 300:
         return content.split("\n\n", 1)[1].strip()
@@ -186,7 +227,7 @@ async def execute_task(
     messages, output_format = _build_task_agent_messages(
         task_id, description, input_spec, output_spec, resolved_inputs, idea_context
     )
-    use_json_mode = _is_json_format(output_format)
+    output_mode = _get_output_mode(output_format)
     # 不使用 response_format，以便 LLM 先输出 reasoning 再输出结果（Thinking 显示推理）
     response_format = None
     stream = on_thinking is not None
@@ -195,14 +236,27 @@ async def execute_task(
         if on_thinking and chunk:
             return on_thinking(chunk, task_id=task_id, operation="Execute")
 
-    raw = await chat_completion(
-        messages,
-        cfg,
-        on_chunk=_on_chunk if stream else None,
-        abort_event=abort_event,
-        stream=stream,
-        temperature=TEMP_TASK_EXECUTE,
-        response_format=response_format,
-    )
-    content = raw if isinstance(raw, str) else (raw.get("content") or "")
-    return _parse_task_agent_output(content, use_json_mode)
+    async def _model_call(message_list: list[dict], temperature: float) -> str:
+        raw = await chat_completion(
+            message_list,
+            cfg,
+            on_chunk=_on_chunk if stream else None,
+            abort_event=abort_event,
+            stream=stream,
+            temperature=temperature,
+            response_format=response_format,
+        )
+        return raw if isinstance(raw, str) else (raw.get("content") or "")
+
+    if output_mode in ("json", "structured"):
+        temperatures = [TEMP_TASK_EXECUTE] + [TEMP_RETRY] * max(0, MAX_FORMAT_REPAIR_ATTEMPTS - 1)
+        parsed, _raw = await generate_with_repair(
+            base_messages=messages,
+            model_call=_model_call,
+            parse_fn=lambda text: _parse_task_agent_output(text, output_format),
+            temperatures=temperatures,
+        )
+        return parsed
+
+    content = await _model_call(messages, TEMP_TASK_EXECUTE)
+    return _parse_task_agent_output(content, output_format)

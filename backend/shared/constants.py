@@ -29,7 +29,7 @@ TEMP_DETERMINISTIC = 0.0
 # Idea agent workflow 需要 20-30+ events (ListSkills, LoadSkill*N, ExtractKeywords, 
 # SearchArxiv, EvaluatePapers, FilterPapers, AnalyzePapers, RefineIdea, ValidateRefinedIdea, FinishIdea)
 IDEA_AGENT_MAX_TURNS = 50
-PLAN_AGENT_MAX_TURNS = 30
+PLAN_AGENT_MAX_TURNS = 100
 TASK_AGENT_MAX_TURNS = 100
 ADK_IDLE_TIMEOUT_SECONDS = int(os.getenv("MAARS_ADK_IDLE_TIMEOUT_SECONDS", "45"))
 ADK_TOOL_WAIT_TIMEOUT_SECONDS = int(os.getenv("MAARS_ADK_TOOL_WAIT_TIMEOUT_SECONDS", "900"))
@@ -42,6 +42,9 @@ PLAN_MAX_VALIDATION_RETRIES = 2
 
 # ── Execution Runner ─────────────────────────────────────────────
 MAX_FAILURES = 3
+MAX_EXECUTION_FAILURES = 3
+MAX_VALIDATION_FAILURES = 3
+MAX_FORMAT_REPAIR_ATTEMPTS = 5
 MAX_EXECUTION_CONCURRENCY = 7
 
 # ── Mock 模式概率 ────────────────────────────────────────────────

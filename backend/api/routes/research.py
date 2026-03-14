@@ -31,6 +31,7 @@ from db import (
     update_research_stage,
 )
 from plan_agent.execution_builder import build_execution_from_plan
+from shared.idea_utils import get_idea_text
 from visualization import build_layout_from_execution
 
 from .. import state as api_state
@@ -67,21 +68,93 @@ def _completed_rank(research: dict | None) -> int:
     return rank - 1
 
 
-def _check_stage_prerequisites(research: dict | None, target_stage: str) -> str | None:
-    """Return error message if target stage cannot start because predecessors are not completed."""
+async def _validate_refine_completion(idea_id: str | None) -> tuple[bool, str | None]:
+    idea = str(idea_id or "").strip()
+    if not idea:
+        return False, "refine has no idea artifact"
+    idea_data = await get_idea(idea)
+    if not idea_data:
+        return False, "refine idea artifact is missing"
+    if not get_idea_text(idea_data.get("refined_idea")):
+        return False, "refine produced no refined idea"
+    return True, None
+
+
+async def _validate_plan_completion(idea_id: str | None, plan_id: str | None) -> tuple[bool, str | None]:
+    idea = str(idea_id or "").strip()
+    plan = str(plan_id or "").strip()
+    if not idea or not plan:
+        return False, "plan has no plan artifact"
+    plan_data = await get_plan(idea, plan)
+    if not plan_data or not (plan_data.get("tasks") or []):
+        return False, "plan artifact is missing or empty"
+    execution = build_execution_from_plan(plan_data)
+    if not (execution.get("tasks") or []):
+        return False, "plan produced no executable atomic tasks"
+    return True, None
+
+
+async def _validate_execute_completion(idea_id: str | None, plan_id: str | None) -> tuple[bool, str | None]:
+    idea = str(idea_id or "").strip()
+    plan = str(plan_id or "").strip()
+    if not idea or not plan:
+        return False, "execute has no execution artifact"
+    execution = await get_execution(idea, plan)
+    execution_tasks = (execution or {}).get("tasks") or []
+    if not execution_tasks:
+        return False, "execution artifact is missing or empty"
+    outputs = await list_plan_outputs(idea, plan)
+    missing = [t.get("task_id") for t in execution_tasks if t.get("task_id") and t.get("task_id") not in outputs]
+    if missing:
+        return False, f"execution is missing persisted outputs for {len(missing)} task(s)"
+    return True, None
+
+
+async def _validate_paper_completion(idea_id: str | None, plan_id: str | None) -> tuple[bool, str | None]:
+    idea = str(idea_id or "").strip()
+    plan = str(plan_id or "").strip()
+    if not idea or not plan:
+        return False, "paper has no paper artifact"
+    paper = await get_paper(idea, plan)
+    if not paper or not str(paper.get("content") or "").strip():
+        return False, "paper artifact is missing or empty"
+    return True, None
+
+
+async def _validate_stage_completion(research: dict | None, stage: str) -> tuple[bool, str | None]:
+    r = research or {}
+    idea_id = r.get("currentIdeaId")
+    plan_id = r.get("currentPlanId")
+    s = _normalize_stage(stage)
+    if s == "refine":
+        return await _validate_refine_completion(idea_id)
+    if s == "plan":
+        return await _validate_plan_completion(idea_id, plan_id)
+    if s == "execute":
+        return await _validate_execute_completion(idea_id, plan_id)
+    if s == "paper":
+        return await _validate_paper_completion(idea_id, plan_id)
+    return False, f"unknown stage '{s}'"
+
+
+async def _check_stage_prerequisites(research: dict | None, target_stage: str) -> str | None:
+    """Return error message if target stage cannot start because predecessors are not truly completed."""
     stage = _normalize_stage(target_stage)
+    order = ["refine", "plan", "execute", "paper"]
     target_rank = _stage_rank(stage)
     if target_rank <= 0:
         return None
 
-    completed = _completed_rank(research)
-    required = target_rank - 1
-    if completed < required:
-        order = ["refine", "plan", "execute", "paper"]
-        need_stage = order[required]
-        cur_stage = _normalize_stage(str((research or {}).get("stage") or "refine"))
-        cur_status = str((research or {}).get("stageStatus") or "idle").strip().lower() or "idle"
-        return f"Cannot start '{stage}' before '{need_stage}' is completed (current: {cur_stage} · {cur_status})."
+    current_stage = _normalize_stage(str((research or {}).get("stage") or "refine"))
+    current_status = str((research or {}).get("stageStatus") or "idle").strip().lower() or "idle"
+    for need_stage in order[:target_rank]:
+        valid, reason = await _validate_stage_completion(research, need_stage)
+        if not valid:
+            detail = f": {reason}" if reason else ""
+            return (
+                f"Cannot start '{stage}' before '{need_stage}' is completed "
+                f"(current: {current_stage} · {current_status}{detail})."
+            )
     return None
 
 
@@ -232,6 +305,9 @@ async def _run_stage_refine(session_id: str, session, research_id: str, prompt: 
         limit=10,
         abort_event=session.idea_run_state.abort_event,
     )
+    refine_ok, refine_err = await _validate_refine_completion(idea_id)
+    if not refine_ok:
+        raise ValueError(f"Refine finished without required artifacts: {refine_err}")
     await update_research_stage(research_id, stage="refine", stage_status="completed", current_idea_id=idea_id)
     await _emit_stage(session_id, research_id, "refine", "completed")
     return idea_id, None
@@ -241,18 +317,19 @@ async def _run_stage_plan(session_id: str, session, research_id: str, idea_id: s
     await _emit_stage(session_id, research_id, "plan", "running")
     await update_research_stage(research_id, stage="plan", stage_status="running", current_plan_id=plan_id, error=None)
     await _run_plan_inner(PlanRunRequest(skip_quality_assessment=False), idea_id, plan_id, session_id, session.plan_run_state)
-    plan = await get_plan(idea_id, plan_id)
-    if not plan or not plan.get("tasks"):
-        raise ValueError("Plan not found or empty after planning")
+    plan_ok, plan_err = await _validate_plan_completion(idea_id, plan_id)
+    if not plan_ok:
+        raise ValueError(f"Plan finished without required artifacts: {plan_err}")
     await update_research_stage(research_id, stage="plan", stage_status="completed", current_plan_id=plan_id)
     await _emit_stage(session_id, research_id, "plan", "completed")
     return plan_id
 
 
 async def _run_stage_execute(session_id: str, session, research_id: str, idea_id: str, plan_id: str) -> None:
+    plan_ok, plan_err = await _validate_plan_completion(idea_id, plan_id)
+    if not plan_ok:
+        raise ValueError(f"Plan prerequisite is invalid: {plan_err}")
     plan = await get_plan(idea_id, plan_id)
-    if not plan or not plan.get("tasks"):
-        raise ValueError("Plan not found or empty after planning")
     await _emit_stage(session_id, research_id, "execute", "running")
     await update_research_stage(research_id, stage="execute", stage_status="running", error=None)
     execution = build_execution_from_plan(plan)
@@ -263,6 +340,9 @@ async def _run_stage_execute(session_id: str, session, research_id: str, idea_id
     session.runner.set_layout(layout, idea_id=idea_id, plan_id=plan_id, execution=execution)
     config = await get_effective_config()
     await session.runner.start_execution(api_config=config, research_id=research_id)
+    execute_ok, execute_err = await _validate_execute_completion(idea_id, plan_id)
+    if not execute_ok:
+        raise ValueError(f"Execute finished without required artifacts: {execute_err}")
     await update_research_stage(research_id, stage="execute", stage_status="completed")
     await _emit_stage(session_id, research_id, "execute", "completed")
 
@@ -279,6 +359,9 @@ async def _run_stage_paper(session_id: str, session, research_id: str, idea_id: 
         paper_format,
         abort_event=session.paper_run_state.abort_event,
     )
+    paper_ok, paper_err = await _validate_paper_completion(idea_id, plan_id)
+    if not paper_ok:
+        raise ValueError(f"Paper finished without required artifacts: {paper_err}")
     await update_research_stage(research_id, stage="paper", stage_status="completed")
     await _emit_stage(session_id, research_id, "paper", "completed")
 
@@ -485,7 +568,7 @@ async def run_research_stage_route(research_id: str, stage: str, body: ResearchR
     research = await get_research(research_id)
     if not research:
         return JSONResponse(status_code=404, content={"error": "Research not found"})
-    prereq_err = _check_stage_prerequisites(research, stage)
+    prereq_err = await _check_stage_prerequisites(research, stage)
     if prereq_err:
         return JSONResponse(status_code=400, content={"error": prereq_err})
     if _is_session_busy(session_id):
@@ -511,7 +594,7 @@ async def resume_research_stage_route(research_id: str, stage: str, body: Resear
     research = await get_research(research_id)
     if not research:
         return JSONResponse(status_code=404, content={"error": "Research not found"})
-    prereq_err = _check_stage_prerequisites(research, stage)
+    prereq_err = await _check_stage_prerequisites(research, stage)
     if prereq_err:
         return JSONResponse(status_code=400, content={"error": prereq_err})
     current_stage = _normalize_stage(research.get("stage") or "refine")
@@ -549,7 +632,7 @@ async def retry_research_stage_route(research_id: str, stage: str, body: Researc
     research = await get_research(research_id)
     if not research:
         return JSONResponse(status_code=404, content={"error": "Research not found"})
-    prereq_err = _check_stage_prerequisites(research, stage)
+    prereq_err = await _check_stage_prerequisites(research, stage)
     if prereq_err:
         return JSONResponse(status_code=400, content={"error": prereq_err})
     if _is_session_busy(session_id):

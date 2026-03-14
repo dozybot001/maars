@@ -6,7 +6,7 @@
     const cfg = window.MAARS?.config;
     if (!cfg) return;
 
-    const DEFAULT_AGENT_MODE = { ideaAgent: 'mock', planAgent: 'mock', taskAgent: 'mock', paperAgent: 'mock', ideaRAG: false };
+    const DEFAULT_AGENT_MODE = { ideaAgent: 'mock', planAgent: 'mock', taskAgent: 'mock', paperAgent: 'mock', ideaRAG: false, literatureSource: 'openalex' };
     const DEFAULT_REFLECTION = { enabled: false, maxIterations: 2, qualityThreshold: 70 };
     const PANELS = ['settingsPanelTheme', 'settingsPanelAi', 'settingsPanelDb'];
     let _configState = { agentMode: { ...DEFAULT_AGENT_MODE }, reflection: { ...DEFAULT_REFLECTION }, current: '', presets: {} };
@@ -64,10 +64,25 @@
         if (cb) cb.checked = !!am.ideaRAG;
     }
 
+    function _syncLiteratureSourceUI() {
+        const am = _configState.agentMode || {};
+        const select = document.getElementById('ideaLiteratureSource');
+        if (!select) return;
+        const value = String(am.literatureSource || 'openalex').trim().toLowerCase();
+        select.value = (value === 'arxiv') ? 'arxiv' : 'openalex';
+    }
+
     function _readIdeaRAGFromUI() {
         const cb = document.getElementById('ideaRAGEnabled');
         _configState.agentMode = _configState.agentMode || { ...DEFAULT_AGENT_MODE };
         _configState.agentMode.ideaRAG = cb ? cb.checked : false;
+    }
+
+    function _readLiteratureSourceFromUI() {
+        const select = document.getElementById('ideaLiteratureSource');
+        _configState.agentMode = _configState.agentMode || { ...DEFAULT_AGENT_MODE };
+        const value = String(select?.value || 'openalex').trim().toLowerCase();
+        _configState.agentMode.literatureSource = (value === 'arxiv') ? 'arxiv' : 'openalex';
     }
 
     function _readReflectionFromUI() {
@@ -147,6 +162,12 @@
             ? { ...DEFAULT_REFLECTION, ...raw.reflection }
             : { ...DEFAULT_REFLECTION };
         if (agentMode.ideaRAG === undefined) agentMode.ideaRAG = false;
+        if (agentMode.literatureSource === undefined) {
+            agentMode.literatureSource = 'openalex';
+        } else {
+            const source = String(agentMode.literatureSource || '').trim().toLowerCase();
+            agentMode.literatureSource = (source === 'arxiv') ? 'arxiv' : 'openalex';
+        }
         _configState = { theme, agentMode, reflection, current, presets };
         _activePresetKey = current || Object.keys(presets)[0];
     }
@@ -190,6 +211,7 @@
             _syncMatrixActive();
             _syncReflectionUI();
             _syncIdeaRAGUI();
+            _syncLiteratureSourceUI();
             _renderPresetSelectItems();
             const keys = Object.keys(_configState.presets);
             const current = _configState.current && keys.includes(_configState.current) ? _configState.current : keys[0];
@@ -226,6 +248,7 @@
                 _showPanel('settingsPanelAi');
                 _syncMatrixActive();
                 _syncIdeaRAGUI();
+                _syncLiteratureSourceUI();
                 _renderPresetSelectItems();
             } else if (id === 'db') {
                 _showPanel('settingsPanelDb');
@@ -306,6 +329,7 @@
             _readFormIntoState();
             _readReflectionFromUI();
             _readIdeaRAGFromUI();
+            _readLiteratureSourceFromUI();
             _configState.theme = document.documentElement.getAttribute('data-theme') || 'light';
             try {
                 await cfg.saveSettings(_configState);

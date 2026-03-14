@@ -27,6 +27,128 @@ def _get_content_str(result: Any) -> str:
     return str(result)
 
 
+def _normalize_criteria_for_format(criteria: list[str], output_format: str) -> tuple[list[str], str]:
+    """Normalize criteria that are impossible under strict JSON serialization."""
+    if not criteria:
+        return [], ""
+
+    fmt = (output_format or "").strip().upper()
+    is_json = fmt.startswith("JSON") or "JSON" in fmt
+    is_structured_artifact = any(
+        token in fmt
+        for token in ("ARRAY", "OBJECT", "DICT", "TABLE", "CSV", "TIME-SERIES", "TIME SERIES", "MATRIX", "TENSOR")
+    )
+    if not is_json:
+        if not is_structured_artifact:
+            return criteria, ""
+        normalized = []
+        for c in criteria:
+            c_lower = c.lower()
+            if (
+                "signal length" in c_lower
+                or "frequency spectrum" in c_lower
+                or "baseline drift" in c_lower
+                or "nan" in c_lower
+                or "infinite" in c_lower
+                or "time-series object" in c_lower
+                or "numerical array" in c_lower
+            ):
+                normalized.append(
+                    "For structured artifact-backed output, provide a loadable data artifact path plus enough evidence to validate the requirement: shape/length, dtype, no-NaN/Inf checks, and any quantitative spectral or filtering evidence required by the task."
+                )
+                continue
+            normalized.append(c)
+        validator_note = (
+            "Structured outputs may be returned as artifact references plus validation evidence. "
+            "Do not fail solely because the raw numeric payload is not embedded inline when the output provides a loadable artifact and concrete verification metadata."
+        )
+        return normalized, validator_note
+
+    normalized: list[str] = []
+    for c in criteria:
+        c_lower = c.lower()
+        if (
+            "initialized model" in c_lower
+            or "initialized instance" in c_lower
+            or "programmatic object" in c_lower
+            or "ready for the training phase" in c_lower
+            or "ready for training" in c_lower
+        ):
+            normalized.append(
+                (
+                    "For JSON output, represent trainable models in a JSON-serializable way: "
+                    "either class/import path + constructor parameters, or references to serialized "
+                    "model artifacts (e.g., .pkl/.joblib) that can be loaded for training."
+                )
+            )
+            continue
+
+        # JSON cannot embed live ndarray objects; require executable array references instead.
+        if (
+            "numpy array" in c_lower
+            or "ndarray" in c_lower
+            or "shape (n_samples" in c_lower
+            or "shape(n_samples" in c_lower
+            or "shape of x" in c_lower
+            or "rows (samples) in x" in c_lower
+            or "x must be" in c_lower and "array" in c_lower
+            or "y must be" in c_lower and "array" in c_lower
+        ):
+            normalized.append(
+                (
+                    "For JSON output, represent arrays as loadable artifacts and metadata, "
+                    "not inline in-memory ndarrays: include file path(s) (.npy/.npz), "
+                    "array key names when using .npz, shape, dtype, and sample-count alignment "
+                    "(e.g., X_rows == y_rows). If available, include a validation summary that "
+                    "confirms numeric data with no NaN/Inf."
+                )
+            )
+            continue
+        normalized.append(c)
+
+    validator_note = (
+        "JSON output cannot contain live in-memory Python objects. "
+        "Do not fail solely because literal instances/ndarrays are not embedded in JSON. "
+        "Pass when output provides a practical, executable representation for downstream use "
+        "(for example, artifact references plus shape/dtype/consistency metadata)."
+    )
+    return normalized, validator_note
+
+
+def classify_validation_failure(report: str, output_format: str = "") -> dict:
+    """Best-effort local classification for retry policy decisions."""
+    text = f"{output_format}\n{report or ''}".lower()
+    if not text.strip():
+        return {"category": "semantic", "retryable": True}
+
+    format_markers = (
+        "failed to parse",
+        "invalid json",
+        "expected numerical array",
+        "expected numerical array/time-series",
+        "expected numerical array or time-series object",
+        "received text description",
+        "received metadata json",
+        "output format: fail",
+        "prose-only",
+        "content wrapper",
+    )
+    evidence_markers = (
+        "data not provided",
+        "no data provided",
+        "no spectral analysis or data provided",
+        "claimed match, but data not provided",
+        "no visual or quantitative evidence provided",
+        "no n/a",
+    )
+
+    if any(marker in text for marker in format_markers):
+        return {"category": "format", "retryable": True}
+    if any(marker in text for marker in evidence_markers):
+        return {"category": "evidence_missing", "retryable": True}
+    return {"category": "semantic", "retryable": True}
+
+
 async def validate_task_output_with_llm(
     result: Any,
     output_spec: Dict[str, Any],
@@ -46,15 +168,19 @@ async def validate_task_output_with_llm(
     validation = validation_spec or {}
     criteria = validation.get("criteria") or []
     output_format = (output_spec or {}).get("format") or ""
+    normalized_criteria, validator_note = _normalize_criteria_for_format(criteria, output_format)
 
-    system_prompt = """You are a validation assistant. Judge whether the task output meets the validation criteria.
+    policy_note = validator_note or "Apply criteria exactly as provided."
+    system_prompt = (
+        "You are a validation assistant. Judge whether the task output meets the validation criteria.\n\n"
+        "Output in two parts:\n"
+        "1. **Reasoning** (1-2 sentences): Briefly explain your validation analysis. This will be shown as your thinking process.\n"
+        "2. **JSON**: Output a JSON block in ```json and ``` with: {\"passed\": true|false, \"report\": \"markdown string\"}\n"
+        "The report should list each criterion and PASS/FAIL, then a final Result line.\n\n"
+        f"Validation policy note:\n{policy_note}"
+    )
 
-Output in two parts:
-1. **Reasoning** (1-2 sentences): Briefly explain your validation analysis. This will be shown as your thinking process.
-2. **JSON**: Output a JSON block in ```json and ``` with: {"passed": true|false, "report": "markdown string"}
-The report should list each criterion and PASS/FAIL, then a final Result line."""
-
-    criteria_text = "\n".join(f"- {c}" for c in criteria) if criteria else "Output should be complete and align with the task description."
+    criteria_text = "\n".join(f"- {c}" for c in normalized_criteria) if normalized_criteria else "Output should be complete and align with the task description."
     user_message = f"""Task ID: {task_id}
 Output format expected: {output_format}
 

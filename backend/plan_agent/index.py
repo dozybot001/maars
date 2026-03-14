@@ -8,12 +8,158 @@ LLM implementation: plan_agent/llm/
 import asyncio
 from typing import Any, Callable, Dict, List, Optional
 
+from loguru import logger
+
 from shared.graph import get_ancestor_path, get_parent_id
 from shared.task_title import ensure_task_titles
 
 from .agent import run_plan_agent
 from .agent_tools import _find_task_idx
 from .llm.executor import assess_quality, check_atomicity, decompose_task, format_task, raise_if_aborted
+
+
+def _task_has_io(task: Dict) -> bool:
+    return bool(task.get("input") and task.get("output"))
+
+
+def _get_direct_children(all_tasks: List[Dict], parent_id: str) -> List[Dict]:
+    return [
+        t for t in all_tasks
+        if t.get("task_id") != parent_id and get_parent_id(t.get("task_id", "")) == parent_id
+    ]
+
+
+def _plan_has_unformatted_leaves(all_tasks: List[Dict]) -> bool:
+    if not all_tasks:
+        return True
+    for task in all_tasks:
+        tid = task.get("task_id") or ""
+        if not tid:
+            continue
+        if _get_direct_children(all_tasks, tid):
+            continue
+        if not _task_has_io(task):
+            return True
+    return False
+
+
+async def _complete_existing_tree_recursive(
+    task: Dict,
+    all_tasks: List[Dict],
+    on_thinking: Callable[[str], None],
+    check_aborted: Callable[[], bool],
+    abort_event: Optional[Any],
+    on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]] = None,
+    idea: Optional[str] = None,
+    use_mock: bool = False,
+    api_config: Optional[Dict] = None,
+    idea_id: Optional[str] = None,
+    plan_id: Optional[str] = None,
+) -> None:
+    if check_aborted and check_aborted():
+        raise asyncio.CancelledError("Aborted")
+
+    tid = task["task_id"]
+    children = _get_direct_children(all_tasks, tid)
+    if children:
+        for child in list(children):
+            await _complete_existing_tree_recursive(
+                child,
+                all_tasks,
+                on_thinking,
+                check_aborted,
+                abort_event,
+                on_tasks_batch,
+                idea,
+                use_mock,
+                api_config,
+                idea_id,
+                plan_id,
+            )
+        return
+
+    if _task_has_io(task):
+        return
+
+    siblings = [
+        t for t in all_tasks
+        if t.get("task_id") != tid and get_parent_id(t.get("task_id", "")) == get_parent_id(tid)
+    ]
+    depth = len(tid.split("_"))
+    atomicity_context = {
+        "depth": depth,
+        "ancestor_path": get_ancestor_path(tid),
+        "idea": idea or "",
+        "siblings": siblings,
+    }
+    verdict = await check_atomicity(task, on_thinking, abort_event, atomicity_context, use_mock, api_config, idea_id, plan_id)
+    if verdict.get("atomic"):
+        io_result = await format_task(task, on_thinking, abort_event, use_mock, api_config, idea_id, plan_id)
+        if not io_result:
+            raise ValueError(f"Format failed for atomic task {tid}: missing input/output")
+        idx = _find_task_idx(all_tasks, tid)
+        if idx >= 0:
+            all_tasks[idx] = {**all_tasks[idx], **io_result}
+        return
+
+    new_children = await decompose_task(task, on_thinking, abort_event, all_tasks, idea, depth, use_mock, api_config, idea_id, plan_id)
+    if not new_children:
+        raise ValueError(f"Decompose returned no children for task {tid}")
+
+    existing_ids = {t.get("task_id") for t in all_tasks}
+    to_add = []
+    for child in new_children:
+        if child.get("task_id") in existing_ids:
+            continue
+        to_add.append(child)
+        all_tasks.append(child)
+
+    if to_add and on_tasks_batch:
+        on_tasks_batch(to_add, task, list(all_tasks))
+
+    for child in list(_get_direct_children(all_tasks, tid)):
+        await _complete_existing_tree_recursive(
+            child,
+            all_tasks,
+            on_thinking,
+            check_aborted,
+            abort_event,
+            on_tasks_batch,
+            idea,
+            use_mock,
+            api_config,
+            idea_id,
+            plan_id,
+        )
+
+
+async def _complete_existing_plan_tree(
+    root_task: Dict,
+    all_tasks: List[Dict],
+    on_thinking: Callable[[str], None],
+    check_aborted: Callable[[], bool],
+    abort_event: Optional[Any],
+    on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]] = None,
+    idea: Optional[str] = None,
+    use_mock: bool = False,
+    api_config: Optional[Dict] = None,
+    idea_id: Optional[str] = None,
+    plan_id: Optional[str] = None,
+) -> None:
+    ensure_task_titles(all_tasks)
+    await _complete_existing_tree_recursive(
+        root_task,
+        all_tasks,
+        on_thinking,
+        check_aborted,
+        abort_event,
+        on_tasks_batch,
+        idea,
+        use_mock,
+        api_config,
+        idea_id,
+        plan_id,
+    )
 
 
 async def _atomicity_and_decompose_recursive(
@@ -112,6 +258,30 @@ async def run_plan(
             api_config=api_config, idea_id=idea_id, plan_id=plan_id,
         )
         all_tasks = result.get("tasks", all_tasks)
+        pending_queue = result.get("pending_queue") or []
+        finished = bool(result.get("finished"))
+        if pending_queue or not finished or _plan_has_unformatted_leaves(all_tasks):
+            logger.warning(
+                "Plan agent produced incomplete plan; running llm-style completion repair plan_id={} finished={} pending={} tasks={}",
+                plan_id,
+                finished,
+                len(pending_queue),
+                len(all_tasks),
+            )
+            await _complete_existing_plan_tree(
+                root_task,
+                all_tasks,
+                on_thinking_fn,
+                check_aborted,
+                abort_event,
+                on_tasks_batch,
+                idea=idea,
+                use_mock=use_mock,
+                api_config=api_config,
+                idea_id=idea_id,
+                plan_id=plan_id,
+            )
+        plan["tasks"] = all_tasks
     else:
         await _atomicity_and_decompose_recursive(
             root_task, all_tasks, on_task, on_thinking_fn, 0, check_aborted, abort_event, on_tasks_batch,

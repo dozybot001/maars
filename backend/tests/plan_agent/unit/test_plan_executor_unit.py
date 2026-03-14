@@ -1,6 +1,8 @@
 import pytest
+import anyio
 
 from plan_agent.llm import executor as plan_exec
+from plan_agent import index as plan_index
 
 
 def test_parse_json_response_from_codeblock():
@@ -53,3 +55,53 @@ def test_build_user_message_atomicity_includes_context():
 def test_parse_json_response_invalid_raises():
     out = plan_exec._parse_json_response("not json")
     assert not isinstance(out, dict)
+
+
+async def _run_agent_plan_repair(monkeypatch):
+    async def fake_run_plan_agent(plan, on_thinking, abort_event, on_tasks_batch, api_config, idea_id=None, plan_id=None):
+        return {
+            "tasks": [
+                {"task_id": "0", "title": "Root", "description": "Root task", "dependencies": []},
+                {"task_id": "1", "title": "Leaf A", "description": "Prepare data", "dependencies": []},
+                {"task_id": "2", "title": "Leaf B", "description": "Train model", "dependencies": ["1"]},
+            ],
+            "pending_queue": ["1", "2"],
+            "finished": False,
+            "turn_count": 30,
+        }
+
+    async def fake_check_atomicity(task, *args, **kwargs):
+        return {"atomic": task.get("task_id") in ("1", "2")}
+
+    async def fake_format_task(task, *args, **kwargs):
+        return {
+            "input": {"description": f"input for {task['task_id']}"},
+            "output": {"description": f"output for {task['task_id']}"},
+        }
+
+    monkeypatch.setattr(plan_index, "run_plan_agent", fake_run_plan_agent)
+    monkeypatch.setattr(plan_index, "check_atomicity", fake_check_atomicity)
+    monkeypatch.setattr(plan_index, "format_task", fake_format_task)
+
+    result = await plan_index.run_plan(
+        {"tasks": [{"task_id": "0", "title": "Root", "description": "Root task", "dependencies": []}], "idea": "Root task"},
+        on_task=None,
+        on_thinking=lambda *args, **kwargs: None,
+        abort_event=None,
+        on_tasks_batch=None,
+        use_mock=False,
+        api_config={"planAgentMode": True},
+        skip_quality_assessment=True,
+        idea_id="idea_test",
+        plan_id="plan_test",
+    )
+
+    tasks = result.get("tasks") or []
+    leaf_1 = next(t for t in tasks if t.get("task_id") == "1")
+    leaf_2 = next(t for t in tasks if t.get("task_id") == "2")
+    assert leaf_1.get("input") and leaf_1.get("output")
+    assert leaf_2.get("input") and leaf_2.get("output")
+
+
+def test_agent_mode_plan_is_repaired_to_atomic_tasks(monkeypatch):
+    anyio.run(_run_agent_plan_repair, monkeypatch)

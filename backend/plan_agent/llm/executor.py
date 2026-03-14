@@ -19,6 +19,7 @@ from shared.llm_client import chat_completion as real_chat_completion, merge_pha
 from test.mock_stream import mock_chat_completion
 
 from shared.constants import (
+    MAX_FORMAT_REPAIR_ATTEMPTS,
     PLAN_MAX_CONCURRENT_CALLS,
     PLAN_MAX_VALIDATION_RETRIES,
     TEMP_AGENT_LOOP,
@@ -26,6 +27,7 @@ from shared.constants import (
     TEMP_RETRY,
     TEMP_STRUCTURED,
 )
+from shared.structured_output import generate_with_repair
 
 PLAN_DIR = Path(__file__).resolve().parent.parent
 MOCK_AI_DIR = PLAN_DIR.parent / "test" / "mock-ai"
@@ -211,6 +213,66 @@ async def _call_chat_completion(
     return content or ""
 
 
+def _build_messages_for_context(context: Dict[str, Any]) -> tuple[list[dict], str]:
+    response_type = context["type"]
+    prompt_file = {
+        "atomicity": "atomicity-prompt.txt",
+        "decompose": "decompose-prompt.txt",
+        "format": "format-prompt.txt",
+        "quality": "quality-assess-prompt.txt",
+    }.get(response_type, "atomicity-prompt.txt")
+    system_prompt = _get_prompt_cached(prompt_file)
+    msg_ctx = (
+        context.get("decomposeContext") if response_type == "decompose"
+        else context.get("qualityContext") if response_type == "quality"
+        else context.get("atomicityContext") if response_type == "atomicity"
+        else None
+    )
+    user_message = _build_user_message(response_type, context.get("task", {}), msg_ctx)
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_message},
+    ]
+    if response_type == "atomicity":
+        phase = "atomicity"
+    elif response_type == "quality":
+        phase = "quality"
+    elif response_type == "decompose":
+        phase = "decompose"
+    else:
+        phase = "format"
+    return messages, phase
+
+
+async def _call_real_chat_completion(
+    *,
+    messages: list[dict],
+    phase: str,
+    on_thinking: Callable[..., None],
+    task_id: str,
+    op_label: str,
+    abort_event: Optional[Any],
+    api_config: Optional[Dict],
+    temperature: float,
+) -> str:
+    cfg = merge_phase_config(api_config, phase)
+
+    def stream_chunk(chunk: str):
+        if on_thinking and chunk:
+            return on_thinking(chunk, task_id=task_id, operation=op_label)
+
+    async with _get_call_semaphore():
+        content = await real_chat_completion(
+            messages,
+            cfg,
+            on_chunk=stream_chunk if on_thinking else None,
+            abort_event=abort_event,
+            stream=bool(on_thinking),
+            temperature=temperature,
+        )
+    return content or ""
+
+
 def _parse_json_response(text: str) -> Any:
     """Parse JSON from AI response using json_repair for malformed output."""
     cleaned = (text or "").strip()
@@ -293,34 +355,62 @@ async def check_atomicity(
     ctx: Dict[str, Any] = {"type": "atomicity", "taskId": task["task_id"], "task": task}
     if atomicity_context:
         ctx["atomicityContext"] = atomicity_context
-    last_err: Optional[Exception] = None
-    for attempt in range(PLAN_MAX_VALIDATION_RETRIES + 1):
-        raise_if_aborted(abort_event)
-        try:
-            content = await _call_chat_completion(
-                on_thinking,
-                ctx,
-                abort_event,
-                stream=True,
-                use_mock=use_mock,
+    if use_mock:
+        last_err: Optional[Exception] = None
+        for attempt in range(PLAN_MAX_VALIDATION_RETRIES + 1):
+            raise_if_aborted(abort_event)
+            try:
+                content = await _call_chat_completion(
+                    on_thinking,
+                    ctx,
+                    abort_event,
+                    stream=True,
+                    use_mock=use_mock,
+                    api_config=api_config,
+                    temperature=TEMP_DETERMINISTIC if attempt == 0 else TEMP_RETRY,
+                )
+                result = _parse_json_response(content)
+                if not _validate_atomicity_response(result):
+                    raise ValueError("Atomicity response invalid: missing or invalid atomic field")
+                break
+            except Exception as e:
+                last_err = e
+                if attempt >= PLAN_MAX_VALIDATION_RETRIES:
+                    raise
+        else:
+            raise last_err or ValueError("Atomicity check failed")
+    else:
+        messages, phase = _build_messages_for_context(ctx)
+
+        def _validate(parsed: Any) -> tuple[bool, str]:
+            if not _validate_atomicity_response(parsed):
+                return False, "Atomicity response invalid: missing or invalid atomic field"
+            return True, ""
+
+        result, _raw = await generate_with_repair(
+            base_messages=messages,
+            model_call=lambda msgs, temp: _call_real_chat_completion(
+                messages=msgs,
+                phase=phase,
+                on_thinking=on_thinking,
+                task_id=task["task_id"],
+                op_label="Atomicity",
+                abort_event=abort_event,
                 api_config=api_config,
-                temperature=TEMP_DETERMINISTIC if attempt == 0 else TEMP_RETRY,
-            )
-            result = _parse_json_response(content)
-            if not _validate_atomicity_response(result):
-                raise ValueError("Atomicity response invalid: missing or invalid atomic field")
-            out = {"atomic": bool(result.get("atomic"))}
-            if idea_id and plan_id:
-                asyncio.create_task(save_ai_response(
-                    idea_id, plan_id, "atomicity", task["task_id"],
-                    {"content": {"atomic": out["atomic"]}, "reasoning": ""},
-                ))
-            return out
-        except Exception as e:
-            last_err = e
-            if attempt >= PLAN_MAX_VALIDATION_RETRIES:
-                raise
-    raise last_err or ValueError("Atomicity check failed")
+                temperature=temp,
+            ),
+            parse_fn=_parse_json_response,
+            validate_fn=_validate,
+            temperatures=[TEMP_DETERMINISTIC] + [TEMP_RETRY] * PLAN_MAX_VALIDATION_RETRIES,
+        )
+
+    out = {"atomic": bool(result.get("atomic"))}
+    if idea_id and plan_id:
+        asyncio.create_task(save_ai_response(
+            idea_id, plan_id, "atomicity", task["task_id"],
+            {"content": {"atomic": out["atomic"]}, "reasoning": ""},
+        ))
+    return out
 
 
 async def decompose_task(
@@ -346,40 +436,67 @@ async def decompose_task(
         "depth": depth,
         "ancestor_path": get_ancestor_path(pid),
     }
-    last_err: Optional[Exception] = None
-    for attempt in range(PLAN_MAX_VALIDATION_RETRIES + 1):
-        raise_if_aborted(abort_event)
-        try:
-            content = await _call_chat_completion(
-                on_thinking,
-                ctx,
-                abort_event,
-                stream=True,
-                use_mock=use_mock,
+    if use_mock:
+        last_err: Optional[Exception] = None
+        for attempt in range(PLAN_MAX_VALIDATION_RETRIES + 1):
+            raise_if_aborted(abort_event)
+            try:
+                content = await _call_chat_completion(
+                    on_thinking,
+                    ctx,
+                    abort_event,
+                    stream=True,
+                    use_mock=use_mock,
+                    api_config=api_config,
+                    temperature=TEMP_RETRY if attempt > 0 else TEMP_AGENT_LOOP,
+                )
+                result = _parse_json_response(content)
+                valid, err_msg = _validate_decompose_response(result, pid)
+                if not valid:
+                    raise ValueError(f"Decompose validation failed: {err_msg}")
+                break
+            except Exception as e:
+                last_err = e
+                if attempt >= PLAN_MAX_VALIDATION_RETRIES:
+                    raise
+        else:
+            raise last_err or ValueError("Decompose failed")
+    else:
+        messages, phase = _build_messages_for_context(ctx)
+
+        def _validate(parsed: Any) -> tuple[bool, str]:
+            ok, err_msg = _validate_decompose_response(parsed, pid)
+            return ok, err_msg or "Decompose validation failed"
+
+        result, _raw = await generate_with_repair(
+            base_messages=messages,
+            model_call=lambda msgs, temp: _call_real_chat_completion(
+                messages=msgs,
+                phase=phase,
+                on_thinking=on_thinking,
+                task_id=parent_task["task_id"],
+                op_label="Decompose",
+                abort_event=abort_event,
                 api_config=api_config,
-                temperature=TEMP_RETRY if attempt > 0 else TEMP_AGENT_LOOP,
-            )
-            result = _parse_json_response(content)
-            valid, err_msg = _validate_decompose_response(result, pid)
-            if not valid:
-                raise ValueError(f"Decompose validation failed: {err_msg}")
-            tasks = result.get("tasks") or []
-            out = [
-                t
-                for t in tasks
-                if t.get("task_id") and t.get("description") and isinstance(t.get("dependencies"), list)
-            ]
-            if idea_id and plan_id:
-                asyncio.create_task(save_ai_response(
-                    idea_id, plan_id, "decompose", pid,
-                    {"content": {"tasks": tasks}, "reasoning": ""},
-                ))
-            return out
-        except Exception as e:
-            last_err = e
-            if attempt >= PLAN_MAX_VALIDATION_RETRIES:
-                raise
-    raise last_err or ValueError("Decompose failed")
+                temperature=temp,
+            ),
+            parse_fn=_parse_json_response,
+            validate_fn=_validate,
+            temperatures=[TEMP_AGENT_LOOP] + [TEMP_RETRY] * PLAN_MAX_VALIDATION_RETRIES,
+        )
+
+    tasks = result.get("tasks") or []
+    out = [
+        t
+        for t in tasks
+        if t.get("task_id") and t.get("description") and isinstance(t.get("dependencies"), list)
+    ]
+    if idea_id and plan_id:
+        asyncio.create_task(save_ai_response(
+            idea_id, plan_id, "decompose", pid,
+            {"content": {"tasks": tasks}, "reasoning": ""},
+        ))
+    return out
 
 
 async def format_task(
@@ -391,46 +508,73 @@ async def format_task(
     idea_id: Optional[str] = None,
     plan_id: Optional[str] = None,
 ) -> Optional[Dict]:
-    """Generate input/output spec for atomic task. Plan Agent LLM single-turn. Retries once with higher temperature on failure."""
-    temps = [TEMP_STRUCTURED, TEMP_RETRY]
-    for attempt, temp in enumerate(temps):
-        raise_if_aborted(abort_event)
-        try:
-            content = await _call_chat_completion(
-                on_thinking,
-                {"type": "format", "taskId": task.get("task_id", ""), "task": task},
-                abort_event,
-                stream=True,
-                use_mock=use_mock,
-                api_config=api_config,
-                temperature=temp,
-            )
-            result = _parse_json_response(content)
-            if not result.get("input") or not result.get("output"):
-                if attempt < len(temps) - 1:
-                    logger.info("format_task attempt %d failed for %s, retrying with higher temperature", attempt + 1, task.get("task_id", ""))
-                    continue
-                return None
-            validation = result.get("validation") if isinstance(result.get("validation"), dict) else None
-            out = {
-                "input": result["input"],
-                "output": result["output"],
-                **({"validation": validation} if validation else {}),
-            }
-            if idea_id and plan_id:
-                asyncio.create_task(save_ai_response(
-                    idea_id, plan_id, "format", task.get("task_id", ""),
-                    {"content": {"input": result["input"], "output": result["output"], "validation": validation or {}}, "reasoning": ""},
-                ))
-            return out
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            if attempt < len(temps) - 1:
+    """Generate input/output spec for atomic task. Plan Agent LLM single-turn with repair retries."""
+    temps = [TEMP_STRUCTURED] + [TEMP_RETRY] * max(1, MAX_FORMAT_REPAIR_ATTEMPTS - 1)
+    messages, phase = _build_messages_for_context({"type": "format", "taskId": task.get("task_id", ""), "task": task})
+    if use_mock:
+        last_err: Optional[Exception] = None
+        for attempt, temp in enumerate(temps):
+            raise_if_aborted(abort_event)
+            try:
+                content = await _call_chat_completion(
+                    on_thinking,
+                    {"type": "format", "taskId": task.get("task_id", ""), "task": task},
+                    abort_event,
+                    stream=True,
+                    use_mock=use_mock,
+                    api_config=api_config,
+                    temperature=temp,
+                )
+                result = _parse_json_response(content)
+                if not result.get("input") or not result.get("output"):
+                    raise ValueError("FormatTask returned no input/output")
+                break
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                last_err = e
+                if attempt >= len(temps) - 1:
+                    raise
                 logger.info("format_task attempt %d error for %s: %s, retrying", attempt + 1, task.get("task_id", ""), e)
-                continue
-            raise
-    return None
+        else:
+            raise last_err or ValueError("FormatTask failed")
+    else:
+        def _validate(parsed: Any) -> tuple[bool, str]:
+            if not isinstance(parsed, dict):
+                return False, "FormatTask response must be a JSON object"
+            if not parsed.get("input") or not parsed.get("output"):
+                return False, "FormatTask returned no input/output"
+            return True, ""
+
+        result, _raw = await generate_with_repair(
+            base_messages=messages,
+            model_call=lambda msgs, temperature: _call_real_chat_completion(
+                messages=msgs,
+                phase=phase,
+                on_thinking=on_thinking,
+                task_id=task.get("task_id", ""),
+                op_label="Format",
+                abort_event=abort_event,
+                api_config=api_config,
+                temperature=temperature,
+            ),
+            parse_fn=_parse_json_response,
+            validate_fn=_validate,
+            temperatures=temps,
+        )
+
+    validation = result.get("validation") if isinstance(result.get("validation"), dict) else None
+    out = {
+        "input": result["input"],
+        "output": result["output"],
+        **({"validation": validation} if validation else {}),
+    }
+    if idea_id and plan_id:
+        asyncio.create_task(save_ai_response(
+            idea_id, plan_id, "format", task.get("task_id", ""),
+            {"content": {"input": result["input"], "output": result["output"], "validation": validation or {}}, "reasoning": ""},
+        ))
+    return out
 
 
 async def assess_quality(
@@ -459,16 +603,43 @@ async def assess_quality(
         "qualityContext": {"idea": idea, "tasksSummary": tasks_summary},
     }
     try:
-        content = await _call_chat_completion(
-            on_thinking,
-            ctx,
-            abort_event,
-            stream=True,
-            use_mock=use_mock,
-            api_config=api_config,
-            temperature=TEMP_STRUCTURED,
-        )
-        result = _parse_json_response(content)
+        if use_mock:
+            content = await _call_chat_completion(
+                on_thinking,
+                ctx,
+                abort_event,
+                stream=True,
+                use_mock=use_mock,
+                api_config=api_config,
+                temperature=TEMP_STRUCTURED,
+            )
+            result = _parse_json_response(content)
+        else:
+            messages, phase = _build_messages_for_context(ctx)
+
+            def _validate(parsed: Any) -> tuple[bool, str]:
+                if not isinstance(parsed, dict):
+                    return False, "Quality response must be a JSON object"
+                if "score" not in parsed:
+                    return False, "Quality response missing score"
+                return True, ""
+
+            result, _raw = await generate_with_repair(
+                base_messages=messages,
+                model_call=lambda msgs, temperature: _call_real_chat_completion(
+                    messages=msgs,
+                    phase=phase,
+                    on_thinking=on_thinking,
+                    task_id="_",
+                    op_label="Quality",
+                    abort_event=abort_event,
+                    api_config=api_config,
+                    temperature=temperature,
+                ),
+                parse_fn=_parse_json_response,
+                validate_fn=_validate,
+                temperatures=[TEMP_STRUCTURED] + [TEMP_RETRY] * PLAN_MAX_VALIDATION_RETRIES,
+            )
         score = result.get("score")
         if isinstance(score, (int, float)):
             score = max(0, min(100, int(score)))

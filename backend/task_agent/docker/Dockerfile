@@ -16,4 +16,11 @@ RUN apt-get update \
 
 RUN python -m pip install --upgrade pip setuptools wheel
 
+RUN python -m pip install \
+    numpy \
+    scipy \
+    pandas \
+    scikit-learn \
+    joblib
+
 CMD ["sh", "-lc", "trap : TERM INT; while sleep 3600; do :; done"]

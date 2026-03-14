@@ -5,7 +5,7 @@ def test_settings_roundtrip(client):
 
     payload = {
         'theme': 'light',
-        'agentMode': {'ideaAgent': 'mock', 'planAgent': 'mock', 'taskAgent': 'mock', 'paperAgent': 'mock', 'ideaRAG': False},
+        'agentMode': {'ideaAgent': 'mock', 'planAgent': 'mock', 'taskAgent': 'mock', 'paperAgent': 'mock', 'ideaRAG': False, 'literatureSource': 'openalex'},
         'reflection': {'enabled': False, 'maxIterations': 1, 'qualityThreshold': 70},
         'current': 'test',
         'presets': {'test': {'label': 'test', 'baseUrl': '', 'apiKey': '', 'model': 'mock'}},
@@ -17,6 +17,7 @@ def test_settings_roundtrip(client):
     r2 = client.get('/api/settings')
     assert r2.status_code == 200
     assert r2.json().get('settings', {}).get('current') == 'test'
+    assert r2.json().get('settings', {}).get('agentMode', {}).get('literatureSource') == 'openalex'
 
 
 def test_db_clear(client):

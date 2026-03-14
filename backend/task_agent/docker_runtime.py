@@ -22,6 +22,7 @@ _MANAGED_LABEL = "maars.managed=true"
 _MANAGED_KIND_LABEL = "maars.kind=task-execution"
 _DOCKERFILE_PATH = Path(__file__).resolve().parent / "docker" / "Dockerfile"
 _IMAGE_BUILD_LOCK = asyncio.Lock()
+_IMAGE_HEALTHCHECK_TIMEOUT = int(os.getenv("MAARS_DOCKER_IMAGE_HEALTHCHECK_TIMEOUT", "45"))
 
 
 def _bootstrap_keepalive_cmd() -> str:
@@ -137,10 +138,27 @@ async def ensure_execution_image(image: str | None = None) -> str:
         raise RuntimeError("Docker CLI not found in PATH")
 
     image_name = (image or DEFAULT_DOCKER_IMAGE).strip() or DEFAULT_DOCKER_IMAGE
+
+    async def _image_has_required_packages(name: str) -> bool:
+        check_cmd = [
+            docker,
+            "run",
+            "--rm",
+            "--entrypoint",
+            "python",
+            name,
+            "-c",
+            "import numpy, scipy, pandas, sklearn, joblib; print('OK')",
+        ]
+        checked = await _run_docker_cmd(check_cmd, timeout=_IMAGE_HEALTHCHECK_TIMEOUT)
+        return bool(checked.get("ok"))
+
     async with _IMAGE_BUILD_LOCK:
         inspect = await _run_docker_cmd([docker, "image", "inspect", image_name], timeout=20)
         if inspect["ok"]:
-            return image_name
+            if await _image_has_required_packages(image_name):
+                return image_name
+            logger.warning("Docker image {} is missing required Python packages; rebuilding", image_name)
 
         if not _DOCKERFILE_PATH.exists():
             raise RuntimeError(f"Dockerfile not found: {_DOCKERFILE_PATH}")
@@ -161,6 +179,8 @@ async def ensure_execution_image(image: str | None = None) -> str:
         ]
         built = await _run_docker_cmd(build_cmd, timeout=max(DOCKER_COMMAND_TIMEOUT, 600))
         if built["ok"]:
+            if not await _image_has_required_packages(image_name):
+                raise RuntimeError(f"Docker image built but required packages are still unavailable: {image_name}")
             return image_name
 
         err_text = (built.get("stderr") or built.get("stdout") or "").strip()
@@ -237,18 +257,25 @@ async def ensure_execution_container(
     if inspect["ok"]:
         started = await _run_docker_cmd([docker, "start", container_name], timeout=20)
         if not started["ok"]:
-            raise RuntimeError(started.get("stderr") or started.get("stdout") or "Failed to start Docker container")
-        return {
-            **status,
-            "connected": True,
-            "containerRunning": True,
-            "containerName": container_name,
-            "image": image_name,
-            "taskId": task_id,
-            "srcDir": str(src_dir),
-            "stepDir": str(step_dir),
-            "sandboxRoot": str(sandbox_root),
-        }
+            err_text = (started.get("stderr") or started.get("stdout") or "").strip()
+            # Docker can leave a just-removed container in a transient state where start fails.
+            # In that case, delete it and continue to recreate from scratch.
+            if "marked for removal" in err_text.lower():
+                await _run_docker_cmd([docker, "rm", "-f", container_name], timeout=20)
+            else:
+                raise RuntimeError(err_text or "Failed to start Docker container")
+        else:
+            return {
+                **status,
+                "connected": True,
+                "containerRunning": True,
+                "containerName": container_name,
+                "image": image_name,
+                "taskId": task_id,
+                "srcDir": str(src_dir),
+                "stepDir": str(step_dir),
+                "sandboxRoot": str(sandbox_root),
+            }
     
     run_cmd = [
         docker,

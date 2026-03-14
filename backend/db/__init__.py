@@ -316,6 +316,8 @@ def _resolve_config(raw: dict) -> dict:
     cfg["taskAgentMode"] = task_m == "agent"
     cfg["paperAgentMode"] = paper_m == "agent"
     cfg["ideaUseRAG"] = bool(agent_mode.get("ideaRAG", False))
+    source = str(agent_mode.get("literatureSource") or "").strip().lower()
+    cfg["literatureSource"] = source if source in ("openalex", "arxiv") else "openalex"
 
     reflection = raw.get("reflection") or {}
     cfg["reflectionEnabled"] = reflection.get("enabled", False)

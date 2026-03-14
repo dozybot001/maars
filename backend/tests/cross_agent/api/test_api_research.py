@@ -1,6 +1,7 @@
 import time
 
 import anyio
+from db import save_execution, save_idea, save_plan, update_research_stage
 
 
 def _wait_for_research_terminal(client, headers, research_id: str, timeout_s: float = 15.0):
@@ -111,7 +112,7 @@ def test_stage_run_blocks_when_predecessor_not_completed(client, session_headers
     assert run_execute.status_code == 400
     err = (run_execute.json() or {}).get('error', '')
     assert 'Cannot start' in err
-    assert 'plan' in err
+    assert ('refine' in err) or ('plan' in err)
 
     # Paper must also be blocked while execute is not completed.
     run_paper = client.post(
@@ -120,6 +121,111 @@ def test_stage_run_blocks_when_predecessor_not_completed(client, session_headers
         json={'format': 'markdown'},
     )
     assert run_paper.status_code == 400
+
+
+def test_stage_run_blocks_on_fake_completed_plan_without_atomic_tasks(client, session_headers):
+    create_resp = client.post('/api/research', headers=session_headers, json={'prompt': 'Fake completed plan'})
+    assert create_resp.status_code == 200
+    rid = create_resp.json()['researchId']
+
+    async def _seed_state() -> None:
+        await save_idea(
+            {
+                'idea': 'Fake completed plan',
+                'keywords': ['fake'],
+                'papers': [],
+                'refined_idea': 'A valid refined idea.',
+            },
+            'idea_fake_plan',
+        )
+        await save_plan(
+            {
+                'tasks': [
+                    {'task_id': '0', 'title': 'Root', 'description': 'Root task', 'dependencies': []},
+                    {'task_id': '1', 'title': 'Leaf', 'description': 'Leaf task', 'dependencies': []},
+                ]
+            },
+            'idea_fake_plan',
+            'plan_fake_plan',
+        )
+        await update_research_stage(
+            rid,
+            stage='plan',
+            stage_status='completed',
+            current_idea_id='idea_fake_plan',
+            current_plan_id='plan_fake_plan',
+            error=None,
+        )
+
+    anyio.run(_seed_state)
+
+    resp = client.post(
+        f'/api/research/{rid}/stage/execute/run',
+        headers=session_headers,
+        json={'format': 'markdown'},
+    )
+    assert resp.status_code == 400
+    err = (resp.json() or {}).get('error', '')
+    assert 'Cannot start' in err
+    assert 'plan' in err
+    assert 'atomic tasks' in err
+
+
+def test_stage_run_blocks_on_fake_completed_execute_without_outputs(client, session_headers):
+    create_resp = client.post('/api/research', headers=session_headers, json={'prompt': 'Fake completed execute'})
+    assert create_resp.status_code == 200
+    rid = create_resp.json()['researchId']
+
+    async def _seed_state() -> None:
+        await save_idea(
+            {
+                'idea': 'Fake completed execute',
+                'keywords': ['fake'],
+                'papers': [],
+                'refined_idea': 'A valid refined idea.',
+            },
+            'idea_fake_execute',
+        )
+        atomic_plan = {
+            'tasks': [
+                {'task_id': '0', 'title': 'Root', 'description': 'Root task', 'dependencies': []},
+                {
+                    'task_id': '1',
+                    'title': 'Atomic',
+                    'description': 'Atomic task',
+                    'dependencies': [],
+                    'input': {'source': 'idea'},
+                    'output': {'artifact': 'report.md'},
+                },
+            ]
+        }
+        await save_plan(atomic_plan, 'idea_fake_execute', 'plan_fake_execute')
+        await save_execution(
+            {'tasks': [{'task_id': '1', 'title': 'Atomic', 'description': 'Atomic task', 'dependencies': [], 'status': 'done'}]},
+            'idea_fake_execute',
+            'plan_fake_execute',
+        )
+        await update_research_stage(
+            rid,
+            stage='execute',
+            stage_status='completed',
+            current_idea_id='idea_fake_execute',
+            current_plan_id='plan_fake_execute',
+            error=None,
+        )
+
+    anyio.run(_seed_state)
+
+    resp = client.post(
+        f'/api/research/{rid}/stage/paper/run',
+        headers=session_headers,
+        json={'format': 'markdown'},
+    )
+    assert resp.status_code == 400
+    err = (resp.json() or {}).get('error', '')
+    assert 'Cannot start' in err
+    assert 'execute' in err
+    assert 'persisted outputs' in err
 
 
 def test_delete_research_cleans_execution_sandbox_and_volume(client, session_headers, monkeypatch):
@@ -189,9 +295,33 @@ def test_retry_cleans_data_but_resume_does_not(client, session_headers, monkeypa
     assert create_resp.status_code == 200
     rid = create_resp.json()['researchId']
 
-    from db import update_research_stage
-
     async def _seed_state() -> None:
+        await save_idea(
+            {
+                'idea': 'Retry resume distinction',
+                'keywords': ['retry'],
+                'papers': [],
+                'refined_idea': 'A valid refined idea.',
+            },
+            'idea_rr_distinct',
+        )
+        await save_plan(
+            {
+                'tasks': [
+                    {'task_id': '0', 'title': 'Root', 'description': 'Root task', 'dependencies': []},
+                    {
+                        'task_id': '1',
+                        'title': 'Atomic',
+                        'description': 'Atomic task',
+                        'dependencies': [],
+                        'input': {'source': 'idea'},
+                        'output': {'artifact': 'result.md'},
+                    },
+                ]
+            },
+            'idea_rr_distinct',
+            'plan_rr_distinct',
+        )
         await update_research_stage(
             rid,
             stage='execute',
@@ -235,9 +365,33 @@ def test_resume_requires_same_stage_and_stopped_or_failed(client, session_header
     assert create_resp.status_code == 200
     rid = create_resp.json()['researchId']
 
-    from db import update_research_stage
-
     async def _seed_completed_state() -> None:
+        await save_idea(
+            {
+                'idea': 'Resume guard',
+                'keywords': ['resume'],
+                'papers': [],
+                'refined_idea': 'A valid refined idea.',
+            },
+            'idea_resume_guard',
+        )
+        await save_plan(
+            {
+                'tasks': [
+                    {'task_id': '0', 'title': 'Root', 'description': 'Root task', 'dependencies': []},
+                    {
+                        'task_id': '1',
+                        'title': 'Atomic',
+                        'description': 'Atomic task',
+                        'dependencies': [],
+                        'input': {'source': 'idea'},
+                        'output': {'artifact': 'result.md'},
+                    },
+                ]
+            },
+            'idea_resume_guard',
+            'plan_resume_guard',
+        )
         await update_research_stage(
             rid,
             stage='execute',

@@ -13,6 +13,7 @@ from .llm import (
     refine_idea_from_papers_stream,
 )
 from .llm.executor import OnThinkingCallback  # 统一 on_thinking 签名
+from .literature import search_literature
 
 __all__ = [
     "collect_literature",
@@ -33,9 +34,9 @@ async def collect_literature(
     abort_event: Optional[Any] = None,
 ) -> dict:
     """
-    根据模糊 idea 收集 arXiv 文献并生成可执行 refined idea。
+    根据模糊 idea 收集文献并生成可执行 refined idea。
 
-    流程：Keywords（LLM 提取关键词）-> arXiv 检索 -> Refine（LLM 基于文献生成 refined idea）。
+    流程：Keywords（LLM 提取关键词）-> 文献检索（OpenAlex/arXiv）-> Refine（LLM 基于文献生成 refined idea）。
 
     Args:
         idea: 用户输入的模糊研究想法
@@ -55,16 +56,21 @@ async def collect_literature(
     if not keywords:
         keywords = ["research"]
     logger.info("Idea collect keywords extracted count={} keywords={}", len(keywords), keywords)
-    # 2. arXiv 检索
+    # 2. 文献检索（默认 OpenAlex，可切换 arXiv）
     query = "+".join(str(k).replace(" ", "+") for k in keywords)[:100]
     if not query:
         query = "research"
-    logger.info("Idea collect search query='{}'", query)
-    papers = await arxiv.search_arxiv(query, limit=limit)
+    source, papers = await search_literature(
+        query,
+        limit=limit,
+        cat=None,
+        source=(api_config or {}).get("literatureSource"),
+    )
+    logger.info("Idea collect search source={} query='{}'", source, query)
     if not papers:
         logger.warning("Idea collect blocked: no papers retrieved for query='{}'", query)
         raise ValueError(
-            f"No papers retrieved from arXiv for query '{query}'. Refine stage is blocked; please adjust the idea/keywords or retry later."
+            f"No papers retrieved from {source} for query '{query}'. Refine stage is blocked; please adjust the idea/keywords or retry later."
         )
     logger.info("Idea collect papers retrieved count={} first_title='{}'", len(papers), (papers[0].get("title") or "")[:120])
     # 3. Refine：基于 idea + papers 生成可执行 refined idea

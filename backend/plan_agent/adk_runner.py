@@ -128,7 +128,7 @@ async def run_plan_agent_adk(
             },
         )
 
-    await run_adk_agent_loop(
+    turn_count = await run_adk_agent_loop(
         app_name="maars_plan",
         agent_name="plan_agent",
         model=model,
@@ -144,4 +144,9 @@ async def run_plan_agent_adk(
     )
 
     plan["tasks"] = plan_state["all_tasks"]
-    return {"tasks": plan_state["all_tasks"]}
+    return {
+        "tasks": plan_state["all_tasks"],
+        "pending_queue": list(plan_state.get("pending_queue") or []),
+        "finished": bool(finish_result) and not (plan_state.get("pending_queue") or []),
+        "turn_count": int(turn_count or 0),
+    }

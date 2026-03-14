@@ -17,7 +17,7 @@ from shared.constants import TEMP_ANALYSIS, TEMP_EXTRACT
 from shared.llm_client import chat_completion, merge_phase_config
 from shared.skill_utils import list_skills as _list_skills, load_skill as _load_skill, read_skill_file as _read_skill_file
 
-from . import arxiv
+from .literature import search_literature
 from .llm import extract_keywords, refine_idea_from_papers
 from .llm.executor import _build_papers_context
 
@@ -379,14 +379,19 @@ async def execute_idea_agent_tool(
         query = "+".join(str(k).replace(" ", "+") for k in keywords)[:100]
         if not query:
             query = "research"
-        papers = await arxiv.search_arxiv(query, limit=lim, cat=cat)
+        source, papers = await search_literature(
+            query,
+            limit=lim,
+            cat=cat,
+            source=(api_config or {}).get("literatureSource"),
+        )
         idea_state["papers"] = papers
         summary = [
             f"[{i+1}] {p.get('title','')[:80]}..."
             for i, p in enumerate(papers[:15])
         ]
         return False, orjson.dumps(
-            {"count": len(papers), "titles": summary}, option=orjson.OPT_INDENT_2
+            {"count": len(papers), "source": source, "titles": summary}, option=orjson.OPT_INDENT_2
         ).decode("utf-8")
 
     if name == "EvaluatePapers":

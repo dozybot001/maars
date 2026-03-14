@@ -57,6 +57,17 @@ def _normalize_sandbox_subpath(path: str) -> tuple[str, str]:
     return normalized, subpath
 
 
+def _finish_output_kind(output_format: str) -> str:
+    fmt = (output_format or "").strip().lower()
+    if "markdown" in fmt or fmt in {"md", "text", "plain text", "plain-text"}:
+        return "markdown"
+    if "json" in fmt:
+        return "json"
+    if any(token in fmt for token in ("array", "object", "dict", "dictionary", "table", "csv", "matrix", "tensor", "time-series", "time series")):
+        return "structured"
+    return "markdown"
+
+
 # OpenAI function-calling tool definitions
 TOOLS = [
     {
@@ -663,7 +674,7 @@ async def run_run_command(
         return f"Error running command: {e}"
 
 
-def run_finish(output: str) -> Tuple[bool, Any]:
+def run_finish(output: str, output_format: str = "") -> Tuple[bool, Any]:
     """
     Execute Finish. Returns (True, parsed_output) on success; (False, error_msg) on parse failure.
     output: JSON string or Markdown. For JSON we parse to dict.
@@ -671,14 +682,23 @@ def run_finish(output: str) -> Tuple[bool, Any]:
     if output is None or (isinstance(output, str) and not output.strip()):
         return False, "Error: output cannot be empty"
     s = output.strip() if isinstance(output, str) else str(output)
+    expected_kind = _finish_output_kind(output_format)
     # Try JSON first
     try:
         parsed = json.loads(s)
+        if expected_kind in ("json", "structured") and isinstance(parsed, str):
+            return False, f"Error: Finish output for format '{output_format or 'structured'}' must be structured JSON, not a plain string"
+        if expected_kind == "structured" and isinstance(parsed, dict) and set(parsed.keys()) == {"content"} and isinstance(parsed.get("content"), str):
+            return False, f"Error: Finish output for format '{output_format or 'structured'}' must contain structured fields/artifact references, not a prose-only content wrapper"
         if isinstance(parsed, dict):
             return True, parsed
+        if expected_kind == "markdown":
+            return True, {"content": parsed}
         return True, {"content": parsed}
     except json.JSONDecodeError:
         pass
+    if expected_kind in ("json", "structured"):
+        return False, f"Error: Finish output for format '{output_format or 'JSON'}' must be valid JSON"
     # Treat as Markdown
     return True, {"content": s}
 
@@ -692,6 +712,7 @@ async def execute_tool(
     *,
     execution_run_id: str = "",
     docker_container_name: str = "",
+    output_format: str = "",
 ) -> Tuple[Optional[Any], str]:
     """
     Execute a tool by name. Returns (finished_output, tool_result_str).
@@ -784,7 +805,7 @@ async def execute_tool(
 
     if name == "Finish":
         out = args.get("output", "")
-        ok, val = run_finish(out)
+        ok, val = run_finish(out, output_format=output_format)
         if ok:
             return val, ""
         return None, val  # val is error message
