@@ -197,6 +197,13 @@ RunSkillScript(skill="task-output-validator", script="scripts/validate.py",
   args=["{{sandbox}}/output.json", "--criteria-json", "<JSON>"])
 ```
 
+### 3.5 项目级共享 Skill
+
+- 仓库根目录的 `AGENTS.md` 用于声明团队共享的仓库级技能入口
+- 当前共享发版技能位于 `.codex/skills/release-workflow/`
+- 当协作者在本仓库上下文中说“发版”或 `release` 时，应优先使用这份仓库内 skill，而不是个人 home 目录下的私有 skill
+- 共享 skill 适合沉淀多人协作都会重复使用的流程，例如发版、发布检查、固定格式输出等
+
 ---
 
 ## 四、Skill 扩充指南

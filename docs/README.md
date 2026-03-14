@@ -12,6 +12,7 @@
 | [设计文档](design/) | 区域职责、Thinking 区域设计 |
 | [前端脚本与模块依赖](FRONTEND_SCRIPTS.md) | 页面对应、脚本加载顺序、模块依赖关系 |
 | [Release Note 撰写标准](RELEASE_NOTE_STANDARD.md) | 版本发布说明的撰写规范 |
+| [仓库共享技能入口](../AGENTS.md) | 仓库级共享技能说明与触发入口 |
 
 ## 设计文档
 

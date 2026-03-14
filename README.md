@@ -75,6 +75,7 @@ Settings → AI Config 中切换。Paper Agent 的 Agent 模式当前为 MVP：o
 
 ```text
 maars/
+├── .codex/            # 仓库级共享 Codex skills（含发版 workflow）
 ├── backend/           # FastAPI + 实时事件桥接（前端使用 SSE）
 │   ├── api/           # 路由（idea、plan、execution、paper、research、plans、session、settings 等）
 │   ├── idea_agent/    # Idea Agent
@@ -102,3 +103,4 @@ maars/
 | [docs/workflow/](docs/workflow/) | 工作流说明（用户流程、Research 流程、四 Agent、实时事件） |
 | [docs/FRONTEND_SCRIPTS.md](docs/FRONTEND_SCRIPTS.md) | 前端脚本与模块依赖 |
 | [docs/RELEASE_NOTE_STANDARD.md](docs/RELEASE_NOTE_STANDARD.md) | Release Note 撰写标准 |
+| [AGENTS.md](AGENTS.md) | 仓库级共享技能入口（包含发版 skill） |
