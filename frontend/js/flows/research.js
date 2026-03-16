@@ -6,6 +6,8 @@
 
     const cfg = window.MAARS?.config;
     const api = window.MAARS?.api;
+    const executeUtils = window.MAARS?.researchExecuteUtils || {};
+    const navUtils = window.MAARS?.researchNavUtils || {};
     if (!cfg || !api) return;
 
     const homeView = document.getElementById('homeView');
@@ -67,6 +69,7 @@
     const executeStreamEl = document.getElementById('researchExecuteStream');
     const executeStreamBodyEl = document.getElementById('researchExecuteStreamBody');
     const executeToggleAllBtnEl = document.getElementById('researchExecuteToggleAllBtn');
+    const executeJumpLatestBtnEl = document.getElementById('researchExecuteJumpLatestBtn');
     const executeRuntimeBadgeEl = document.getElementById('researchExecutionRuntimeBadge');
     const executeRuntimeMetaEl = document.getElementById('researchExecutionRuntimeMeta');
 
@@ -86,11 +89,18 @@
         treeData: [],
         layout: null,
     };
-    let executionGraphRenderedKey = '';
+    const executionGraphHelpers = window.MAARS?.createResearchExecutionGraphHelpers?.({
+        getPayload: () => executionGraphPayload,
+        setPayload: (payload) => { executionGraphPayload = payload || { treeData: [], layout: null }; },
+        upsertTaskMeta: (task) => _upsertTaskMeta(task),
+        getStatuses: () => executeState.statuses,
+        getActiveStage: () => activeStage,
+    });
 
     let executeState = {
         order: [],
         statuses: new Map(),
+        latestStepBByTask: new Map(),
         recentOutputsByTask: new Map(),
         taskMetaById: new Map(),
         messages: [],
@@ -100,6 +110,8 @@
     };
     let executionRuntimeStatus = null;
     let runtimeStatusRequestId = 0;
+    let executeElapsedTimerId = 0;
+    let executeAutoFollow = true;
     let executeSplitRatio = 80;
     const EXECUTE_TIMELINE_MAX_MESSAGES = 2000;
     let currentStageState = {
@@ -166,13 +178,15 @@
             const status = String(info.status || 'idle').trim() || 'idle';
             const stageStarted = !!currentStageState?.[stage]?.started;
             const isRunningSelf = status === 'running';
+            // Also enable Stop when the execute runner is still active (runner may have outlived its pipeline task)
+            const executeRunnerActive = stage === 'execute' && !!(executionRuntimeStatus?.running);
             const hasOtherRunning = !!runningStage && runningStage !== stage;
             const blocked = hasOtherRunning;
             const prereqOk = _isStagePrerequisiteCompleted(stage);
             if (actions?.run) actions.run.disabled = blocked || !prereqOk;
             if (actions?.resume) actions.resume.disabled = blocked || !prereqOk || !(status === 'stopped' || status === 'failed');
             if (actions?.retry) actions.retry.disabled = blocked || !prereqOk || !(stageStarted || status === 'failed' || status === 'stopped');
-            if (actions?.stop) actions.stop.disabled = blocked || !isRunningSelf;
+            if (actions?.stop) actions.stop.disabled = blocked || !(isRunningSelf || executeRunnerActive);
         });
     }
 
@@ -263,6 +277,7 @@
         window.MAARS = window.MAARS || {};
         window.MAARS.researchCurrentStage = s;
         renderStageButtons(s);
+        _syncExecuteElapsedTicker();
 
         // Panels
         _setPanelActive(panelRefine, s === 'refine');
@@ -284,7 +299,7 @@
         } else if (s === 'execute') {
             _applyExecuteSplitRatio();
             setTreeView('execution');
-            ensureExecutionGraphRendered();
+            scheduleExecutionGraphRender({ force: true, delays: [0, 100, 320, 700] });
             renderExecuteStream();
             refreshExecutionRuntimeStatus();
         }
@@ -307,16 +322,10 @@
     }
 
     function _stringifyOutput(val) {
-        if (val == null) return '';
-        if (typeof val === 'string') return val;
-        try {
-            if (typeof val === 'object' && val !== null && 'content' in val && typeof val.content === 'string') return val.content;
-        } catch (_) { }
-        try {
-            return JSON.stringify(val, null, 2);
-        } catch (_) {
-            return String(val);
+        if (typeof executeUtils.stringifyOutput === 'function') {
+            return executeUtils.stringifyOutput(val);
         }
+        return String(val || '');
     }
 
     function _ensureTaskInOrder(taskId) {
@@ -350,12 +359,14 @@
         const id = String(task?.task_id || '').trim();
         if (!id) return;
         const current = executeState.taskMetaById.get(id) || {};
+        const outputFormat = String(task?.output?.format || task?.outputFormat || current.outputFormat || '').trim();
         executeState.taskMetaById.set(id, {
             ...current,
             task_id: id,
             title: String(task?.title || current.title || '').trim(),
             description: String(task?.description || task?.objective || current.description || '').trim(),
             status: String(task?.status || current.status || '').trim(),
+            outputFormat,
         });
         _ensureTaskInOrder(id);
     }
@@ -378,72 +389,57 @@
     }
 
     function _statusLabel(status) {
-        const s = String(status || '').trim() || 'undone';
-        const map = {
-            undone: 'Pending',
-            doing: 'Running',
-            done: 'Done',
-            'execution-failed': 'Execution Failed',
-            'validation-failed': 'Validation Failed',
-        };
-        return map[s] || s;
+        if (typeof executeUtils.statusLabel === 'function') {
+            return executeUtils.statusLabel(status);
+        }
+        return String(status || 'undone');
     }
 
     function _statusTone(status) {
-        const s = String(status || '').trim();
-        if (s === 'doing') return 'doing';
-        if (s === 'done') return 'done';
-        if (s === 'execution-failed' || s === 'validation-failed') return 'failed';
+        if (typeof executeUtils.statusTone === 'function') {
+            return executeUtils.statusTone(status);
+        }
         return 'pending';
+    }
+
+    function _extractValidationDirectReason(reportText) {
+        if (typeof executeUtils.extractValidationDirectReason === 'function') {
+            return executeUtils.extractValidationDirectReason(reportText);
+        }
+        return 'Validation gate failed.';
+    }
+
+    function _buildValidationSummaryBody(taskId, detail, meta, options = {}) {
+        if (typeof executeUtils.buildValidationSummaryBody === 'function') {
+            return executeUtils.buildValidationSummaryBody({
+                taskId,
+                detail,
+                meta,
+                statusLabel: options.statusLabel,
+                latestStepBByTask: executeState.latestStepBByTask,
+            });
+        }
+        return 'Validation report unavailable.';
     }
 
     function renderExecutionRuntimeStatus(status) {
         executionRuntimeStatus = status && typeof status === 'object' ? status : null;
         if (!executeRuntimeBadgeEl || !executeRuntimeMetaEl) return;
 
-        const next = executionRuntimeStatus || {};
-        const enabled = !!next.enabled;
-        const connected = !!next.connected;
-        const containerRunning = !!next.containerRunning;
-        const running = !!next.running;
+        const viewModel = (typeof executeUtils.buildRuntimeStatusViewModel === 'function')
+            ? executeUtils.buildRuntimeStatusViewModel(executionRuntimeStatus)
+            : {
+                badgeText: 'Docker: checking...',
+                tone: 'is-warn',
+                shortMetaText: '',
+                detailMetaText: '',
+            };
 
-        let badgeText = 'Docker: checking…';
-        let tone = 'is-warn';
-        if (!enabled) {
-            badgeText = 'Docker: disabled';
-            tone = 'is-warn';
-        } else if (!next.available) {
-            badgeText = 'Docker: not found';
-            tone = 'is-error';
-        } else if (!connected) {
-            badgeText = 'Docker: disconnected';
-            tone = 'is-error';
-        } else if (containerRunning && running) {
-            badgeText = 'Docker: running';
-            tone = 'is-ok';
-        } else if (containerRunning) {
-            badgeText = 'Docker: connected';
-            tone = 'is-ok';
-        } else {
-            badgeText = 'Docker: ready';
-            tone = 'is-warn';
-        }
-
-        executeRuntimeBadgeEl.textContent = badgeText;
+        executeRuntimeBadgeEl.textContent = viewModel.badgeText;
         executeRuntimeBadgeEl.classList.remove('is-ok', 'is-warn', 'is-error');
-        executeRuntimeBadgeEl.classList.add(tone);
-
-        const metaParts = [];
-        if (next.serverVersion) metaParts.push(`Engine ${next.serverVersion}`);
-        if (next.image) metaParts.push(`Image ${next.image}`);
-        if (next.volumeName) metaParts.push(`Volume ${next.volumeName}`);
-        if (next.executionRunId) metaParts.push(`Run ${next.executionRunId}`);
-        if (next.srcDir) metaParts.push(`Src ${next.srcDir}`);
-        if (next.stepDir) metaParts.push(`Step ${next.stepDir}`);
-        else if (next.executionRunId) metaParts.push('Step per task');
-        if (next.error) metaParts.push(String(next.error).trim());
-        if (!metaParts.length && !enabled) metaParts.push('Enable Task Agent mode to use Docker-backed execution.');
-        executeRuntimeMetaEl.textContent = metaParts.join(' · ');
+        executeRuntimeBadgeEl.classList.add(viewModel.tone);
+        executeRuntimeMetaEl.textContent = viewModel.shortMetaText;
+        executeRuntimeMetaEl.title = viewModel.detailMetaText;
     }
 
     async function refreshExecutionRuntimeStatus(explicitIds) {
@@ -495,6 +491,7 @@
             id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
             at: Date.now(),
             ...message,
+            startedAt: Number(message?.startedAt) || Date.now(),
             attempt: taskId ? attempt : undefined,
         });
         if (executeState.messages.length > EXECUTE_TIMELINE_MAX_MESSAGES) {
@@ -502,7 +499,63 @@
         }
     }
 
+    function _isExecuteStreamNearBottom() {
+        if (!executeStreamBodyEl) return true;
+        return (executeStreamBodyEl.scrollHeight - executeStreamBodyEl.scrollTop - executeStreamBodyEl.clientHeight) < 48;
+    }
+
+    function _scrollExecuteStreamToLatest() {
+        if (!executeStreamBodyEl) return;
+        executeStreamBodyEl.scrollTop = executeStreamBodyEl.scrollHeight;
+    }
+
+    function _updateExecuteJumpLatestButton() {
+        if (!executeJumpLatestBtnEl || !executeStreamBodyEl) return;
+        const hasMessages = (executeState.messages || []).length > 0;
+        const shouldShow = hasMessages && !executeAutoFollow && !_isExecuteStreamNearBottom();
+        executeJumpLatestBtnEl.hidden = !shouldShow;
+    }
+
+    function _formatElapsedDuration(ms) {
+        if (typeof executeUtils.formatElapsedDuration === 'function') {
+            return executeUtils.formatElapsedDuration(ms);
+        }
+        return '0s';
+    }
+
+    function _hasActiveExecuteBubble() {
+        return executeState.messages.some((msg) => {
+            if (msg.kind !== 'assistant') return false;
+            const taskId = String(msg.taskId || '').trim();
+            if (!taskId) return false;
+            const status = String(executeState.statuses.get(taskId) || '').trim();
+            return status === 'doing' || status === 'validating';
+        });
+    }
+
+    function _syncExecuteElapsedTicker() {
+        const shouldRun = activeStage === 'execute' && _hasActiveExecuteBubble();
+        if (!shouldRun) {
+            if (executeElapsedTimerId) {
+                window.clearInterval(executeElapsedTimerId);
+                executeElapsedTimerId = 0;
+            }
+            return;
+        }
+        if (executeElapsedTimerId) return;
+        executeElapsedTimerId = window.setInterval(() => {
+            if (activeStage !== 'execute' || !_hasActiveExecuteBubble()) {
+                _syncExecuteElapsedTicker();
+                return;
+            }
+            renderExecuteStream();
+        }, 1000);
+    }
+
     function _getAttemptKey(taskId, attempt) {
+        if (typeof executeUtils.getAttemptKey === 'function') {
+            return executeUtils.getAttemptKey(taskId, attempt);
+        }
         return `${String(taskId || '').trim()}:${Number(attempt) || 1}`;
     }
 
@@ -517,97 +570,61 @@
         const id = String(taskId || '').trim();
         const n = Number(attempt);
         if (!id || !Number.isFinite(n) || n < 1) return;
-        executeState.currentAttemptByTask.set(id, n);
-        const key = _getAttemptKey(id, n);
+        const current = _getCurrentAttempt(id);
+        const next = Math.max(current, n);
+        executeState.currentAttemptByTask.set(id, next);
+        const key = _getAttemptKey(id, next);
         if (!executeState.attemptExpandedById.has(key)) {
             executeState.attemptExpandedById.set(key, true);
         }
     }
 
     function _getAttemptStatus(taskId, attempt, msgs, fallbackStatus) {
-        const list = Array.isArray(msgs) ? msgs : [];
-        if (list.some((m) => m.status === 'done')) return 'done';
-        if (list.some((m) => m.status === 'validation-failed')) return 'validation-failed';
-        if (list.some((m) => m.status === 'execution-failed')) return 'execution-failed';
-        if (list.some((m) => m.kind === 'error')) return 'validation-failed';
-        if (Number(attempt) < _getCurrentAttempt(taskId)) return 'validation-failed';
+        if (typeof executeUtils.getAttemptStatus === 'function') {
+            return executeUtils.getAttemptStatus({
+                taskId,
+                attempt,
+                msgs,
+                fallbackStatus,
+                currentAttempt: _getCurrentAttempt(taskId),
+            });
+        }
         return String(fallbackStatus || 'doing').trim() || 'doing';
     }
 
     function _getAttemptSummary(msgs) {
-        const list = Array.isArray(msgs) ? msgs : [];
-        const source = [...list].reverse().find((m) => m.kind === 'error' || (m.kind === 'system' && /retry|failed|error/i.test(String(m.title || ''))))
-            || list[list.length - 1];
-        const text = String(source?.body || '').trim();
-        if (!text) return '';
-        const firstLine = text.split('\n').map((line) => line.trim()).filter(Boolean)[0] || text;
-        return firstLine.length > 180 ? `${firstLine.slice(0, 180)}...` : firstLine;
-    }
-
-    function _resolveExecutionGraphPayload() {
-        if (executionGraphPayload?.layout && Array.isArray(executionGraphPayload?.treeData) && executionGraphPayload.treeData.length) {
-            return executionGraphPayload;
+        if (typeof executeUtils.getAttemptSummary === 'function') {
+            return executeUtils.getAttemptSummary(msgs);
         }
-        const sharedState = window.MAARS?.state || {};
-        const layoutState = sharedState.executionLayout;
-        const treeData = Array.isArray(layoutState?.treeData) ? layoutState.treeData : [];
-        const layout = layoutState?.layout || null;
-        if (!treeData.length || !layout) return null;
-        executionGraphPayload = { treeData, layout };
-        treeData.forEach(_upsertTaskMeta);
-        return executionGraphPayload;
+        return '';
     }
 
-    function _buildExecutionGraphRenderKey(payload) {
-        if (!payload?.layout || !Array.isArray(payload?.treeData)) return '';
-        const ids = payload.treeData.map((t) => String(t?.task_id || '')).filter(Boolean).join('|');
-        const width = Number(payload.layout?.width || 0);
-        const height = Number(payload.layout?.height || 0);
-        return `${ids}::${width}x${height}`;
-    }
-
-    function _syncExecutionGraphNodeStatuses() {
-        const updates = [];
-        executeState.statuses.forEach((status, taskId) => {
-            const id = String(taskId || '').trim();
-            const s = String(status || '').trim();
-            if (!id) return;
-            updates.push({ task_id: id, status: s || 'undone' });
-        });
-        if (!updates.length) return;
-        window.MAARS?.taskTree?.updateTaskStates?.(updates);
-    }
-
-    function ensureExecutionGraphRendered(force = false) {
-        if (activeStage !== 'execute') return;
-        const payload = _resolveExecutionGraphPayload();
-        if (!payload?.layout || !Array.isArray(payload?.treeData) || !payload.treeData.length) return;
-        const nextKey = _buildExecutionGraphRenderKey(payload);
-        const existingNodes = document.querySelectorAll('.plan-agent-execution-tree-area .tasks-tree .tree-task').length;
-        if (!force && executionGraphRenderedKey === nextKey && existingNodes > 0) {
-            _syncExecutionGraphNodeStatuses();
-            return;
+    function _replayPersistedStepEvents(stepEvents) {
+        if (typeof executeUtils.replayPersistedStepEvents === 'function') {
+            executeUtils.replayPersistedStepEvents(stepEvents);
         }
-        const render = () => window.MAARS?.taskTree?.renderExecutionTree?.(payload.treeData, payload.layout);
-        if (typeof window.requestAnimationFrame === 'function') {
-            window.requestAnimationFrame(() => {
-                render();
-                executionGraphRenderedKey = nextKey;
-                _syncExecutionGraphNodeStatuses();
-            });
-            return;
-        }
-        render();
-        executionGraphRenderedKey = nextKey;
-        _syncExecutionGraphNodeStatuses();
     }
 
-    function _upsertExecuteThinkingMessage(taskId, operation, body, scheduleInfo) {
+    function scheduleExecutionGraphRender(options = {}) {
+        executionGraphHelpers?.schedule?.(options);
+    }
+
+    function ensureExecutionGraphRendered(force = false, options = {}) {
+        executionGraphHelpers?.ensure?.(force, options);
+    }
+
+    function invalidateExecutionGraphRender() {
+        executionGraphHelpers?.invalidate?.();
+    }
+
+    function _upsertExecuteThinkingMessage(taskId, operation, body, scheduleInfo, attemptHint) {
         const id = String(taskId || '').trim();
         if (!id) return;
         const op = String(operation || 'Execute').trim() || 'Execute';
         const text = String(body || '').trim();
         if (!text) return;
+        const hintedAttempt = Number(attemptHint || scheduleInfo?.attempt) || 0;
+        const currentAttempt = Math.max(_getCurrentAttempt(id), hintedAttempt, 1);
 
         const turn = Number(scheduleInfo?.turn);
         const maxTurns = Number(scheduleInfo?.max_turns);
@@ -635,18 +652,30 @@
         const bodyText = Number.isFinite(turn) && Number.isFinite(maxTurns)
             ? `[${turn}/${maxTurns}] ${text}`
             : text;
+        const dedupeKey = Number.isFinite(turn)
+            ? `thinking:${id}:${currentAttempt}:${op}:${toolName}:${turn}:${bodyText.slice(0, 240)}`
+            : '';
 
         const last = executeState.messages[executeState.messages.length - 1];
         if (
             last
             && last.taskId === id
+            && Number(last.attempt || 1) === currentAttempt
             && last.kind === 'assistant'
             && String(last.title || '') === title
-            && String(last.body || '') === bodyText
             && String(last.tokenMetaText || '') === tokenMetaText
         ) {
-            const nextRepeat = Number(last.repeatCount || 1) + 1;
-            last.repeatCount = nextRepeat;
+            const previous = String(last.body || '').trim();
+            if (previous && previous !== bodyText) {
+                const merged = `${previous}\n${bodyText}`;
+                // Keep one continuous bubble but prevent unbounded growth in long streams.
+                last.body = merged.length > 12000 ? merged.slice(-12000) : merged;
+            } else if (!previous) {
+                last.body = bodyText;
+            } else {
+                const nextRepeat = Number(last.repeatCount || 1) + 1;
+                last.repeatCount = nextRepeat;
+            }
             last.at = Date.now();
             return;
         }
@@ -658,13 +687,17 @@
             body: bodyText,
             tokenMetaText,
             status: executeState.statuses.get(id) || 'doing',
+            attempt: currentAttempt,
+            dedupeKey,
             repeatCount: 1,
+            startedAt: Date.now(),
         });
     }
 
-    function _seedExecutionState(treeData, execution, outputs) {
+    function _seedExecutionState(treeData, execution, outputs, options = {}) {
         executeState.order = [];
         executeState.statuses = new Map();
+        executeState.latestStepBByTask = new Map();
         executeState.recentOutputsByTask = new Map();
         executeState.taskMetaById = new Map();
         executeState.messages = [];
@@ -681,13 +714,16 @@
             _setCurrentAttempt(task.task_id, 1);
         });
 
+        const skipOutputSeed = options?.skipOutputSeed === true;
         const outputMap = outputs && typeof outputs === 'object' ? outputs : {};
-        Object.entries(outputMap).forEach(([taskId, output]) => {
-            const text = _stringifyOutput(output).trim();
-            if (!text) return;
-            _ensureTaskInOrder(taskId);
-            _pushRecentOutput(taskId, text);
-        });
+        if (!skipOutputSeed) {
+            Object.entries(outputMap).forEach(([taskId, output]) => {
+                const text = _stringifyOutput(output).trim();
+                if (!text) return;
+                _ensureTaskInOrder(taskId);
+                _pushRecentOutput(taskId, text);
+            });
+        }
 
         _appendExecuteMessage({
             kind: 'system',
@@ -702,33 +738,39 @@
             const meta = _getTaskMetaById(taskId) || {};
             const status = executeState.statuses.get(taskId) || meta.status || 'undone';
 
-            const outputsForTask = executeState.recentOutputsByTask.get(taskId) || [];
-            if (outputsForTask.length) {
-                _appendExecuteMessage({
-                    taskId,
-                    kind: status === 'execution-failed' || status === 'validation-failed' ? 'error' : 'output',
-                    title: meta.title || taskId,
-                    body: outputsForTask[outputsForTask.length - 1],
-                    status,
-                    dedupeKey: `seed-output:${taskId}`,
-                });
+            if (!skipOutputSeed) {
+                const outputsForTask = executeState.recentOutputsByTask.get(taskId) || [];
+                if (outputsForTask.length) {
+                    _appendExecuteMessage({
+                        taskId,
+                        kind: status === 'execution-failed' || status === 'validation-failed' ? 'error' : 'output',
+                        title: meta.title || taskId,
+                        body: outputsForTask[outputsForTask.length - 1],
+                        status,
+                        dedupeKey: `seed-output:${taskId}`,
+                    });
+                }
             }
         });
     }
 
     function _resetExecuteTimelineForNewRun() {
         executeState.messages = [];
+        executeState.latestStepBByTask = new Map();
         executeState.recentOutputsByTask = new Map();
         executeState.currentAttemptByTask = new Map();
         executeState.attemptExpandedById = new Map();
+        executeAutoFollow = true;
         executeState.order.forEach((taskId) => {
             _setCurrentAttempt(taskId, 1);
         });
+        _updateExecuteJumpLatestButton();
+        _syncExecuteElapsedTicker();
     }
 
     function renderExecuteStream() {
         if (!executeStreamBodyEl) return;
-        const wasNearBottom = (executeStreamBodyEl.scrollHeight - executeStreamBodyEl.scrollTop - executeStreamBodyEl.clientHeight) < 48;
+        const wasNearBottom = _isExecuteStreamNearBottom();
         const messages = Array.isArray(executeState.messages) ? executeState.messages : [];
 
         executeStreamBodyEl.textContent = '';
@@ -906,6 +948,9 @@
 
                     const attemptBodyEl = document.createElement('div');
                     attemptBodyEl.className = 'research-execute-attempt-body';
+                    const activeAssistantMsg = (attemptNumber === latestAttempt && (attemptStatus === 'doing' || attemptStatus === 'validating'))
+                        ? [...attemptMsgs].reverse().find((m) => m.kind === 'assistant') || null
+                        : null;
 
                     attemptMsgs.forEach((msg) => {
                         const msgEl = document.createElement('div');
@@ -939,7 +984,16 @@
                             if (msg.tokenMetaText) {
                                 const tokenMetaEl = document.createElement('div');
                                 tokenMetaEl.className = 'research-execute-message-token-meta';
-                                tokenMetaEl.textContent = String(msg.tokenMetaText || '').trim();
+                                const tokenMetaBits = [String(msg.tokenMetaText || '').trim()].filter(Boolean);
+                                if (msg === activeAssistantMsg) {
+                                    tokenMetaBits.push(`elapsed ${_formatElapsedDuration(Date.now() - Number(msg.startedAt || msg.at || Date.now()))}`);
+                                }
+                                tokenMetaEl.textContent = tokenMetaBits.join(' · ');
+                                bubbleEl.appendChild(tokenMetaEl);
+                            } else if (msg === activeAssistantMsg) {
+                                const tokenMetaEl = document.createElement('div');
+                                tokenMetaEl.className = 'research-execute-message-token-meta';
+                                tokenMetaEl.textContent = `elapsed ${_formatElapsedDuration(Date.now() - Number(msg.startedAt || msg.at || Date.now()))}`;
                                 bubbleEl.appendChild(tokenMetaEl);
                             }
                         }
@@ -1026,24 +1080,43 @@
             }
         });
 
-        if (wasNearBottom || executeStreamBodyEl.childElementCount <= 2) {
-            executeStreamBodyEl.scrollTop = executeStreamBodyEl.scrollHeight;
+        if (executeAutoFollow || (wasNearBottom && executeStreamBodyEl.childElementCount <= 2)) {
+            _scrollExecuteStreamToLatest();
         }
         _updateExecuteToggleAllButton();
+        _updateExecuteJumpLatestButton();
+        _syncExecuteElapsedTicker();
     }
 
     function initExecuteStreamControls() {
-        if (!executeToggleAllBtnEl) return;
-        executeToggleAllBtnEl.addEventListener('click', () => {
-            const taskIds = executeState.order || [];
-            if (!taskIds.length) return;
-            const allCollapsed = taskIds.every((taskId) => executeState.taskExpandedById.get(taskId) === false);
-            _setAllExecuteTaskExpanded(allCollapsed);
-        });
+        if (executeToggleAllBtnEl) {
+            executeToggleAllBtnEl.addEventListener('click', () => {
+                const taskIds = executeState.order || [];
+                if (!taskIds.length) return;
+                const allCollapsed = taskIds.every((taskId) => executeState.taskExpandedById.get(taskId) === false);
+                _setAllExecuteTaskExpanded(allCollapsed);
+            });
+        }
+        if (executeJumpLatestBtnEl) {
+            executeJumpLatestBtnEl.addEventListener('click', () => {
+                executeAutoFollow = true;
+                _scrollExecuteStreamToLatest();
+                _updateExecuteJumpLatestButton();
+            });
+        }
+        if (executeStreamBodyEl) {
+            executeStreamBodyEl.addEventListener('scroll', () => {
+                const nearBottom = _isExecuteStreamNearBottom();
+                executeAutoFollow = nearBottom;
+                _updateExecuteJumpLatestButton();
+            }, { passive: true });
+        }
         _updateExecuteToggleAllButton();
+        _updateExecuteJumpLatestButton();
     }
 
     function _getQueryParam(name) {
+        if (typeof navUtils.getQueryParam === 'function') return navUtils.getQueryParam(name);
         try {
             const params = new URLSearchParams(window.location.search || '');
             return (params.get(name) || '').trim();
@@ -1053,10 +1126,9 @@
     }
 
     function _getResearchIdFromUrl() {
-        // New routing: research_detail.html?researchId=...
+        if (typeof navUtils.getResearchIdFromUrl === 'function') return navUtils.getResearchIdFromUrl();
         const byQuery = _getQueryParam('researchId') || _getQueryParam('rid');
         if (byQuery) return byQuery;
-        // Back-compat: old hash route #/r/<id>
         const hash = (window.location.hash || '').replace(/^#/, '');
         const m = hash.match(/^\/r\/(.+)$/);
         if (m) return decodeURIComponent(m[1]);
@@ -1064,16 +1136,27 @@
     }
 
     function navigateToCreateResearch() {
-        // Dedicated create page
+        if (typeof navUtils.navigateToCreateResearch === 'function') {
+            navUtils.navigateToCreateResearch();
+            return;
+        }
         window.location.href = 'research.html';
     }
 
     function navigateToResearch(researchId) {
+        if (typeof navUtils.navigateToResearch === 'function') {
+            navUtils.navigateToResearch(researchId);
+            return;
+        }
         if (!researchId) return;
         window.location.href = `research_detail.html?researchId=${encodeURIComponent(researchId)}`;
     }
 
     function _scrollToDetails() {
+        if (typeof navUtils.scrollToDetails === 'function') {
+            navUtils.scrollToDetails();
+            return;
+        }
         const host = document.getElementById('researchDetailHost');
         if (!host) return;
         host.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1093,7 +1176,8 @@
         if (!treeTabButtons.length) return;
         treeTabButtons.forEach((btn) => {
             btn.addEventListener('click', () => {
-                const view = btn.getAttribute('data-view') || 'decomposition';
+                const view = String(btn.getAttribute('data-view') || '').trim();
+                if (!view) return;
                 setTreeView(view);
             });
         });
@@ -1174,6 +1258,7 @@
         const plan = data?.plan || null;
         const execution = data?.execution || null;
         const outputs = data?.outputs || {};
+        const stepEvents = data?.stepEvents || { runId: '', events: [] };
         const paper = data?.paper || null;
 
         if (breadcrumbEl) breadcrumbEl.textContent = 'Research';
@@ -1269,7 +1354,7 @@
                             treeData: Array.isArray(layoutJson.layout?.treeData) ? layoutJson.layout.treeData : [],
                             layout: layoutJson.layout?.layout || null,
                         };
-                        executionGraphRenderedKey = '';
+                        invalidateExecutionGraphRender();
                     }
                 }
             } catch (_) { }
@@ -1288,9 +1373,15 @@
             },
         }));
 
-        _seedExecutionState(treePayload.treeData, executionForRestore, outputs);
-        if (executionGraphPayload?.layout && activeStage === 'execute') {
-            ensureExecutionGraphRendered();
+        const hasPersistedTimeline = Array.isArray(stepEvents?.events) && stepEvents.events.length > 0;
+        _seedExecutionState(treePayload.treeData, executionForRestore, outputs, {
+            skipOutputSeed: hasPersistedTimeline,
+        });
+        if (hasPersistedTimeline) {
+            _replayPersistedStepEvents(stepEvents);
+        }
+        if (executionGraphPayload?.layout) {
+            scheduleExecutionGraphRender({ force: true, allowInactive: true, delays: [0, 100, 320, 700] });
         }
         if (activeStage === 'execute') renderExecuteStream();
         refreshExecutionRuntimeStatus({ ideaId, planId });
@@ -1361,7 +1452,7 @@
                 if (stage === 'execute') {
                     _resetExecuteTimelineForNewRun();
                     if (activeStage === 'execute') {
-                        ensureExecutionGraphRendered();
+                        scheduleExecutionGraphRender({ force: true, delays: [0, 100, 320, 700] });
                         renderExecuteStream();
                     }
                 }
@@ -1376,7 +1467,7 @@
                 if (stage === 'execute') {
                     _resetExecuteTimelineForNewRun();
                     if (activeStage === 'execute') {
-                        ensureExecutionGraphRendered();
+                        scheduleExecutionGraphRender({ force: true, delays: [0, 100, 320, 700] });
                         renderExecuteStream();
                     }
                 }
@@ -1395,7 +1486,7 @@
         document.addEventListener('maars:task-start', () => {
             setStageStarted('execute', true);
             if (activeStage === 'execute') {
-                ensureExecutionGraphRendered();
+                scheduleExecutionGraphRender({ force: true, delays: [0, 100, 320, 700] });
                 renderExecuteStream();
             }
         });
@@ -1489,7 +1580,7 @@
                 // Task descriptions are shown in task-started event, status changes are shown in status labels
             });
             if (activeStage === 'execute') {
-                ensureExecutionGraphRendered();
+                scheduleExecutionGraphRender();
                 renderExecuteStream();
             }
         });
@@ -1498,15 +1589,20 @@
             const d = e?.detail || {};
             const taskId = String(d.taskId || d.task_id || '').trim();
             const chunk = String(d.chunk || '').trim();
+            const operation = String(d.operation || 'Execute').trim() || 'Execute';
             if (!taskId || !chunk) return;
+
+            // Keep validation/Step-B details in the final failure summary bubble only.
+            if (/^validate$/i.test(operation) || /^step-b$/i.test(operation)) return;
 
             _ensureTaskInOrder(taskId);
             _setCurrentAttempt(taskId, Number(d.attempt || d?.scheduleInfo?.attempt) || _getCurrentAttempt(taskId));
             _upsertExecuteThinkingMessage(
                 taskId,
-                d.operation || 'Execute',
+                operation,
                 chunk,
                 d.scheduleInfo || null,
+                Number(d.attempt || d?.scheduleInfo?.attempt) || 0,
             );
 
             if (activeStage === 'execute') {
@@ -1539,7 +1635,7 @@
             });
 
             if (activeStage === 'execute') {
-                ensureExecutionGraphRendered();
+                scheduleExecutionGraphRender();
                 renderExecuteStream();
             }
         });
@@ -1553,14 +1649,17 @@
             const outputText = _stringifyOutput(d.output);
             _pushRecentOutput(taskId, outputText);
             const meta = _getTaskMetaById(taskId) || {};
+            const attemptNumber = _getCurrentAttempt(taskId);
             _appendExecuteMessage({
                 taskId,
                 kind: 'output',
                 title: meta.title || taskId,
                 body: outputText,
-                attempt: _getCurrentAttempt(taskId),
+                attempt: attemptNumber,
                 status: executeState.statuses.get(taskId) || meta.status || '',
+                dedupeKey: `output:${taskId}:${attemptNumber}:${outputText.slice(0, 120)}`,
             });
+
             if (activeStage === 'execute') {
                 renderExecuteStream();
             }
@@ -1575,24 +1674,23 @@
             executeState.statuses.set(taskId, 'done');
             const meta = _getTaskMetaById(taskId) || {};
             const validated = !!d.validated;
-            const report = String(d.validationReport || '').trim();
-
-            let body = 'Task completed successfully.';
-            if (validated && report) {
-                body = report.length > 500 ? `${report.slice(0, 500)}...` : report;
-            }
+            const attemptNumber = _getCurrentAttempt(taskId);
+            const body = validated
+                ? _buildValidationSummaryBody(taskId, d, meta, { statusLabel: 'PASS' })
+                : 'Task completed successfully.';
 
             _appendExecuteMessage({
                 taskId,
                 kind: 'system',
-                title: `${taskId} ${validated ? 'validated' : 'completed'} · Attempt ${_getCurrentAttempt(taskId)}`,
+                title: `${taskId} ${validated ? 'validation summary' : 'completed'} · Attempt ${attemptNumber}`,
                 body,
-                attempt: _getCurrentAttempt(taskId),
+                attempt: attemptNumber,
                 status: 'done',
+                dedupeKey: validated ? `validation-pass:${taskId}:${attemptNumber}` : '',
             });
 
             if (activeStage === 'execute') {
-                ensureExecutionGraphRendered();
+                scheduleExecutionGraphRender();
                 renderExecuteStream();
             }
         });
@@ -1609,7 +1707,7 @@
                 if (nextStatus) executeState.statuses.set(id, nextStatus);
             });
             if (activeStage === 'execute') {
-                ensureExecutionGraphRendered();
+                scheduleExecutionGraphRender();
                 renderExecuteStream();
             }
             refreshExecutionRuntimeStatus();
@@ -1631,7 +1729,7 @@
             });
             executeState.statuses.set(taskId, 'done');
             if (activeStage === 'execute') {
-                ensureExecutionGraphRendered();
+                scheduleExecutionGraphRender();
                 renderExecuteStream();
             }
             refreshExecutionRuntimeStatus();
@@ -1639,6 +1737,9 @@
 
         document.addEventListener('maars:task-error', (e) => {
             const d = e?.detail || {};
+            // fatal=true comes from _trigger_fail_fast after _retry_or_fail already emitted
+            // a full validation summary — skip to avoid duplicate bubble
+            if (d.fatal === true) return;
             const taskId = String(d.taskId || d.task_id || '').trim();
             const errorText = String(d.error || '').trim();
             const phase = String(d.phase || '').trim();
@@ -1661,20 +1762,27 @@
             const terminalStatus = phase === 'validation' ? 'validation-failed' : 'execution-failed';
             const currentStatus = taskId ? (executeState.statuses.get(taskId) || '') : '';
             const nextStatus = willRetry ? (currentStatus || 'doing') : terminalStatus;
+            const isValidationPhase = phase === 'validation';
+            const body = isValidationPhase
+                ? _buildValidationSummaryBody(taskId, d, meta, { statusLabel: 'FAIL' })
+                : `${detailPrefix}${errorText || 'Unknown execution error.'}`;
             _appendExecuteMessage({
                 taskId: taskId || '',
-                kind: willRetry ? 'system' : 'error',
-                title: `${meta.title || taskId || (willRetry ? 'Retrying Task' : 'Execution Error')} · Attempt ${messageAttempt}`,
-                body: `${detailPrefix}${errorText || 'Unknown execution error.'}`,
+                kind: isValidationPhase ? 'error' : (willRetry ? 'system' : 'error'),
+                title: isValidationPhase
+                    ? `${meta.title || taskId || 'Task'} · Validation failed · Attempt ${messageAttempt}`
+                    : `${meta.title || taskId || (willRetry ? 'Retrying Task' : 'Execution Error')} · Attempt ${messageAttempt}`,
+                body,
                 attempt: messageAttempt,
                 status: taskId ? nextStatus : terminalStatus,
+                dedupeKey: isValidationPhase ? `validation-fail:${taskId}:${messageAttempt}` : '',
             });
             if (taskId) executeState.statuses.set(taskId, nextStatus);
             if (activeStage === 'execute') renderExecuteStream();
             refreshExecutionRuntimeStatus();
         });
 
-        document.addEventListener('maars:task-retry', (e) => {
+        document.addEventListener('maars:attempt-retry', (e) => {
             const d = e?.detail || {};
             const taskId = String(d.taskId || d.task_id || '').trim();
             if (!taskId) return;
@@ -1690,13 +1798,20 @@
             }
             const failedAttempt = Number.isFinite(attempt) ? attempt : _getCurrentAttempt(taskId);
             const upcomingAttempt = Number.isFinite(nextAttempt) ? nextAttempt : failedAttempt + 1;
+            const validationSummary = d?.decision?.validationSummary || {};
+            const directReasonRaw = String(validationSummary?.directReason || '').trim();
+            const directReason = directReasonRaw || _extractValidationDirectReason(reason);
+            const body = phase === 'validation'
+                ? `Direct reason: ${directReason || 'Validation failed'}\n${detailParts.join(' · ')}\n${reason}`
+                : `${detailParts.join(' · ')}\n${reason}`;
             _appendExecuteMessage({
                 taskId,
                 kind: 'system',
                 title: `${taskId} retrying · Attempt ${failedAttempt}`,
-                body: `${detailParts.join(' · ')}\n${reason}`,
+                body,
                 attempt: failedAttempt,
                 status: executeState.statuses.get(taskId) || 'execution-failed',
+                dedupeKey: `retry:${taskId}:${phase}:${failedAttempt}:${upcomingAttempt}`,
             });
             executeState.attemptExpandedById.set(_getAttemptKey(taskId, failedAttempt), false);
             _setCurrentAttempt(taskId, upcomingAttempt);
@@ -1711,25 +1826,12 @@
             _ensureTaskInOrder(taskId);
             const attempt = Number(d.attempt) || _getCurrentAttempt(taskId);
             _setCurrentAttempt(taskId, attempt);
-            const adjusted = d.shouldAdjust === true;
-            const immutableBlocked = d.immutableImpacted === true;
-            const patchSummary = String(d.patchSummary || '').trim();
-            const reasoning = String(d.reasoning || '').trim();
-            const bodyParts = [
-                `Step B review: ${adjusted ? 'Adjusted mutable validation criteria' : 'No criteria change'}`,
-            ];
-            if (immutableBlocked) bodyParts.push('Immutable constraints impacted: blocked');
-            if (patchSummary) bodyParts.push(`Patch: ${patchSummary}`);
-            if (reasoning) bodyParts.push(`Reasoning: ${reasoning}`);
-            _appendExecuteMessage({
-                taskId,
-                kind: 'system',
-                title: `${taskId} · Step B · Attempt ${attempt}`,
-                body: bodyParts.join('\n'),
-                attempt,
-                status: executeState.statuses.get(taskId) || 'validating',
+            executeState.latestStepBByTask.set(taskId, {
+                shouldAdjust: d.shouldAdjust === true,
+                immutableImpacted: d.immutableImpacted === true,
+                patchSummary: String(d.patchSummary || '').trim(),
+                reasoning: String(d.reasoning || '').trim(),
             });
-            if (activeStage === 'execute') renderExecuteStream();
         });
 
         document.addEventListener('maars:execution-runtime-status', (e) => {
@@ -1742,12 +1844,30 @@
             const graphLayout = d?.layout?.layout || null;
             if (!treeData.length || !graphLayout) return;
             executionGraphPayload = { treeData, layout: graphLayout };
-            executionGraphRenderedKey = '';
+            invalidateExecutionGraphRender();
             treeData.forEach(_upsertTaskMeta);
             if (activeStage === 'execute') {
-                ensureExecutionGraphRendered(true);
+                scheduleExecutionGraphRender({ force: true, delays: [0, 100, 320, 700] });
                 renderExecuteStream();
             }
+        });
+
+        window.addEventListener('pageshow', () => {
+            scheduleExecutionGraphRender({ force: true, allowInactive: true, delays: [0, 120, 360, 900] });
+        });
+
+        window.addEventListener('resize', () => {
+            if (activeStage !== 'execute') return;
+            scheduleExecutionGraphRender({ force: true, delays: [0, 120] });
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'visible') return;
+            scheduleExecutionGraphRender({
+                force: true,
+                allowInactive: activeStage !== 'execute',
+                delays: [0, 120, 360],
+            });
         });
     }
 

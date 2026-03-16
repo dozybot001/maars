@@ -5,6 +5,8 @@
 (function () {
     'use strict';
 
+    const appendThinkingChunk = window.MAARS?.appendThinkingChunk;
+
     const escapeHtml = window.MAARS?.utils?.escapeHtml || ((s) => (s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')));
     const truncateForDisplay = (s, maxLen) => {
         if (s == null || typeof s !== 'string') return '';
@@ -165,115 +167,8 @@
     }
 
     function appendChunk(chunk, taskId, operation, scheduleInfo, source) {
-        const blocksKey = `${PREFIX}ThinkingBlocks`;
-        const planStreamingKey = `${PREFIX}PlanStreamingKey`;
-        const ideaStreamingKey = `${PREFIX}IdeaStreamingKey`;
-        const paperStreamingKey = `${PREFIX}PaperStreamingKey`;
-        const scheduleCounterKey = `${PREFIX}ScheduleCounter`;
-        const planCounterKey = `${PREFIX}PlanCounter`;
-        const ideaCounterKey = `${PREFIX}IdeaCounter`;
-        const lastUpdatedKey = `${PREFIX}LastUpdatedBlockKey`;
-        const isIdea = source === 'idea' || operation === 'Refine';
-        const isPaper = source === 'paper' || operation === 'Paper';
-
-        if (!chunk && scheduleInfo != null) {
-            state[planStreamingKey] = '';
-            state[ideaStreamingKey] = '';
-            if (scheduleInfo.tool_name || scheduleInfo.operation) {
-                state[scheduleCounterKey] = (state[scheduleCounterKey] || 0) + 1;
-                const key = `schedule_${state[scheduleCounterKey]}`;
-                state[blocksKey].push({
-                    key,
-                    blockType: 'schedule',
-                    scheduleInfo,
-                    taskId: taskId ?? scheduleInfo.task_id,
-                    operation: operation ?? scheduleInfo.operation,
-                    source: source || 'task',
-                });
-                state[lastUpdatedKey] = key;
-                scheduleRender();
-            }
-            return;
-        }
-        if (taskId == null && isPaper && chunk) {
-            const paperCounterKey = `${PREFIX}PaperCounter`;
-            let block = state[paperStreamingKey] ? state[blocksKey].find((b) => b.key === state[paperStreamingKey]) : null;
-            state[planStreamingKey] = '';
-            state[ideaStreamingKey] = '';
-            if (block) {
-                block.content += chunk;
-                if (scheduleInfo != null) block.scheduleInfo = scheduleInfo;
-                state[lastUpdatedKey] = block.key;
-            } else {
-                state[paperCounterKey] = (state[paperCounterKey] || 0) + 1;
-                const key = `paper_${state[paperCounterKey]}`;
-                block = { key, taskId: null, operation: operation || 'Paper', content: chunk, scheduleInfo: scheduleInfo || null, source: 'paper' };
-                state[blocksKey].push(block);
-                state[paperStreamingKey] = key;
-                state[lastUpdatedKey] = key;
-            }
-            scheduleRender();
-            return;
-        }
-        if (taskId == null && isIdea && chunk) {
-            let block = state[ideaStreamingKey] ? state[blocksKey].find((b) => b.key === state[ideaStreamingKey]) : null;
-            state[planStreamingKey] = '';
-            state[paperStreamingKey] = '';
-            if (block && block.operation !== operation) {
-                block = null;
-                state[ideaStreamingKey] = '';
-            }
-            if (block) {
-                block.content += chunk;
-                if (scheduleInfo != null) block.scheduleInfo = scheduleInfo;
-                state[lastUpdatedKey] = block.key;
-            } else {
-                state[ideaCounterKey] = (state[ideaCounterKey] || 0) + 1;
-                const key = `idea_${state[ideaCounterKey]}`;
-                block = { key, taskId: null, operation: operation || 'Refine', content: chunk, scheduleInfo: scheduleInfo || null, source: 'idea' };
-                state[blocksKey].push(block);
-                state[ideaStreamingKey] = key;
-                state[lastUpdatedKey] = key;
-            }
-            scheduleRender();
-            return;
-        }
-        if (taskId == null && chunk) {
-            let block = state[planStreamingKey] ? state[blocksKey].find((b) => b.key === state[planStreamingKey]) : null;
-            state[ideaStreamingKey] = '';
-            state[paperStreamingKey] = '';
-            if (block && block.operation !== operation) {
-                block = null;
-                state[planStreamingKey] = '';
-            }
-            if (block) {
-                block.content += chunk;
-                if (scheduleInfo != null) block.scheduleInfo = scheduleInfo;
-                state[lastUpdatedKey] = block.key;
-            } else {
-                state[planCounterKey] = (state[planCounterKey] || 0) + 1;
-                const key = `plan_${state[planCounterKey]}`;
-                block = { key, taskId: null, operation: operation || 'Plan', content: chunk, scheduleInfo: scheduleInfo || null, source: 'plan' };
-                state[blocksKey].push(block);
-                state[planStreamingKey] = key;
-                state[lastUpdatedKey] = key;
-            }
-            scheduleRender();
-            return;
-        }
-        state[planStreamingKey] = '';
-        state[ideaStreamingKey] = '';
-        state[paperStreamingKey] = '';
-        const key = (taskId != null && operation != null) ? `${String(taskId)}::${String(operation)}` : '_default';
-        let block = state[blocksKey].find((b) => b.key === key);
-        if (!block) {
-            block = { key, taskId, operation, content: '', scheduleInfo: null, source: source || 'task' };
-            state[blocksKey].push(block);
-        }
-        if (chunk) block.content += chunk;
-        if (scheduleInfo != null) block.scheduleInfo = scheduleInfo;
-        state[lastUpdatedKey] = key;
-        scheduleRender();
+        if (!appendThinkingChunk) return;
+        appendThinkingChunk(state, PREFIX, chunk, taskId, operation, scheduleInfo, source, scheduleRender);
     }
 
     function applyHighlight() {

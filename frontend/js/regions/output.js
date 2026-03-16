@@ -7,6 +7,7 @@
 
     const escapeHtml = window.MAARS?.utils?.escapeHtml || ((s) => (s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')));
     const escapeHtmlAttr = window.MAARS?.utils?.escapeHtmlAttr || ((s) => (s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')));
+    const outputUtils = window.MAARS?.outputUtils || {};
 
     const state = window.MAARS.state || {};
     state.taskOutputs = state.taskOutputs || {};
@@ -17,46 +18,36 @@
 
     /** Refine 结果格式化（由 output 负责展示逻辑） */
     function formatRefineResult(data) {
-        const keywords = data.keywords || [];
-        const papers = data.papers || [];
-        const refined = (data.refined_idea && typeof data.refined_idea === 'string') ? data.refined_idea.trim() : '';
+        if (typeof outputUtils.formatRefineResult === 'function') {
+            return outputUtils.formatRefineResult(data);
+        }
+        return '';
+    }
 
-        let md = '## Refine Results\n\n';
-        if (refined) md += '### Refined Idea\n\n' + refined + '\n\n';
-        md += '**Keywords:** ' + (keywords.length ? keywords.join(', ') : '—') + '\n\n';
-        md += '**Papers (' + papers.length + '):**\n\n';
-        papers.forEach((p, i) => {
-            const title = (p.title || '').replace(/[[\]]/g, '\\$&');
-            const url = p.url || '#';
-            const authors = Array.isArray(p.authors) ? p.authors.join(', ') : '';
-            const published = p.published || '';
-            const abstract = (p.abstract || '').replace(/\s+/g, ' ').slice(0, 300) + (p.abstract && p.abstract.length > 300 ? '...' : '');
-            md += (i + 1) + '. **[' + title + '](' + url + ')**';
-            if (published) md += ' (' + published + ')';
-            md += '\n';
-            if (authors) md += '   *Authors:* ' + authors + '\n';
-            if (abstract) md += '   ' + abstract + '\n';
-            md += '\n';
-        });
-        return md;
+    function _sortOutputKeys(outputs) {
+        if (typeof outputUtils.sortOutputKeys === 'function') return outputUtils.sortOutputKeys(outputs);
+        return Object.keys(outputs || {}).sort();
+    }
+
+    function _renderOutputContent(raw) {
+        if (typeof outputUtils.renderContent === 'function') {
+            return outputUtils.renderContent(raw, (typeof marked !== 'undefined' ? marked : undefined));
+        }
+        return { displayLabel: '', html: String(raw || '') };
+    }
+
+    function _normalizeOutputLabel(taskId, renderedLabel) {
+        if (typeof outputUtils.normalizeLabel === 'function') {
+            return outputUtils.normalizeLabel(taskId, renderedLabel);
+        }
+        return renderedLabel || String(taskId || '');
     }
     function renderOutput() {
         const el = document.getElementById('taskAgentOutputContent');
         const area = document.getElementById('taskAgentOutputArea');
         if (!el || !area) return;
         const outputs = state.taskOutputs;
-        const keys = Object.keys(outputs).sort((a, b) => {
-            if (a === 'idea') return -1;
-            if (b === 'idea') return 1;
-            if (a === 'paper') return 1;
-            if (b === 'paper') return -1;
-            if (a.startsWith('task_') && b.startsWith('task_')) {
-                const na = parseInt(a.slice(6), 10);
-                const nb = parseInt(b.slice(6), 10);
-                if (!isNaN(na) && !isNaN(nb)) return na - nb;
-            }
-            return String(a).localeCompare(b);
-        });
+        const keys = _sortOutputKeys(outputs);
         const wasNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
         const savedScrollTops = {};
         el.querySelectorAll('.task-agent-output-block').forEach((blockEl) => {
@@ -71,20 +62,9 @@
         let html = '';
         for (const taskId of keys) {
             const raw = outputs[taskId];
-            let content = '';
-            let displayLabel = taskId === 'idea' ? 'Refine' : (taskId.startsWith('task_') ? 'Task ' + taskId.slice(6) : 'Task ' + (taskId || ''));
-            if (typeof raw === 'object' && raw !== null && raw.label) {
-                displayLabel = raw.label;
-                if ('content' in raw && typeof raw.content === 'string') {
-                    const text = raw.content || '';
-                    content = text ? (typeof marked !== 'undefined' ? marked.parse(text) : text) : '';
-                } else {
-                    const str = JSON.stringify(raw, null, 2);
-                    content = typeof marked !== 'undefined' ? marked.parse('```json\n' + str + '\n```') : '<pre>' + str + '</pre>';
-                }
-            } else {
-                content = (raw || '') ? (typeof marked !== 'undefined' ? marked.parse(String(raw)) : String(raw)) : '';
-            }
+            const rendered = _renderOutputContent(raw);
+            let content = rendered.html || '';
+            const displayLabel = _normalizeOutputLabel(taskId, rendered.displayLabel);
             if (content && typeof DOMPurify !== 'undefined') content = DOMPurify.sanitize(content);
             html += `<div class="task-agent-output-block" data-task-id="${escapeHtml(taskId || '')}" data-label="${escapeHtmlAttr(displayLabel || '')}"><div class="task-agent-output-block-header">${escapeHtml(displayLabel)}<button type="button" class="task-agent-output-block-expand" aria-label="Expand" title="Expand">⤢</button></div><div class="task-agent-output-block-body">${content}</div></div>`;
         }
@@ -185,17 +165,13 @@
 
     function downloadTaskOutput(taskId) {
         const raw = state.taskOutputs[taskId];
-        let text = '', ext = 'txt';
-        if (raw != null) {
-            if (typeof raw === 'string') { text = raw; ext = 'md'; }
-            else if (typeof raw === 'object' && raw !== null && 'content' in raw && typeof raw.content === 'string') { text = raw.content; ext = 'md'; }
-            else { text = JSON.stringify(raw, null, 2); ext = 'json'; }
-        }
-        const filename = `task-${(taskId || 'output').replace(/[^a-zA-Z0-9_-]/g, '_')}.${ext}`;
-        const blob = new Blob([text], { type: ext === 'json' ? 'application/json' : 'text/markdown' });
+        const payload = typeof outputUtils.toDownloadPayload === 'function'
+            ? outputUtils.toDownloadPayload(raw, taskId)
+            : { text: '', filename: `task-${taskId || 'output'}.txt`, mime: 'text/plain' };
+        const blob = new Blob([payload.text], { type: payload.mime });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = filename;
+        a.download = payload.filename;
         a.click();
         URL.revokeObjectURL(a.href);
     }

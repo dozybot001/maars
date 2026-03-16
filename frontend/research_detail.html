@@ -329,7 +329,10 @@
                         <div class="research-execute-stream" id="researchExecuteStream" hidden>
                             <div class="research-execute-stream-header">
                                 <span>Execution Stream</span>
-                                <button type="button" class="research-execute-stream-toggle-all" id="researchExecuteToggleAllBtn">Collapse All</button>
+                                <div class="research-execute-stream-actions">
+                                    <button type="button" class="research-execute-stream-jump-latest" id="researchExecuteJumpLatestBtn" hidden>Jump to latest</button>
+                                    <button type="button" class="research-execute-stream-toggle-all" id="researchExecuteToggleAllBtn">Collapse All</button>
+                                </div>
                             </div>
                             <div class="research-execute-stream-body" id="researchExecuteStreamBody">—</div>
                         </div>
@@ -370,15 +373,29 @@
     <script src="js/core/config.js"></script>
     <script src="js/core/logger.js"></script>
     <script src="js/core/state.js"></script>
+    <script src="js/regions/tree/task-tree-popover.js"></script>
+    <script src="js/regions/tree/task-tree-zoom.js"></script>
+    <script src="js/regions/tree/task-tree-events.js"></script>
+    <script src="js/regions/tree/task-tree-renderer.js"></script>
     <script src="js/regions/tree/task-tree.js"></script>
     <script src="js/ui/theme.js"></script>
+    <script src="js/api/research-api.js"></script>
     <script src="js/api/api.js"></script>
+    <script src="js/flows/task-run-controls.js"></script>
+    <script src="js/flows/task-execution-state.js"></script>
     <script src="js/flows/task.js"></script>
+    <script src="js/flows/research-execute-utils.js"></script>
+    <script src="js/flows/research-execution-graph.js"></script>
+    <script src="js/flows/research-nav-utils.js"></script>
     <script src="js/flows/research.js"></script>
+    <script src="js/regions/output-utils.js"></script>
     <script src="js/regions/output.js"></script>
+    <script src="js/regions/thinking-stream.js"></script>
     <script src="js/regions/thinking.js"></script>
     <script src="js/ws/handlers/thinking-handler.js"></script>
     <script src="js/ws/websocket.js"></script>
+    <script src="js/ui/settings-presets.js"></script>
+    <script src="js/ui/settings-sync.js"></script>
     <script src="js/ui/settings.js"></script>
     <script src="js/ui/sidebar.js"></script>
     <script src="app.js"></script>

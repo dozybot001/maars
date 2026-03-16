@@ -4,18 +4,23 @@ Initialized by main.py after creating app and services.
 """
 
 import asyncio
-import hashlib
-import hmac
 import os
-import re
-import secrets
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Dict, Optional, Set, Tuple
 
 from fastapi import HTTPException
 from loguru import logger
+
+from .session_auth import (
+    issue_session_credentials,
+    normalize_session_id,
+    resolve_session_id,
+    resolve_socket_session_id,
+    verify_session_token,
+)
+from .run_state_ops import clear_run_state, stop_run_state as _stop_run_state
+from .realtime_emitter import RealtimeEmitter
 
 
 @dataclass
@@ -58,50 +63,9 @@ sessions: Dict[str, SessionState] = {}
 _sessions_lock: Optional[asyncio.Lock] = None
 _socket_session_map: Dict[str, str] = {}
 _sse_subscribers: Dict[str, Set[asyncio.Queue]] = {}
-def _load_or_create_session_secret() -> str:
-    """Load a stable session signing secret.
-
-    If MAARS_SESSION_SECRET is set, use it.
-    Otherwise, persist a generated secret in backend/db/session_secret.txt so
-    session credentials survive server restarts (dev-friendly).
-    """
-    env = os.getenv("MAARS_SESSION_SECRET")
-    if env and env.strip():
-        return env.strip()
-    try:
-        secret_file = Path(__file__).resolve().parent.parent / "db" / "session_secret.txt"
-        secret_file.parent.mkdir(parents=True, exist_ok=True)
-        if secret_file.exists():
-            s = secret_file.read_text(encoding="utf-8").strip()
-            if s:
-                return s
-        s = secrets.token_hex(32)
-        secret_file.write_text(s, encoding="utf-8")
-        return s
-    except Exception:
-        return secrets.token_hex(32)
-
-
-_session_secret = _load_or_create_session_secret()
-_session_id_re = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
 SESSION_IDLE_TTL_SECONDS = int(os.getenv("MAARS_SESSION_IDLE_TTL_SECONDS", "7200"))
 _session_sweep_interval_seconds = int(os.getenv("MAARS_SESSION_SWEEP_INTERVAL_SECONDS", "120"))
 _last_session_sweep_ts = 0.0
-
-
-class _RealtimeEmitter:
-    """Proxy emitter that mirrors Socket.IO emits into SSE subscribers."""
-
-    def __init__(self, raw_sio: Any):
-        self._raw = raw_sio
-
-    async def emit(self, event: str, payload: dict, to: Optional[str] = None, **kwargs):
-        # Socket.IO uses "to" for room/session; we reuse it as SSE session id.
-        if to:
-            await _publish_sse(to, event, payload)
-        if self._raw and hasattr(self._raw, "emit"):
-            return await self._raw.emit(event, payload, to=to, **kwargs)
-        return None
 
 
 def init_api_state(
@@ -111,7 +75,7 @@ def init_api_state(
     _sio_raw = sio_instance
     # Expose a proxy emitter so internal components that call api_state.sio.emit
     # automatically publish to SSE as well.
-    sio = _RealtimeEmitter(sio_instance) if sio_instance is not None else None
+    sio = RealtimeEmitter(sio_instance, _publish_sse) if sio_instance is not None else None
     if _sessions_lock is None:
         _sessions_lock = asyncio.Lock()
 
@@ -168,60 +132,6 @@ async def _publish_sse(session_id: str, event: str, payload: dict) -> None:
                 pass
 
 
-def normalize_session_id(raw_session_id: Optional[str]) -> str:
-    """Normalize and validate session id."""
-    sid = str(raw_session_id or "").strip()
-    if not sid:
-        raise ValueError("sessionId is required")
-    sid = sid.replace("/", "_").replace("\\", "_")
-    sid = sid[:128]
-    if not _session_id_re.match(sid):
-        raise ValueError("Invalid sessionId format")
-    return sid
-
-
-def _sign_session_id(session_id: str) -> str:
-    return hmac.new(
-        _session_secret.encode("utf-8"),
-        session_id.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
-
-
-def verify_session_token(session_id: str, session_token: Optional[str]) -> bool:
-    token = str(session_token or "").strip()
-    if not token:
-        return False
-    expected = _sign_session_id(session_id)
-    return hmac.compare_digest(expected, token)
-
-
-def issue_session_credentials() -> Dict[str, str]:
-    """Create a new signed session credential pair."""
-    session_id = normalize_session_id(f"sess_{secrets.token_urlsafe(18)}")
-    session_token = _sign_session_id(session_id)
-    return {"sessionId": session_id, "sessionToken": session_token}
-
-
-def resolve_session_id(request: Any) -> str:
-    """Resolve and verify session id/token from HTTP request."""
-    header_sid = request.headers.get("X-MAARS-SESSION-ID")
-    header_token = request.headers.get("X-MAARS-SESSION-TOKEN")
-    query_sid = request.query_params.get("sessionId")
-    query_token = request.query_params.get("sessionToken")
-    raw_sid = header_sid or query_sid
-    raw_token = header_token or query_token
-    if not raw_sid or not raw_token:
-        raise HTTPException(status_code=401, detail="Missing session credentials")
-    try:
-        session_id = normalize_session_id(raw_sid)
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e)) from e
-    if not verify_session_token(session_id, raw_token):
-        raise HTTPException(status_code=401, detail="Invalid session credentials")
-    return session_id
-
-
 async def require_session(request: Any) -> tuple[str, SessionState]:
     """
     Resolve + verify HTTP session credentials, then return session state.
@@ -230,18 +140,6 @@ async def require_session(request: Any) -> tuple[str, SessionState]:
     session_id = resolve_session_id(request)
     session = await get_or_create_session_state(session_id)
     return session_id, session
-
-
-def resolve_socket_session_id(auth: Any) -> str:
-    """Resolve and verify session id/token from websocket auth payload."""
-    if not isinstance(auth, dict):
-        raise ValueError("Missing socket auth")
-    raw_sid = auth.get("sessionId")
-    raw_token = auth.get("sessionToken")
-    session_id = normalize_session_id(raw_sid)
-    if not verify_session_token(session_id, raw_token):
-        raise ValueError("Invalid session credentials")
-    return session_id
 
 
 def _is_session_busy(state: SessionState) -> bool:
@@ -381,14 +279,6 @@ async def emit_safe(
         logger.warning("{} failed: {}", warning_label or f"{event} emit", e)
 
 
-def clear_run_state(state: Any) -> None:
-    """Clear run task + abort event for idea/plan/paper states."""
-    if not state:
-        return
-    state.run_task = None
-    state.abort_event = None
-
-
 async def stop_run_state(
     session_id: str,
     state: Any,
@@ -397,24 +287,11 @@ async def stop_run_state(
     error_message: str,
     emit_when_idle: bool = False,
 ) -> bool:
-    """
-    Stop one agent run state and optionally emit stop error event.
-    Returns whether there was an active running task.
-    """
-    if not state:
-        return False
-    if state.abort_event:
-        state.abort_event.set()
-
-    is_running = bool(state.run_task and not state.run_task.done())
-    if is_running:
-        state.run_task.cancel()
-
-    if is_running or emit_when_idle:
-        await emit_safe(
-            session_id,
-            error_event,
-            {"error": error_message},
-            warning_label=f"{error_event} emit (stop)",
-        )
-    return is_running
+    return await _stop_run_state(
+        session_id,
+        state,
+        emit_safe=emit_safe,
+        error_event=error_event,
+        error_message=error_message,
+        emit_when_idle=emit_when_idle,
+    )

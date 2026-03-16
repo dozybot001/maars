@@ -4,6 +4,7 @@
 (function () {
     'use strict';
     const cfg = window.MAARS?.config;
+    const researchApi = window.MAARS?.researchApi || {};
     if (!cfg) return;
 
     function loadExampleIdea() {
@@ -180,113 +181,6 @@
         return data;
     }
 
-    async function createResearch(prompt) {
-        const res = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/research`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: prompt || '' }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || data.detail || 'Failed to create research');
-        return data;
-    }
-
-    async function listResearches() {
-        const res = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/research`);
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || data.detail || 'Failed to list researches');
-        return data;
-    }
-
-    async function getResearch(researchId) {
-        const res = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/research/${encodeURIComponent(researchId)}`);
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || data.detail || 'Failed to load research');
-        return data;
-    }
-
-    async function runResearch(researchId) {
-        const res = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/research/${encodeURIComponent(researchId)}/run`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ format: 'markdown' }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || data.detail || 'Failed to run research');
-        return data;
-    }
-
-    async function stopResearch(researchId) {
-        const res = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/research/${encodeURIComponent(researchId)}/stop`, {
-            method: 'POST',
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || data.detail || 'Failed to stop research');
-        return data;
-    }
-
-    async function retryResearch(researchId) {
-        const res = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/research/${encodeURIComponent(researchId)}/retry`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ format: 'markdown' }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || data.detail || 'Failed to retry research');
-        return data;
-    }
-
-    async function runResearchStage(researchId, stage) {
-        const res = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/research/${encodeURIComponent(researchId)}/stage/${encodeURIComponent(stage)}/run`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ format: 'markdown' }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || data.detail || 'Failed to run research stage');
-        return data;
-    }
-
-    async function resumeResearchStage(researchId, stage) {
-        const res = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/research/${encodeURIComponent(researchId)}/stage/${encodeURIComponent(stage)}/resume`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ format: 'markdown' }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || data.detail || 'Failed to resume research stage');
-        return data;
-    }
-
-    async function retryResearchStage(researchId, stage) {
-        const res = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/research/${encodeURIComponent(researchId)}/stage/${encodeURIComponent(stage)}/retry`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ format: 'markdown' }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || data.detail || 'Failed to retry research stage');
-        return data;
-    }
-
-    async function stopResearchStage(researchId, stage) {
-        const res = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/research/${encodeURIComponent(researchId)}/stage/${encodeURIComponent(stage)}/stop`, {
-            method: 'POST',
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || data.detail || 'Failed to stop research stage');
-        return data;
-    }
-
-    async function deleteResearch(researchId) {
-        const res = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/research/${encodeURIComponent(researchId)}`, {
-            method: 'DELETE',
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || data.detail || 'Failed to delete research');
-        return data;
-    }
-
     window.MAARS.api = {
         loadExampleIdea,
         loadExecution,
@@ -298,16 +192,16 @@
         resumeFromTask,
         refineIdea,
         stopAgent,
-        createResearch,
-        listResearches,
-        getResearch,
-        runResearch,
-        stopResearch,
-        retryResearch,
-        runResearchStage,
-        resumeResearchStage,
-        retryResearchStage,
-        stopResearchStage,
-        deleteResearch,
+        createResearch: researchApi.createResearch,
+        listResearches: researchApi.listResearches,
+        getResearch: researchApi.getResearch,
+        runResearch: researchApi.runResearch,
+        stopResearch: researchApi.stopResearch,
+        retryResearch: researchApi.retryResearch,
+        runResearchStage: researchApi.runResearchStage,
+        resumeResearchStage: researchApi.resumeResearchStage,
+        retryResearchStage: researchApi.retryResearchStage,
+        stopResearchStage: researchApi.stopResearchStage,
+        deleteResearch: researchApi.deleteResearch,
     };
 })();

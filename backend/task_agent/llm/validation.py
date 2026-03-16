@@ -187,3 +187,92 @@ Output your reasoning first, then the JSON block."""
     except Exception as e:
         report = f"# Validating Task {task_id}\n\n**Result: FAIL**\n\nLLM validation error: {e}"
         return False, report
+
+
+async def validate_task_output_with_readonly_agent(
+    result: Any,
+    output_spec: Dict[str, Any],
+    task_id: str,
+    validation_spec: Optional[Dict[str, Any]] = None,
+    validation_context: Optional[Dict[str, Any]] = None,
+    api_config: Optional[Dict] = None,
+    abort_event: Optional[Any] = None,
+    on_thinking: Optional[Callable[[str, Optional[str], Optional[str], Optional[dict]], None]] = None,
+) -> Tuple[bool, str]:
+    """Read-only validation agent.
+
+    This validator is intentionally isolated from execution concerns:
+    it can reason from provided context and output content only,
+    and must not propose file writes or command execution.
+    """
+    content = _get_content_str(result)
+    validation = validation_spec or {}
+    criteria = validation.get("criteria") or []
+    output_format = (output_spec or {}).get("format") or ""
+    context = validation_context or {}
+
+    system_prompt = (
+        "You are a READ-ONLY validation agent.\n"
+        "You are not allowed to execute commands, write files, or call tools.\n"
+        "Use only provided task context, attempt history, and output content to judge criteria.\n\n"
+        "Output in two parts:\n"
+        "1. **Reasoning** (1-2 sentences): Briefly explain your validation analysis.\n"
+        "2. **JSON**: Output a JSON block in ```json and ``` with: {\"passed\": true|false, \"report\": \"markdown string\"}\n"
+        "The report should list each criterion and PASS/FAIL, then a final Result line."
+    )
+
+    criteria_text = "\n".join(f"- {c}" for c in criteria) if criteria else "Output should be complete and align with the task description."
+    context_text = json.dumps(context, ensure_ascii=False)[:4000]
+    user_message = f"""Task ID: {task_id}
+Output format expected: {output_format}
+
+Validation context (read-only):
+```json
+{context_text}
+```
+
+Validation criteria:
+{criteria_text}
+
+Task output to validate:
+```
+{content[:8000]}
+```
+
+Output your reasoning first, then the JSON block."""
+
+    def _stream_chunk(chunk: str):
+        if on_thinking and chunk:
+            r = on_thinking(chunk, task_id=task_id, operation="Validate", schedule_info=None)
+            if asyncio.iscoroutine(r):
+                return r
+
+    try:
+        cfg = merge_phase_config(api_config or {}, "validate")
+        stream = on_thinking is not None
+        response = await chat_completion(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            cfg,
+            on_chunk=_stream_chunk if stream else None,
+            abort_event=abort_event,
+            stream=stream,
+            temperature=TEMP_DETERMINISTIC,
+        )
+        text = response if isinstance(response, str) else (response.get("content") or "")
+        cleaned = (text or "").strip()
+        m = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned)
+        if m:
+            cleaned = m.group(1).strip()
+        try:
+            parsed = json.loads(cleaned) if cleaned else {}
+        except (json.JSONDecodeError, TypeError):
+            parsed = {}
+        passed = bool(parsed.get("passed"))
+        report = parsed.get("report") or f"# Validating Task {task_id}\n\n**Result: {'PASS' if passed else 'FAIL'}** (Read-only validation agent)"
+        return passed, report
+    except Exception as e:
+        report = f"# Validating Task {task_id}\n\n**Result: FAIL**\n\nRead-only validation agent error: {e}"
+        return False, report

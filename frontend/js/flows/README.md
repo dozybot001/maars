@@ -43,6 +43,7 @@
 | `maars:execution-layout` | task | 设置执行布局 |
 | `maars:task-states-update` | task, taskTree | 更新任务状态 |
 | `maars:task-output` | output | 设置任务产出 |
+| `maars:task-step-b` | task | 展示每次尝试中的 Step B 规约审查结果 |
 | `maars:execution-sync` | task, taskTree | 连接时同步执行状态 |
 
 ### 用户操作事件
@@ -59,7 +60,7 @@
 |------|----------|----------|
 | plan | plan-start, plan-thinking, plan-error, plan-complete | plan-tree-update |
 | idea | idea-start, idea-thinking, idea-error, idea-complete | — |
-| task | task-start, task-thinking, task-error, task-complete | task-states-update, task-output, execution-layout |
+| task | task-start, task-thinking, task-error, task-complete | task-states-update, task-output, task-step-b, execution-layout |
 | paper | paper-start, paper-thinking, paper-error, paper-complete | — |
 
 **基本事件语义**：

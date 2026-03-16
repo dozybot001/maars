@@ -5,6 +5,8 @@
     'use strict';
     const cfg = window.MAARS?.config;
     if (!cfg) return;
+    const presetHelpers = window.MAARS?.settingsPresetHelpers || {};
+    const syncHelpers = window.MAARS?.settingsSyncHelpers || {};
 
     const DEFAULT_AGENT_MODE = { ideaAgent: 'mock', planAgent: 'mock', taskAgent: 'mock', paperAgent: 'mock', ideaRAG: false, literatureSource: 'openalex' };
     const DEFAULT_REFLECTION = { enabled: false, maxIterations: 2, qualityThreshold: 70 };
@@ -17,17 +19,11 @@
         const u = window.MAARS?.utils;
         return (s) => (u?.escapeHtml ? u.escapeHtml(s) : (s ? String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''));
     })();
-    const _escapeHtmlAttr = (() => {
-        const u = window.MAARS?.utils;
-        return (s) => (u?.escapeHtmlAttr ? u.escapeHtmlAttr(s) : (s ? String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''));
-    })();
-
     function _generateKey(label) {
-        const base = (label || 'preset').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'preset';
-        let key = base;
-        let i = 2;
-        while (_configState.presets[key]) { key = base + '_' + i++; }
-        return key;
+        if (typeof presetHelpers.generatePresetKey === 'function') {
+            return presetHelpers.generatePresetKey(label, _configState.presets);
+        }
+        return 'preset';
     }
 
     function _applyTheme(theme) {
@@ -35,111 +31,54 @@
     }
 
     function _syncThemeCardsActive() {
-        const current = document.documentElement.getAttribute('data-theme') || 'light';
-        document.querySelectorAll('.settings-theme-card').forEach(el => {
-            el.classList.toggle('active', el.dataset.pick === current);
-        });
+        syncHelpers.syncThemeCardsActive?.();
     }
 
     function _syncMatrixActive() {
-        const am = _configState.agentMode || {};
-        document.querySelectorAll('#settingsModeMatrix .settings-mode-cell').forEach(el => {
-            el.classList.toggle('active', am[el.dataset.row] === el.dataset.col);
-        });
+        syncHelpers.syncMatrixActive?.(_configState.agentMode || {});
     }
 
     function _syncReflectionUI() {
-        const r = _configState.reflection || DEFAULT_REFLECTION;
-        const cb = document.getElementById('reflectionEnabled');
-        const mi = document.getElementById('reflectionMaxIterations');
-        const qt = document.getElementById('reflectionQualityThreshold');
-        if (cb) cb.checked = !!r.enabled;
-        if (mi) mi.value = r.maxIterations ?? 2;
-        if (qt) qt.value = r.qualityThreshold ?? 70;
+        syncHelpers.syncReflectionUI?.(_configState.reflection || DEFAULT_REFLECTION);
     }
 
     function _syncIdeaRAGUI() {
-        const am = _configState.agentMode || {};
-        const cb = document.getElementById('ideaRAGEnabled');
-        if (cb) cb.checked = !!am.ideaRAG;
+        syncHelpers.syncIdeaRAGUI?.(_configState.agentMode || {});
     }
 
     function _syncLiteratureSourceUI() {
-        const am = _configState.agentMode || {};
-        const select = document.getElementById('ideaLiteratureSource');
-        if (!select) return;
-        const value = String(am.literatureSource || 'openalex').trim().toLowerCase();
-        select.value = (value === 'arxiv') ? 'arxiv' : 'openalex';
+        syncHelpers.syncLiteratureSourceUI?.(_configState.agentMode || {});
     }
 
     function _readIdeaRAGFromUI() {
-        const cb = document.getElementById('ideaRAGEnabled');
-        _configState.agentMode = _configState.agentMode || { ...DEFAULT_AGENT_MODE };
-        _configState.agentMode.ideaRAG = cb ? cb.checked : false;
+        _configState.agentMode = syncHelpers.readIdeaRAGFromUI?.(_configState.agentMode, DEFAULT_AGENT_MODE)
+            || { ...DEFAULT_AGENT_MODE, ...(_configState.agentMode || {}) };
     }
 
     function _readLiteratureSourceFromUI() {
-        const select = document.getElementById('ideaLiteratureSource');
-        _configState.agentMode = _configState.agentMode || { ...DEFAULT_AGENT_MODE };
-        const value = String(select?.value || 'openalex').trim().toLowerCase();
-        _configState.agentMode.literatureSource = (value === 'arxiv') ? 'arxiv' : 'openalex';
+        _configState.agentMode = syncHelpers.readLiteratureSourceFromUI?.(_configState.agentMode, DEFAULT_AGENT_MODE)
+            || { ...DEFAULT_AGENT_MODE, ...(_configState.agentMode || {}) };
     }
 
     function _readReflectionFromUI() {
-        const cb = document.getElementById('reflectionEnabled');
-        const mi = document.getElementById('reflectionMaxIterations');
-        const qt = document.getElementById('reflectionQualityThreshold');
-        _configState.reflection = {
-            enabled: cb ? cb.checked : false,
-            maxIterations: mi ? Math.max(1, Math.min(5, parseInt(mi.value, 10) || 2)) : 2,
-            qualityThreshold: qt ? Math.max(0, Math.min(100, parseInt(qt.value, 10) || 70)) : 70,
-        };
+        _configState.reflection = syncHelpers.readReflectionFromUI?.(DEFAULT_REFLECTION)
+            || { ...DEFAULT_REFLECTION };
     }
 
     function _renderPresetSelectItems() {
-        const container = document.getElementById('settingsPresetList');
-        if (!container) return;
-        let html = '';
-        Object.keys(_configState.presets).forEach(key => {
-            const preset = _configState.presets[key];
-            const label = _escapeHtml(preset.label || key);
-            const isActive = _configState.current === key;
-            const meta = _escapeHtml(preset.model || '') || '—';
-            html += `<button type="button" class="settings-preset-item${isActive ? ' active' : ''}" data-preset-key="${key}">
-                <span class="settings-preset-item-name">${label}</span>
-                <span class="settings-preset-item-meta">${meta}</span>
-            </button>`;
-        });
-        container.innerHTML = html;
+        presetHelpers.renderPresetSelectItems?.(_configState, _escapeHtml);
     }
 
     function _updateEditPanelVisibility() {
-        const titleEl = document.getElementById('settingsPresetEditTitle');
-        if (titleEl) {
-            titleEl.textContent = _activePresetKey
-                ? (_configState.presets[_activePresetKey]?.label || _activePresetKey)
-                : 'Select preset';
-        }
+        presetHelpers.updateEditPanelVisibility?.(_activePresetKey, _configState);
     }
 
     function _populatePresetForm() {
-        const preset = _configState.presets[_activePresetKey] || {};
-        document.getElementById('presetLabel').value = preset.label || '';
-        document.getElementById('presetBaseUrl').value = preset.baseUrl || '';
-        document.getElementById('presetApiKey').value = preset.apiKey || '';
-        document.getElementById('presetModel').value = preset.model || '';
-        const deleteBtn = document.getElementById('settingsPresetDeleteBtn');
-        if (deleteBtn) deleteBtn.style.display = Object.keys(_configState.presets).length > 1 ? '' : 'none';
+        presetHelpers.populatePresetForm?.(_activePresetKey, _configState);
     }
 
     function _readFormIntoState() {
-        if (!_activePresetKey || !_configState.presets[_activePresetKey]) return;
-        const preset = _configState.presets[_activePresetKey];
-        preset.label = document.getElementById('presetLabel').value.trim() || preset.label || _activePresetKey;
-        preset.baseUrl = document.getElementById('presetBaseUrl').value.trim();
-        preset.apiKey = document.getElementById('presetApiKey').value.trim();
-        preset.model = document.getElementById('presetModel').value.trim();
-        delete preset.phases;
+        presetHelpers.readFormIntoState?.(_activePresetKey, _configState);
     }
 
     function _loadConfig(raw) {
@@ -183,12 +122,7 @@
     }
 
     function _selectPreset(key) {
-        _readFormIntoState();
-        _activePresetKey = key;
-        _configState.current = key;
-        _populatePresetForm();
-        _updateEditPanelVisibility();
-        _renderPresetSelectItems();
+        _activePresetKey = presetHelpers.selectPreset?.(key, _activePresetKey, _configState, _escapeHtml) || key;
     }
 
     function initSettingsModal() {

@@ -97,8 +97,12 @@
         onJsonEvent('task-error', (data) => {
             document.dispatchEvent(new CustomEvent('maars:task-error', { detail: data || {} }));
         });
+        onJsonEvent('attempt-retry', (data) => {
+            document.dispatchEvent(new CustomEvent('maars:attempt-retry', { detail: data || {} }));
+        });
+        // Backward compatibility for older backends still emitting task-retry.
         onJsonEvent('task-retry', (data) => {
-            document.dispatchEvent(new CustomEvent('maars:task-retry', { detail: data || {} }));
+            document.dispatchEvent(new CustomEvent('maars:attempt-retry', { detail: data || {} }));
         });
         onJsonEvent('task-step-b', (data) => {
             document.dispatchEvent(new CustomEvent('maars:task-step-b', { detail: data || {} }));

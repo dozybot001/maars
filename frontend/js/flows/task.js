@@ -16,6 +16,15 @@
     state.executionLayout = state.executionLayout ?? null;
     state.chainCache = state.chainCache ?? [];
     state.previousTaskStates = state.previousTaskStates ?? new Map();
+    const executionStateHelpers = window.MAARS?.createTaskExecutionStateHelpers?.(state) || {};
+    const runControlHelpers = window.MAARS?.createTaskRunControlHelpers?.({
+        cfg,
+        api,
+        state,
+        executionBtn,
+        stopExecutionBtn,
+        clear,
+    }) || {};
 
     function clear() {
         state.executionLayout = null;
@@ -33,123 +42,38 @@
     }
 
     function buildChainCacheFromLayout(layout) {
-        const cache = [];
-        if (!layout) return cache;
-        const treeData = layout.treeData || [];
-        treeData.forEach(task => {
-            if (task && task.task_id) {
-                cache.push({ task_id: task.task_id, dependencies: task.dependencies || [], status: task.status || 'undone' });
-            }
-        });
-        return cache;
+        if (typeof executionStateHelpers.buildChainCacheFromLayout === 'function') {
+            return executionStateHelpers.buildChainCacheFromLayout(layout);
+        }
+        return [];
     }
 
     function renderExecutionDiagram() {
-        const layout = state.executionLayout;
-        const treeData = layout?.treeData || [];
-        window.MAARS.taskTree?.renderExecutionTree(treeData, layout?.layout);
+        executionStateHelpers.renderExecutionDiagram?.();
     }
 
     function animateConnectionLines(taskId, color, direction) {
-        const area = document.querySelector('.plan-agent-execution-tree-area');
-        const svg = area?.querySelector('.tree-connection-lines');
-        if (!svg) return;
-        const paths = Array.from(svg.querySelectorAll('path.connection-line'));
-        const lines = direction === 'upstream'
-            ? paths.filter(p => {
-                const to = p.getAttribute('data-to-task');
-                const toTasks = p.getAttribute('data-to-tasks');
-                if (to === taskId) return true;
-                if (toTasks) return toTasks.split(',').map(s => s.trim()).includes(taskId);
-                return false;
-            })
-            : paths.filter(p => {
-                const from = p.getAttribute('data-from-task');
-                const fromTasks = p.getAttribute('data-from-tasks');
-                if (from === taskId) return true;
-                if (fromTasks) return fromTasks.split(',').map(s => s.trim()).includes(taskId);
-                return false;
-            });
-        if (lines.length === 0) return;
-        const animClass = color === 'yellow' ? 'animate-yellow-glow' : 'animate-red-glow';
-        lines.forEach(line => line.classList.remove('animate-yellow-glow', 'animate-red-glow'));
-        void svg.offsetHeight;
-        const order = color === 'yellow' ? lines : [...lines].reverse();
-        order.forEach((line, i) => {
-            setTimeout(() => {
-                line.classList.add(animClass);
-                setTimeout(() => line.classList.remove(animClass), 1000);
-            }, i * 50);
-        });
+        executionStateHelpers.animateConnectionLines?.(taskId, color, direction);
     }
 
     function renderExecutionStats(data) {
-        if (!data?.stats) return;
-        const stats = data.stats;
-        const concurrent = (stats.busy ?? 0) + (stats.validating ?? 0);
-        const max = stats.max ?? 7;
-        const concurrentEl = document.getElementById('taskAgentConcurrent');
-        const maxEl = document.getElementById('taskAgentMax');
-        if (concurrentEl) concurrentEl.textContent = concurrent;
-        if (maxEl) maxEl.textContent = max;
+        executionStateHelpers.renderExecutionStats?.(data);
     }
 
     function startExecutionUI() {
-        if (executionBtn) {
-            executionBtn.disabled = true;
-            executionBtn.textContent = 'Executing...';
-        }
-        if (stopExecutionBtn) stopExecutionBtn.style.display = '';
+        runControlHelpers.startExecutionUI?.();
     }
 
     async function runExecution() {
-        if (!executionBtn) return;
-        const { ideaId, planId } = await cfg.resolvePlanIds();
-        if (!ideaId || !planId) {
-            alert('Current research has no valid plan yet. Please finish Refine/Plan first.');
-            return;
-        }
-        const btn = executionBtn;
-        const originalText = btn.textContent;
-        document.dispatchEvent(new CustomEvent('maars:task-start'));
-        document.dispatchEvent(new CustomEvent('maars:switch-view', { detail: { view: 'execution' } }));
-        startExecutionUI();
-        try {
-            let stream = window.MAARS?.state?.es;
-            if (!stream || stream.readyState !== 1) {
-                stream = await window.MAARS.ws?.requireConnected?.();
-                if (!stream || stream.readyState !== 1) {
-                    resetExecutionButtons();
-                    return;
-                }
-            }
-            const response = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/execution/run`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ideaId, planId })
-            });
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to start execution');
-            }
-            if (stopExecutionBtn) stopExecutionBtn.style.display = '';
-        } catch (error) {
-            console.error('Error in execution:', error);
-            alert('Error: ' + error.message);
-            btn.textContent = originalText;
-            btn.disabled = false;
-            if (stopExecutionBtn) stopExecutionBtn.style.display = 'none';
-        }
+        await runControlHelpers.runExecution?.();
     }
 
     function stopExecution() {
-        resetExecutionButtons(); /* 立即恢复按钮，不等待后端 */
-        api.stopAgent('task').catch(() => {});
+        runControlHelpers.stopExecution?.();
     }
 
     function resetExecutionButtons() {
-        if (executionBtn) { executionBtn.disabled = false; executionBtn.textContent = 'Execution'; }
-        if (stopExecutionBtn) stopExecutionBtn.style.display = 'none';
+        runControlHelpers.resetExecutionButtons?.();
     }
 
     async function generateExecutionLayout(explicitIds) {
@@ -229,37 +153,12 @@
         renderExecutionDiagram();
     }
 
-    /** 应用任务状态到 chainCache、previousTaskStates，并触发连线动画 */
     function applyTaskStates(tasks) {
-        if (!tasks || !Array.isArray(tasks)) return;
-        tasks.forEach((taskState) => {
-            const cacheNode = state.chainCache.find((node) => node.task_id === taskState.task_id);
-            const previousStatus = state.previousTaskStates.get(taskState.task_id);
-            if (cacheNode) cacheNode.status = taskState.status;
-            if (previousStatus !== undefined && previousStatus !== taskState.status) {
-                if (taskState.status === 'doing' && (previousStatus === 'undone' || previousStatus === 'validating')) {
-                    setTimeout(() => animateConnectionLines(taskState.task_id, 'yellow', 'upstream'), 50);
-                } else if (taskState.status === 'undone' && previousStatus === 'done') {
-                    setTimeout(() => animateConnectionLines(taskState.task_id, 'red', 'downstream'), 50);
-                }
-            }
-            state.previousTaskStates.set(taskState.task_id, taskState.status);
-        });
+        executionStateHelpers.applyTaskStates?.(tasks);
     }
 
-    /** 连接时同步执行状态（chainCache、stats、按钮） */
     function handleExecutionSync(data) {
-        if (!data?.tasks?.length) return;
-        renderExecutionStats({ stats: data.stats });
-        data.tasks.forEach((taskState) => {
-            const cacheNode = state.chainCache.find((node) => node.task_id === taskState.task_id);
-            if (cacheNode) cacheNode.status = taskState.status;
-            state.previousTaskStates.set(taskState.task_id, taskState.status);
-        });
-        if (data.running) {
-            if (executionBtn) { executionBtn.disabled = true; executionBtn.textContent = 'Executing...'; }
-            if (stopExecutionBtn) stopExecutionBtn.style.display = '';
-        }
+        executionStateHelpers.handleExecutionSync?.(data, executionBtn, stopExecutionBtn);
     }
 
     function onIdeaStart() {
@@ -306,29 +205,13 @@
     }
 
     function onTaskError(e) {
-        const data = e?.detail || {};
-        const isStoppedByUser = (data.error || '').includes('stopped by user');
-        const isRetryable = !!data.willRetry;
-        const phase = String(data.phase || '').trim().toLowerCase();
-        const taskId = String(data.taskId || '').trim();
-        const phaseLabel = phase === 'validation' ? 'Validation failed' : 'Execution error';
-        const prefix = taskId ? `[${taskId}] ${phaseLabel}` : phaseLabel;
-        if (!isStoppedByUser) {
-            if (isRetryable) {
-                console.warn(prefix + ' (auto-retrying):', data.error);
-            } else {
-                console.error(prefix + ':', data.error);
-                alert(prefix + ': ' + (data.error || 'Unknown error'));
-            }
-        }
-        if (!isRetryable) resetExecutionButtons();
+        runControlHelpers.onTaskError?.(e);
     }
 
     function onExecutionSync(e) {
         const data = e?.detail;
         if (!data?.tasks?.length) return;
-        // Track running flag so we can avoid layout mutations mid-execution.
-        state.executionRunning = !!data.running;
+        runControlHelpers.onExecutionSyncRunning?.(data);
         handleExecutionSync(data);
     }
 
@@ -347,21 +230,11 @@
     }
 
     function onTaskRetry(e) {
-        const taskId = e?.detail?.taskId;
-        if (!taskId || !api) return;
-        api.retryTask(taskId).then(() => startExecutionUI()).catch((err) => {
-            console.error('Retry failed:', err);
-            alert('Failed: ' + (err.message || err));
-        });
+        runControlHelpers.onTaskRetry?.(e);
     }
 
     function onTaskResume(e) {
-        const taskId = e?.detail?.taskId;
-        if (!taskId || !api) return;
-        api.resumeFromTask(taskId).then(() => startExecutionUI()).catch((err) => {
-            console.error('Resume failed:', err);
-            alert('Failed: ' + (err.message || err));
-        });
+        runControlHelpers.onTaskResume?.(e);
     }
 
     function init() {
@@ -369,7 +242,7 @@
         if (stopExecutionBtn) stopExecutionBtn.addEventListener('click', stopExecution);
         document.addEventListener('maars:idea-start', onIdeaStart);
         document.addEventListener('maars:plan-start', onPlanStart);
-        document.addEventListener('maars:task-start', () => clear());
+        document.addEventListener('maars:task-start', () => runControlHelpers.onExecutionStartClear?.());
         document.addEventListener('maars:plan-complete', onPlanComplete);
         document.addEventListener('maars:plan-complete', onPlanCompleteForLayout);
         document.addEventListener('maars:task-complete', onExecutionComplete);
@@ -378,7 +251,7 @@
         document.addEventListener('maars:task-states-update', onTaskStatesUpdate);
         document.addEventListener('maars:task-error', onTaskError);
         document.addEventListener('maars:execution-sync', onExecutionSync);
-        document.addEventListener('maars:task-retry', onTaskRetry);
+        document.addEventListener('maars:attempt-retry-request', onTaskRetry);
         document.addEventListener('maars:task-resume', onTaskResume);
         executionBtn && (executionBtn.disabled = true);
         updateButtonState();
