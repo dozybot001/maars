@@ -73,11 +73,12 @@
     color: var(--text-color);
     background: none;
     border: 1px solid transparent;
+    border-radius: var(--btn-radius);
     text-align: left;
     width: 100%;
     min-width: 0;
     cursor: pointer;
-    transition: var(--state-transition);
+    transition: var(--btn-transition);
 }
 
 .settings-nav-item:hover {

@@ -1,6 +1,6 @@
 # MAARS Release Note 撰写标准
 
-本文档定义 MAARS 项目 Release Note 的撰写规范，供每次版本发布时参考。
+本文档定义 MAARS 项目 Release Note 的撰写规范，供每次版本发布时参考。默认目标是写出适合 GitHub Release 首屏阅读的短版说明，而不是冗长的变更清单。
 
 ---
 
@@ -9,6 +9,8 @@
 - **不维护** `docs/releases/` 目录下的 Release 文件
 - **输出**：撰写完成后，以 Markdown 代码块（` ```markdown ... ``` `）形式输出，供用户复制到 GitHub Release、CHANGELOG 等
 - **版本号**：采用语义化版本 `v{major}.{minor}.{patch}`，如 `v1.2.0`
+- **标题**：正文中不写 `# vX.Y.Z` 这类标题，GitHub Release 页面会单独展示版本标题
+- **长度**：优先短版，通常控制在 4 个以内的小节；只有在变更复杂时才补充更多章节
 
 ---
 
@@ -29,26 +31,33 @@
 ## 3. Release Note 结构模板
 
 > **注意**：正文中不要包含版本标题（如 `# MAARS v2.4.1`）。GitHub 版本发布页面会自动显示版本号作为标题，重复书写会造成冗余。
+>
+> 默认采用短版模板，只保留对读者最重要的信息。
 
 ```markdown
-**发布日期**：YYYY-MM-DD HH:mm
+**发布日期**：YYYY-MM-DD
 
 ## 概述
 
-（1–3 句话概括本版本的主要变化与价值）
+（1-2 句话概括本版本的主要变化与价值）
 
 ## 新增功能 (Added)
 
-- （功能描述，可附 PR/Issue 编号）
-
-## 变更 (Changed)
-
-- （行为变更、API 变更、配置变更等）
+- （新增能力、入口、接口、工作流等）
 
 ## 修复 (Fixed)
 
 - （Bug 修复、稳定性改进）
 
+## 变更 (Changed)
+
+- （行为变更、API 变更、配置变更、文档结构调整等）
+
+```
+
+如版本确实涉及额外风险，可按需追加以下可选章节：
+
+```markdown
 ## 弃用/移除 (Deprecated / Removed)
 
 - （如有）
@@ -57,10 +66,9 @@
 
 - （如有安全相关更新）
 
-## 技术细节 / 迁移指南
+## 迁移说明
 
-（可选：重要变更的迁移步骤、配置说明、破坏性变更说明）
-
+- （如有必要，说明升级注意事项）
 ```
 
 ---
@@ -75,21 +83,22 @@
 
 **撰写要点**：说明「做了什么」以及「用户/开发者能获得什么」。
 
-### 4.2 变更 (Changed)
-
-- 现有行为或 API 的调整
-- 性能优化、重构
-- 默认配置变更
-
-**撰写要点**：明确变更前后差异，必要时说明迁移方式。
-
-### 4.3 修复 (Fixed)
+### 4.2 修复 (Fixed)
 
 - Bug 修复
 - 崩溃、异常、错误处理改进
 - 兼容性修复
 
 **撰写要点**：简要描述问题现象及修复结果。
+
+### 4.3 变更 (Changed)
+
+- 现有行为或 API 的调整
+- 性能优化、重构
+- 默认配置变更
+- 文档结构调整
+
+**撰写要点**：明确变更前后差异，必要时说明迁移方式。
 
 ### 4.4 弃用/移除 (Deprecated / Removed)
 
@@ -114,29 +123,37 @@
 - **语言**：以中文为主，技术术语可保留英文（如 API、WebSocket、LLM）
 - **对象**：面向用户与开发者，兼顾使用场景与实现细节
 - **风格**：简洁、客观，避免营销式表述
+- **优先级**：先写用户真正关心的变化，再写实现层细节
 
 ### 5.2 条目格式
 
 - 每条变更单独一行，以 `-` 开头
 - 格式：`- **模块/区域**：具体描述`（模块可选）
 - 可附 PR/Issue 编号，如：`(#123)`、`(PR #45)`
+- 一般不必把所有提交都逐条翻译成条目，应适当归并
 
 ### 5.3 示例
 
 ```markdown
+**发布日期**：2025-03-03
+
+## 概述
+
+本版本新增开发指南文档，并修正前端 Restore 流程与 Task 清空逻辑。
+
 ## 新增功能 (Added)
 
-- **Plan Agent**：支持按阶段独立配置 LLM（atomicity/decompose/format）
-- **Monitor**：执行图新增 stage-based 网格布局，支持等价任务合并 (#78)
-
-## 变更 (Changed)
-
-- **API**：`/api/plan/{id}` 响应中 `layout` 字段结构变更，详见 [EXECUTION_LAYOUT_RULES](backend/visualization/EXECUTION_LAYOUT_RULES.md)
+- **开发指南**：新增 `docs/DEVELOPMENT_GUIDE.md`，涵盖底层架构、四 Agent 流程、三模式、Skill 扩充与维护等
 
 ## 修复 (Fixed)
 
-- 修复 Task Agent 池在任务失败时可能卡死的问题
-- 修复前端任务树在深层嵌套时的布局错位
+- **Task 流程**：`maars:task-start` 时调用 `clear()`，确保 Task 区域正确清空
+- **Restore 流程**：Settings 中 Restore 成功后不再手动派发 `maars:idea-complete`、`maars:plan-complete`，由 `maars:restore-complete` 统一处理
+- **plan-error**：WebSocket 转发时携带 `detail.error`，供前端使用
+
+## 变更 (Changed)
+
+- **文档索引**：README、docs/README 增加开发指南链接
 ```
 
 ---
@@ -144,7 +161,7 @@
 ## 6. 发布流程
 
 1. **收集变更**：从 Git 提交、PR、Issue 中整理本版本变更
-2. **分类归类**：按 Added / Changed / Fixed / Deprecated / Security 分类
+2. **分类归类**：默认按 Added / Fixed / Changed 分类，只有确有必要时再补充 Deprecated / Security / 迁移说明
 3. **撰写初稿**：按模板撰写，遵循上述原则
 4. **评审**：由维护者或团队 Review
 5. **输出**：以 Markdown 代码块形式输出 Release Note，供用户复制到 GitHub Release 等

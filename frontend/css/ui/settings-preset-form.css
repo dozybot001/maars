@@ -32,11 +32,11 @@
     color: var(--text-color);
     background: var(--bg-white);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: var(--btn-radius);
     text-align: left;
     min-width: 0;
     cursor: pointer;
-    transition: var(--state-transition);
+    transition: var(--btn-transition);
     box-sizing: border-box;
 }
 
@@ -89,9 +89,9 @@
     color: var(--text-muted);
     background: var(--bg-white);
     border: 1px dashed var(--border-color);
-    border-radius: 8px;
+    border-radius: var(--btn-radius);
     cursor: pointer;
-    transition: var(--state-transition);
+    transition: var(--btn-transition);
 }
 
 .settings-preset-add:hover {

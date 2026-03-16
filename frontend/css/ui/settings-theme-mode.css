@@ -16,15 +16,15 @@
     padding: 12px;
     background: none;
     border: 2px solid var(--border-color);
-    border-radius: 12px;
+    border-radius: var(--btn-radius);
     cursor: pointer;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    transition: var(--btn-transition);
     overflow: hidden;
 }
 
 .settings-theme-card:hover {
-    border-color: var(--border-color-hover);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    border-color: var(--btn-hover-border);
+    background: var(--btn-hover-bg);
 }
 
 .settings-theme-card.active {
@@ -231,9 +231,9 @@
     color: var(--text-color);
     background: var(--bg-white);
     border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
+    border-radius: var(--btn-radius);
     cursor: pointer;
-    transition: var(--state-transition);
+    transition: var(--btn-transition);
 }
 
 .settings-mode-cell:hover {
