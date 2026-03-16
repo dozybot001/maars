@@ -279,7 +279,7 @@ class RunnerTaskExecutionMixin:
                         "attemptHistory": list(self.task_attempt_history.get(task_id) or []),
                         "inputArtifacts": sorted(list((resolved_inputs or {}).keys())),
                     }
-                    validation_passed, final_report = await runner_mod.validate_task_output_with_readonly_agent(
+                    validation_passed, final_report = await runner_mod.validate_task_output_with_llm(
                         result,
                         output_spec,
                         task_id,

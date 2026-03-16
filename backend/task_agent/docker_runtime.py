@@ -225,9 +225,18 @@ async def ensure_execution_container(
         "executionRunId": execution_run_id,
     }
 
-    sandbox_root = get_execution_sandbox_root(execution_run_id).resolve()
-    src_dir = get_execution_src_dir(execution_run_id).resolve()
-    step_dir = get_execution_task_step_dir(execution_run_id, task_id).resolve()
+    # Respect runtime/pytest overrides that patch db.SANDBOX_DIR on the db module.
+    import db as db_mod
+
+    sandbox_base = Path(getattr(db_mod, "SANDBOX_DIR", "")).resolve() if getattr(db_mod, "SANDBOX_DIR", None) else None
+    if sandbox_base:
+        sandbox_root = (sandbox_base / execution_run_id).resolve()
+        src_dir = (sandbox_root / "src").resolve()
+        step_dir = (sandbox_root / "step" / task_id).resolve()
+    else:
+        sandbox_root = get_execution_sandbox_root(execution_run_id).resolve()
+        src_dir = get_execution_src_dir(execution_run_id).resolve()
+        step_dir = get_execution_task_step_dir(execution_run_id, task_id).resolve()
     skills_dir = skills_dir.resolve()
     src_dir.mkdir(parents=True, exist_ok=True)
     step_dir.mkdir(parents=True, exist_ok=True)

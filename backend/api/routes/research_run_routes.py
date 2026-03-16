@@ -106,20 +106,55 @@ async def stop_research_route(research_id: str, request: Request):
     if not research:
         return JSONResponse(status_code=404, content={"error": "Research not found"})
 
-    task = _running_task_for(session_id, research_id)
-    await _abort_stage_runners(session, include_execute=True)
+    # Stop should work even if frontend session changed after refresh.
+    active_session_id = session_id
+    active_session = session
+    task = _running_task_for(active_session_id, research_id)
+    if not task or task.done():
+        for (sid, rid), entry in list(_RUNNING.items()):
+            if rid != research_id:
+                continue
+            t = (entry or {}).get("task")
+            if t and not t.done():
+                active_session_id = sid
+                active_session = api_state.sessions.get(sid) or session
+                task = t
+                break
+
+    await _abort_stage_runners(active_session, include_execute=True)
 
     if task and not task.done():
         task.cancel()
         await update_research_stage(research_id, stage_status="stopped", error=None)
         try:
             stage = _normalize_stage(research.get("stage") or "refine")
-            await _emit_stage(session_id, research_id, stage, "stopped")
+            await _emit_stage(active_session_id, research_id, stage, "stopped")
+            if active_session_id != session_id:
+                await _emit_stage(session_id, research_id, stage, "stopped")
         except Exception:
             pass
-        return {"success": True, "researchId": research_id, "sessionId": session_id, "stopped": True}
+        return {"success": True, "researchId": research_id, "sessionId": active_session_id, "stopped": True}
 
-    return {"success": True, "researchId": research_id, "sessionId": session_id, "stopped": False, "message": "No running pipeline"}
+    current_stage = _normalize_stage(research.get("stage") or "refine")
+    current_status = str(research.get("stageStatus") or "idle").strip().lower()
+    if current_status == "running":
+        # Recover from stale DB state when no in-memory task exists.
+        await update_research_stage(research_id, stage=current_stage, stage_status="stopped", error=None)
+        try:
+            await _emit_stage(active_session_id, research_id, current_stage, "stopped")
+            if active_session_id != session_id:
+                await _emit_stage(session_id, research_id, current_stage, "stopped")
+        except Exception:
+            pass
+        return {
+            "success": True,
+            "researchId": research_id,
+            "sessionId": active_session_id,
+            "stopped": True,
+            "message": "Recovered stale running state",
+        }
+
+    return {"success": True, "researchId": research_id, "sessionId": active_session_id, "stopped": False, "message": "No running pipeline"}
 
 
 @router.post("/retry")
@@ -243,20 +278,55 @@ async def stop_research_stage_route(research_id: str, stage: str, request: Reque
     research = await get_research(research_id)
     if not research:
         return JSONResponse(status_code=404, content={"error": "Research not found"})
-    entry = _RUNNING.get((session_id, research_id)) or {}
+
+    # Resolve active running session by research id first; UI session may differ after refresh.
+    active_session_id = session_id
+    active_session = session
+    entry = _RUNNING.get((active_session_id, research_id)) or {}
+    if not entry:
+        for (sid, rid), candidate in list(_RUNNING.items()):
+            if rid != research_id:
+                continue
+            task_candidate = (candidate or {}).get("task")
+            if task_candidate and not task_candidate.done():
+                active_session_id = sid
+                active_session = api_state.sessions.get(sid) or session
+                entry = candidate or {}
+                break
+
     running_stage = _normalize_stage(entry.get("stage") or (research.get("stage") or "refine"))
     task = entry.get("task")
     runner_was_running = (
         stage == "execute"
-        and getattr(session, "runner", None) is not None
-        and bool(getattr(session.runner, "is_running", False))
+        and getattr(active_session, "runner", None) is not None
+        and bool(getattr(active_session.runner, "is_running", False))
     )
-    await _abort_stage_runners(session, include_execute=True)
+    await _abort_stage_runners(active_session, include_execute=True)
     pipeline_task_active = task and not task.done() and running_stage == stage
     if pipeline_task_active or runner_was_running:
         if pipeline_task_active:
             task.cancel()
         await update_research_stage(research_id, stage=stage, stage_status="stopped", error=None)
-        await _emit_stage(session_id, research_id, stage, "stopped")
-        return {"success": True, "researchId": research_id, "sessionId": session_id, "stage": stage, "stopped": True}
-    return {"success": True, "researchId": research_id, "sessionId": session_id, "stage": stage, "stopped": False, "message": "No running stage task"}
+        await _emit_stage(active_session_id, research_id, stage, "stopped")
+        if active_session_id != session_id:
+            await _emit_stage(session_id, research_id, stage, "stopped")
+        return {"success": True, "researchId": research_id, "sessionId": active_session_id, "stage": stage, "stopped": True}
+
+    current_stage = _normalize_stage(research.get("stage") or "refine")
+    current_status = str(research.get("stageStatus") or "idle").strip().lower()
+    if current_stage == stage and current_status == "running":
+        # Stale status recovery: DB says running but runtime has no active task.
+        await update_research_stage(research_id, stage=stage, stage_status="stopped", error=None)
+        await _emit_stage(active_session_id, research_id, stage, "stopped")
+        if active_session_id != session_id:
+            await _emit_stage(session_id, research_id, stage, "stopped")
+        return {
+            "success": True,
+            "researchId": research_id,
+            "sessionId": active_session_id,
+            "stage": stage,
+            "stopped": True,
+            "message": "Recovered stale running state",
+        }
+
+    return {"success": True, "researchId": research_id, "sessionId": active_session_id, "stage": stage, "stopped": False, "message": "No running stage task"}

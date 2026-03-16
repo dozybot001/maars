@@ -36,6 +36,10 @@ from validate_agent import review_contract_adjustment
 from shared.reflection import self_evaluate, generate_skill_from_reflection, save_learned_skill
 
 
+# Backward-compat symbol: tests and some callers still patch this name.
+validate_task_output_with_llm = validate_task_output_with_readonly_agent
+
+
 def _env_float(name: str, default: float) -> float:
     raw = os.getenv(name)
     if raw is None or raw == "":

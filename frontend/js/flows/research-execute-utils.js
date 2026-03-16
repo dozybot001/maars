@@ -170,7 +170,9 @@
             if (!domEvent) return;
             const payload = item && typeof item.payload === 'object' && item.payload !== null ? item.payload : {};
             const taskId = String(item?.taskId || '').trim();
-            const detail = taskId ? { ...payload, taskId } : { ...payload };
+            const detail = taskId
+                ? { ...payload, taskId, __replayed: true }
+                : { ...payload, __replayed: true };
             document.dispatchEvent(new CustomEvent(domEvent, { detail }));
         });
     }

@@ -31,6 +31,30 @@ from shared.constants import (
 from shared.structured_output import generate_with_repair
 
 
+async def real_chat_completion(
+    *,
+    messages: List[Dict[str, Any]],
+    phase: str,
+    on_thinking: Callable[[str], None],
+    task_id: str,
+    op_label: str,
+    abort_event: Optional[Any],
+    api_config: Optional[Dict] = None,
+    temperature: float = TEMP_DETERMINISTIC,
+) -> str:
+    """Compatibility wrapper so tests can monkeypatch plan_exec.real_chat_completion."""
+    return await _call_real_chat_completion(
+        messages=messages,
+        phase=phase,
+        on_thinking=on_thinking,
+        task_id=task_id,
+        op_label=op_label,
+        abort_event=abort_event,
+        api_config=api_config,
+        temperature=temperature,
+    )
+
+
 def _parse_json_response(text: str) -> Any:
     """Parse JSON from AI response using json_repair for malformed output."""
     cleaned = (text or "").strip()
@@ -306,7 +330,7 @@ async def format_task(
 
         result, _raw = await generate_with_repair(
             base_messages=messages,
-            model_call=lambda msgs, temperature: _call_real_chat_completion(
+            model_call=lambda msgs, temperature: real_chat_completion(
                 messages=msgs,
                 phase=phase,
                 on_thinking=on_thinking,

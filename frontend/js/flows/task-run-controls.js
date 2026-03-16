@@ -78,6 +78,9 @@
 
         function onTaskError(e) {
             const data = e?.detail || {};
+            if (data.__replayed === true) {
+                return;
+            }
             const isStoppedByUser = String(data.error || '').includes('stopped by user');
             const isRetryable = !!data.willRetry;
             const phase = String(data.phase || '').trim().toLowerCase();
