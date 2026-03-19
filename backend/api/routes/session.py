@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 from fastapi import Request
+from fastapi.responses import JSONResponse
 
 from .. import state as api_state
 
@@ -13,11 +14,14 @@ async def init_session():
     """Issue a signed session credential pair and pre-create session context."""
     creds = api_state.issue_session_credentials()
     await api_state.get_or_create_session_state(creds["sessionId"])
-    return {
+    response = JSONResponse({
         "sessionId": creds["sessionId"],
         "sessionToken": creds["sessionToken"],
         "idleTtlSeconds": api_state.SESSION_IDLE_TTL_SECONDS,
-    }
+    })
+    response.set_cookie("maars_sid", creds["sessionId"], httponly=True, samesite="strict")
+    response.set_cookie("maars_stoken", creds["sessionToken"], httponly=True, samesite="strict")
+    return response
 
 
 @router.get("/verify")

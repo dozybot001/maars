@@ -144,11 +144,9 @@
         } catch (_) {
             /* ignore probe errors */
         }
-        const sid = creds?.sessionId || cfg.getSessionId?.();
-        const token = creds?.sessionToken || cfg.getSessionToken?.();
-        const url = `${cfg.API_BASE_URL}/events/stream?sessionId=${encodeURIComponent(sid || '')}&sessionToken=${encodeURIComponent(token || '')}`;
+        const url = `${cfg.API_BASE_URL}/events/stream`;
         console.log('Connecting SSE:', url);
-        state.es = new EventSource(url);
+        state.es = new EventSource(url, { withCredentials: true });
         // One-shot auto refresh if credentials were stale.
         let refreshed = false;
         state.es.addEventListener('error', async () => {

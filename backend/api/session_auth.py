@@ -79,8 +79,10 @@ def resolve_session_id(request: Any) -> str:
     header_token = request.headers.get("X-MAARS-SESSION-TOKEN")
     query_sid = request.query_params.get("sessionId")
     query_token = request.query_params.get("sessionToken")
-    raw_sid = header_sid or query_sid
-    raw_token = header_token or query_token
+    cookie_sid = request.cookies.get("maars_sid")
+    cookie_token = request.cookies.get("maars_stoken")
+    raw_sid = header_sid or query_sid or cookie_sid
+    raw_token = header_token or query_token or cookie_token
     if not raw_sid or not raw_token:
         raise HTTPException(status_code=401, detail="Missing session credentials")
     try:
