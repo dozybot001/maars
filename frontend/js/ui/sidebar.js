@@ -3,6 +3,7 @@
  */
 (function () {
     'use strict';
+    const toast = window.MAARS.toast;
 
     const TRANSITION_MS = 260;
     let _refreshResearchList = null;
@@ -89,7 +90,7 @@
                 }
             } catch (e) {
                 console.error('Failed to delete research:', e);
-                alert('删除失败：' + e.message);
+                toast.error('删除失败：' + e.message);
             }
         }
 

@@ -3,6 +3,7 @@
  */
 (function () {
     'use strict';
+    const toast = window.MAARS.toast;
 
     function _isStagePrerequisiteCompleted(ctx, stage) {
         const order = ['refine', 'plan', 'execute', 'paper'];
@@ -281,7 +282,7 @@
             navigateToResearch(ctx, researchId);
         } catch (e) {
             console.error(e);
-            alert(e?.message || 'Failed to create research');
+            toast.error(e?.message || 'Failed to create research');
         } finally {
             if (ctx.createBtn) ctx.createBtn.disabled = false;
         }
@@ -294,7 +295,7 @@
             btn.addEventListener('click', async () => {
                 if (!researchId) return;
                 if (action !== 'stop' && !_isStagePrerequisiteCompleted(ctx, stage)) {
-                    alert(`Cannot start ${stage} stage before previous stage is completed.`);
+                    toast.warning(`Cannot start ${stage} stage before previous stage is completed.`);
                     renderStageStatusDetails(ctx);
                     return;
                 }
@@ -309,7 +310,7 @@
                         // Keep UI in sync with backend state and avoid noisy alerts.
                         ctx.loadResearch?.(researchId).catch(() => {});
                     } else {
-                        alert(msg || `Failed to ${action} stage`);
+                        toast.error(msg || `Failed to ${action} stage`);
                     }
                 } finally {
                     renderStageStatusDetails(ctx);
@@ -374,7 +375,7 @@
                 ctx.renderExecutionRuntimeStatus({ enabled: true, available: true, connected: false });
                 ctx.loadResearch(rid).catch((e) => {
                     console.error(e);
-                    alert(e?.message || 'Failed to load research');
+                    toast.error(e?.message || 'Failed to load research');
                     navigateToCreateResearch(ctx);
                 });
             } else {

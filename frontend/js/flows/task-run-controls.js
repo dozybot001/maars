@@ -4,6 +4,7 @@
  */
 (function () {
     'use strict';
+    const toast = window.MAARS.toast;
 
     function createTaskRunControlHelpers(deps) {
         const cfg = deps?.cfg;
@@ -33,7 +34,7 @@
             if (!executionBtn || !cfg || !api) return;
             const { ideaId, planId } = await cfg.resolvePlanIds();
             if (!ideaId || !planId) {
-                alert('Current research has no valid plan yet. Please finish Refine/Plan first.');
+                toast.warning('Current research has no valid plan yet. Please finish Refine/Plan first.');
                 return;
             }
 
@@ -64,7 +65,7 @@
                 if (stopExecutionBtn) stopExecutionBtn.style.display = '';
             } catch (error) {
                 console.error('Error in execution:', error);
-                alert('Error: ' + error.message);
+                toast.error('Error: ' + error.message);
                 btn.textContent = originalText;
                 btn.disabled = false;
                 if (stopExecutionBtn) stopExecutionBtn.style.display = 'none';
@@ -93,7 +94,7 @@
                     console.warn(prefix + ' (auto-retrying):', data.error);
                 } else {
                     console.error(prefix + ':', data.error);
-                    alert(prefix + ': ' + (data.error || 'Unknown error'));
+                    toast.error(prefix + ': ' + (data.error || 'Unknown error'));
                 }
             }
             if (!isRetryable) resetExecutionButtons();
@@ -104,7 +105,7 @@
             if (!taskId || !api) return;
             api.retryTask(taskId).then(() => startExecutionUI()).catch((err) => {
                 console.error('Retry failed:', err);
-                alert('Failed: ' + (err.message || err));
+                toast.error('Failed: ' + (err.message || err));
             });
         }
 
@@ -113,7 +114,7 @@
             if (!taskId || !api) return;
             api.resumeFromTask(taskId).then(() => startExecutionUI()).catch((err) => {
                 console.error('Resume failed:', err);
-                alert('Failed: ' + (err.message || err));
+                toast.error('Failed: ' + (err.message || err));
             });
         }
 

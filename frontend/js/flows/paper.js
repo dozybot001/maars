@@ -7,6 +7,7 @@
     const cfg = window.MAARS?.config;
     const api = window.MAARS?.api;
     if (!cfg || !api) return;
+    const toast = window.MAARS.toast;
 
     const generatePaperBtn = document.getElementById('generatePaperBtn');
     const stopPaperBtn = document.getElementById('stopPaperBtn');
@@ -17,7 +18,7 @@
         const isStoppedByUser = (errorMsg || '').includes('stopped by user');
         if (errorMsg && !isStoppedByUser) {
             console.error('Paper error:', errorMsg);
-            alert('Paper generation failed: ' + errorMsg);
+            toast.error('Paper generation failed: ' + errorMsg);
         }
         isGenerating = false;
         if (stopPaperBtn) stopPaperBtn.style.display = 'none';
@@ -35,7 +36,7 @@
         try {
             const { ideaId, planId } = await cfg.resolvePlanIds();
             if (!ideaId || !planId) {
-                alert('Please Refine and Plan first.');
+                toast.warning('Please Refine and Plan first.');
                 return;
             }
             isGenerating = true;

@@ -7,6 +7,7 @@
     const cfg = window.MAARS?.config;
     const api = window.MAARS?.api;
     if (!cfg || !api) return;
+    const toast = window.MAARS.toast;
 
     const ideaInput = document.getElementById('ideaInput');
     const generatePlanBtn = document.getElementById('generatePlanBtn');
@@ -44,7 +45,7 @@
             /* 完成数据由 WebSocket plan-complete 回传，onPlanComplete 负责 resetPlanUI */
         } catch (error) {
             console.error('Error generating plan:', error);
-            alert('Error: ' + (error.message || 'Failed to generate plan'));
+            toast.error('Error: ' + (error.message || 'Failed to generate plan'));
             resetPlanUI();
         }
     }

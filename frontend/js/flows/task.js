@@ -7,6 +7,7 @@
     const cfg = window.MAARS?.config;
     const api = window.MAARS?.api;
     if (!cfg || !api) return;
+    const toast = window.MAARS.toast;
 
     const executionBtn = document.getElementById('executionBtn');
     const stopExecutionBtn = document.getElementById('stopExecutionBtn');
@@ -100,7 +101,7 @@
             if (!genRes.ok) throw new Error(genData.error || 'Failed to generate execution from plan');
             const execData = genData.execution;
             if (!execData || !execData.tasks?.length) {
-                alert('Current plan has no executable atomic tasks. Refine/Plan must finish successfully first.');
+                toast.warning('Current plan has no executable atomic tasks. Refine/Plan must finish successfully first.');
                 return;
             }
             const response = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/plan/layout`, {
@@ -132,7 +133,7 @@
                 console.warn('Layout update blocked while running; ignoring.');
                 return;
             }
-            alert('Error: ' + msg);
+            toast.error('Error: ' + msg);
         }
     }
 

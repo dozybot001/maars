@@ -5,6 +5,7 @@
     'use strict';
     const cfg = window.MAARS?.config;
     if (!cfg) return;
+    const toast = window.MAARS.toast;
     const presetHelpers = window.MAARS?.settingsPresetHelpers || {};
     const syncHelpers = window.MAARS?.settingsSyncHelpers || {};
 
@@ -136,7 +137,7 @@
                 raw = await cfg.fetchSettings();
             } catch (e) {
                 console.error('Failed to load config:', e);
-                alert('Failed to load settings: ensure backend is running (e.g. uvicorn main:asgi_app) and refresh the page.');
+                toast.error('Failed to load settings: ensure backend is running (e.g. uvicorn main:asgi_app) and refresh the page.', { duration: 8000 });
                 return;
             }
             _loadConfig(raw);
@@ -233,7 +234,7 @@
                 }, 1500);
             } catch (e) {
                 console.error('Restore failed:', e);
-                alert('Restore failed: ' + (e.message || e));
+                toast.error('Restore failed: ' + (e.message || e));
                 if (btn) { btn.disabled = false; btn.textContent = origText || 'Restore'; }
             }
         });
@@ -248,7 +249,7 @@
                 location.reload();
             } catch (e) {
                 console.error('Clear DB failed:', e);
-                alert('Clear failed: ' + (e.message || e));
+                toast.error('Clear failed: ' + (e.message || e));
             }
         });
 
@@ -270,7 +271,7 @@
                 closeModal();
             } catch (err) {
                 console.error('Save config:', err);
-                alert('Save failed: ' + (err.message || 'Unknown error'));
+                toast.error('Save failed: ' + (err.message || 'Unknown error'));
             }
         });
 

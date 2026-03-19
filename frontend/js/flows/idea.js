@@ -7,6 +7,7 @@
     const cfg = window.MAARS?.config;
     const api = window.MAARS?.api;
     if (!cfg || !api) return;
+    const toast = window.MAARS.toast;
 
     const ideaInput = document.getElementById('ideaInput');
     const refineIdeaBtn = document.getElementById('refineIdeaBtn');
@@ -32,7 +33,7 @@
         const isStoppedByUser = (errorMsg || '').includes('stopped by user');
         if (errorMsg && !isStoppedByUser) {
             console.error('Refine error:', errorMsg);
-            alert('Refine failed: ' + errorMsg);
+            toast.error('Refine failed: ' + errorMsg);
         }
         isRefining = false;
         if (stopRefineBtn) stopRefineBtn.style.display = 'none';

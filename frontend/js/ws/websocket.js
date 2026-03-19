@@ -7,6 +7,7 @@
     const cfg = window.MAARS?.config;
     if (!cfg) return;
 
+    const toast = window.MAARS.toast;
     const state = window.MAARS.state || {};
     state.socket = state.socket ?? null;
     window.MAARS.state = state;
@@ -183,7 +184,7 @@
     async function requireConnected(timeoutMs = 4000) {
         const socket = await ensureConnected(timeoutMs);
         if (socket && socket.readyState === 1) return socket;
-        alert('Realtime stream not connected. Please wait and try again.');
+        toast.warning('Realtime stream not connected. Please wait and try again.');
         return null;
     }
 
