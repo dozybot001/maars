@@ -11,12 +11,6 @@ from loguru import logger
 from db import get_execution_task_step_dir
 
 
-def _runner_module():
-    from . import runner as runner_mod
-
-    return runner_mod
-
-
 class RunnerTaskExecutionMixin:
     @staticmethod
     def _write_text_file(path: Path, content: str) -> None:
@@ -99,7 +93,7 @@ class RunnerTaskExecutionMixin:
             logger.exception("Failed to persist prompt snapshot task_id={} attempt={}", task_id, attempt)
 
     async def _execute_task(self, task: Dict) -> None:
-        runner_mod = _runner_module()
+
         if not self.is_running:
             return
         logger.info(
@@ -115,7 +109,7 @@ class RunnerTaskExecutionMixin:
         retry_count = 0
         while self.is_running and slot_id is None and retry_count < 50:
             async with self._worker_lock:
-                slot_id = runner_mod.worker_manager["assign_task"](task["task_id"])
+                slot_id = self._deps.assign_task(task["task_id"])
             if slot_id is None:
                 await asyncio.sleep(min(0.1 + retry_count * 0.02, 0.5))
                 retry_count += 1
@@ -188,7 +182,7 @@ class RunnerTaskExecutionMixin:
                 raise ValueError(f"Task {task['task_id']} has no output spec")
             execution_error_message = ""
             try:
-                resolved_inputs = await runner_mod.resolve_artifacts(task, self.task_map, self.idea_id or "", self.plan_id or "")
+                resolved_inputs = await self._deps.resolve_artifacts(task, self.task_map, self.idea_id or "", self.plan_id or "")
                 logger.info(
                     "Task resolved inputs task_id={} input_keys={} output_keys={}",
                     task["task_id"],
@@ -223,12 +217,12 @@ class RunnerTaskExecutionMixin:
                 if api_cfg.get("taskAgentMode"):
                     if not (self.idea_id and self.plan_id):
                         raise ValueError("Docker task execution requires idea_id and plan_id")
-                    runtime = await runner_mod.ensure_execution_container(
+                    runtime = await self._deps.ensure_execution_container(
                         execution_run_id=self.execution_run_id,
                         idea_id=self.idea_id,
                         plan_id=self.plan_id,
                         task_id=task["task_id"],
-                        skills_dir=runner_mod.SKILLS_ROOT,
+                        skills_dir=self._deps.SKILLS_ROOT,
                         image=api_cfg.get("taskDockerImage"),
                     )
                     task_container_name = runtime.get("containerName") or ""
@@ -249,7 +243,7 @@ class RunnerTaskExecutionMixin:
                             prompt_payload=prompt_payload,
                         )
 
-                    result = await runner_mod.run_task_agent(
+                    result = await self._deps.run_task_agent(
                         task_id=task["task_id"],
                         description=task.get("description") or "",
                         input_spec=input_spec,
@@ -268,7 +262,7 @@ class RunnerTaskExecutionMixin:
                         on_prompt_built=_on_prompt_built,
                     )
                 else:
-                    result = await runner_mod.execute_task(
+                    result = await self._deps.execute_task(
                         task_id=task["task_id"],
                         description=task.get("description") or "",
                         input_spec=input_spec,
@@ -282,7 +276,7 @@ class RunnerTaskExecutionMixin:
                         idea_context=self._idea_text,
                     )
                 to_save = result if isinstance(result, dict) else {"content": result}
-                await runner_mod.save_task_artifact(self.idea_id or "", self.plan_id or "", task["task_id"], to_save)
+                await self._deps.save_task_artifact(self.idea_id or "", self.plan_id or "", task["task_id"], to_save)
                 self._emit("task-output", {"taskId": task["task_id"], "attempt": run_attempt, "output": result})
                 await self._append_step_event(task["task_id"], "task-output", {"attempt": run_attempt, "output": to_save})
                 execution_passed = True
@@ -302,7 +296,7 @@ class RunnerTaskExecutionMixin:
                 )
                 return
 
-            runner_mod.worker_manager["set_worker_status"](task["task_id"], "validating")
+            self._deps.set_worker_status(task["task_id"], "validating")
             self._broadcast_worker_states()
             self._update_task_status(task["task_id"], "validating")
 
@@ -379,7 +373,7 @@ class RunnerTaskExecutionMixin:
                         "attemptHistory": list(self.task_attempt_history.get(task_id) or []),
                         "inputArtifacts": sorted(list((resolved_inputs or {}).keys())),
                     }
-                    validation_passed, final_report = await runner_mod.validate_task_output_with_llm(
+                    validation_passed, final_report = await self._deps.validate_task_output(
                         result,
                         output_spec,
                         task_id,
@@ -401,9 +395,9 @@ class RunnerTaskExecutionMixin:
                         f"{_direct_line}"
                     )
             if use_mock:
-                for chunk in runner_mod.chunk_string(report, 20):
+                for chunk in self._deps.chunk_string(report, 20):
                     await self._emit_await("task-thinking", {"chunk": chunk, "source": "task", "taskId": task_id, "operation": "Validate"})
-                    await asyncio.sleep(runner_mod._MOCK_VALIDATOR_CHUNK_DELAY)
+                    await asyncio.sleep(self._deps._MOCK_VALIDATOR_CHUNK_DELAY)
 
             if use_mock:
                 self._emit("task-step-b", {
@@ -423,7 +417,7 @@ class RunnerTaskExecutionMixin:
                 })
 
             if self.idea_id and self.plan_id:
-                await runner_mod.save_validation_report(
+                await self._deps.save_validation_report(
                     self.idea_id,
                     self.plan_id,
                     task_id,
@@ -473,7 +467,7 @@ class RunnerTaskExecutionMixin:
             if validation_passed:
                 await self._reflect_on_task(task, result, _on_thinking)
                 async with self._worker_lock:
-                    runner_mod.worker_manager["release_worker_by_task_id"](task["task_id"])
+                    self._deps.release_worker(task["task_id"])
                 self._broadcast_worker_states()
 
                 self._emit("task-completed", {
@@ -510,7 +504,7 @@ class RunnerTaskExecutionMixin:
 
         except Exception as e:
             async with self._worker_lock:
-                runner_mod.worker_manager["release_worker_by_task_id"](task["task_id"])
+                self._deps.release_worker(task["task_id"])
             self._broadcast_worker_states()
             await self._append_step_event(task["task_id"], "task-error", {"error": str(e)})
             raise
@@ -518,7 +512,7 @@ class RunnerTaskExecutionMixin:
             task_container_name = self.task_docker_containers.pop(task["task_id"], "")
             if task_container_name:
                 try:
-                    await runner_mod.stop_execution_container(task_container_name)
+                    await self._deps.stop_execution_container(task_container_name)
                 except Exception:
                     logger.exception("Failed to stop Docker task container task_id={} container={}", task["task_id"], task_container_name)
             if self.docker_container_name == task_container_name:
@@ -536,7 +530,7 @@ class RunnerTaskExecutionMixin:
         self.task_execute_started_attempts.pop(task["task_id"], None)
         self.task_attempt_history.pop(task["task_id"], None)
         if self.research_id:
-            await runner_mod.delete_task_attempt_memories(self.research_id, task["task_id"])
+            await self._deps.delete_task_attempt_memories(self.research_id, task["task_id"])
         logger.info("Task complete task_id={} completed={} remaining_pending={}", task["task_id"], len(self.completed_tasks), len(self.pending_tasks))
 
         dependents = self.reverse_dependency_index.get(task["task_id"], [])
@@ -557,14 +551,14 @@ class RunnerTaskExecutionMixin:
         self._schedule_ready_tasks([self.task_map[id] for id in candidates if self.task_map.get(id)])
 
     async def _reflect_on_task(self, task: Dict, result: Any, on_thinking) -> None:
-        runner_mod = _runner_module()
+
         api_cfg = self.api_config or {}
         if not api_cfg.get("reflectionEnabled", False):
             return
         if api_cfg.get("taskUseMock", False):
             return
         try:
-            evaluation = await runner_mod.self_evaluate(
+            evaluation = await self._deps.self_evaluate(
                 "task", result,
                 context={
                     "task_id": task["task_id"],
@@ -577,13 +571,13 @@ class RunnerTaskExecutionMixin:
             )
             suggestion = evaluation.get("skill_suggestion", {})
             if suggestion.get("should_create") and suggestion.get("name"):
-                skill_content = await runner_mod.generate_skill_from_reflection(
+                skill_content = await self._deps.generate_skill_from_reflection(
                     "task", evaluation,
                     context={"task_id": task["task_id"], "description": task.get("description", "")},
                     api_config=api_cfg, abort_event=self.abort_event,
                 )
                 if skill_content:
-                    runner_mod.save_learned_skill("task", suggestion["name"], skill_content)
+                    self._deps.save_learned_skill("task", suggestion["name"], skill_content)
         except asyncio.CancelledError:
             raise
         except Exception as e:

@@ -11,34 +11,35 @@ from typing import Any, Dict, List, Optional, Set
 
 from loguru import logger
 
-from db import DB_DIR, delete_task_artifact, get_idea, save_execution, save_task_artifact, save_validation_report
-from db import delete_task_attempt_memories, list_task_attempt_memories, save_task_attempt_memory
 from shared.constants import (
     MAX_EXECUTION_CONCURRENCY,
     MOCK_EXECUTION_PASS_PROBABILITY,
     MOCK_VALIDATION_PASS_PROBABILITY,
 )
 from shared.idea_utils import get_idea_text
-from shared.utils import chunk_string
-from .artifact_resolver import resolve_artifacts
-from .agent import run_task_agent
-from .agent_tools import SKILLS_ROOT
-from .pools import worker_manager
-from .docker_runtime import ensure_execution_container, get_local_docker_status, prepare_execution_runtime, stop_execution_container
-from .llm.executor import execute_task
-from .llm.validation import validate_task_output_with_readonly_agent
+from .runner_deps import RunnerDeps, build_default_deps
 from .runner_emit_mixin import RunnerEmitMixin
 from .runner_execution_mixin import RunnerExecutionMixin
 from .runner_memory_mixin import RunnerMemoryMixin
 from .runner_retry_mixin import RunnerRetryMixin
 from .runner_state_mixin import RunnerStateMixin
-from validate_agent import review_contract_adjustment
-from shared.reflection import self_evaluate, generate_skill_from_reflection, save_learned_skill
 
-
-# Backward-compat symbol: tests and some callers still patch this name.
+# --- Backward-compat symbols for test monkeypatching ---
+# Tests do: monkeypatch.setattr(runner_mod, "resolve_artifacts", fake)
+# These imports keep those patches working until tests migrate to RunnerDeps injection.
+from db import DB_DIR, delete_task_artifact, get_idea, save_execution, save_task_artifact, save_validation_report  # noqa: F401
+from db import delete_task_attempt_memories, list_task_attempt_memories, save_task_attempt_memory  # noqa: F401
+from shared.utils import chunk_string  # noqa: F401
+from .artifact_resolver import resolve_artifacts  # noqa: F401
+from .agent import run_task_agent  # noqa: F401
+from .agent_tools import SKILLS_ROOT  # noqa: F401
+from .pools import worker_manager  # noqa: F401
+from .docker_runtime import ensure_execution_container, get_local_docker_status, prepare_execution_runtime, stop_execution_container  # noqa: F401
+from .llm.executor import execute_task  # noqa: F401
+from .llm.validation import validate_task_output_with_readonly_agent  # noqa: F401
+from validate_agent import review_contract_adjustment  # noqa: F401
+from shared.reflection import self_evaluate, generate_skill_from_reflection, save_learned_skill  # noqa: F401
 validate_task_output_with_llm = validate_task_output_with_readonly_agent
-
 
 def _env_float(name: str, default: float) -> float:
     raw = os.getenv(name)
@@ -48,7 +49,6 @@ def _env_float(name: str, default: float) -> float:
         return float(raw)
     except ValueError:
         return default
-
 
 _MOCK_VALIDATOR_CHUNK_DELAY = _env_float("MAARS_MOCK_VALIDATOR_CHUNK_DELAY", 0.03)
 
@@ -60,9 +60,10 @@ class ExecutionRunner(
     RunnerStateMixin,
     RunnerExecutionMixin,
 ):
-    def __init__(self, sio: Any, session_id: Optional[str] = None):
+    def __init__(self, sio: Any, session_id: Optional[str] = None, deps: Optional[RunnerDeps] = None):
         self.sio = sio
         self.session_id = session_id
+        self._deps = deps or build_default_deps()
         self._worker_lock = asyncio.Lock()
         self.is_running = False
         self.running_tasks: Set[str] = set()
@@ -173,13 +174,13 @@ class ExecutionRunner(
         # Attempt history is scoped to one execute run. Start of a new run clears persisted memories.
         if self.research_id:
             try:
-                await delete_task_attempt_memories(self.research_id)
+                await self._deps.delete_task_attempt_memories(self.research_id)
             except Exception:
                 logger.exception("Failed to clear task attempt memories for new run research_id={}", self.research_id)
         self.task_attempt_history.clear()
         if self.idea_id:
             try:
-                idea_data = await get_idea(self.idea_id)
+                idea_data = await self._deps.get_idea(self.idea_id)
                 if idea_data:
                     refined = idea_data.get("refined_idea")
                     self._idea_text = get_idea_text(refined) or (idea_data.get("idea") or "").strip()
@@ -187,18 +188,18 @@ class ExecutionRunner(
                 pass
         try:
             max_conc = MAX_EXECUTION_CONCURRENCY
-            worker_manager["initialize_workers"](max_conc)
+            self._deps.initialize_workers(max_conc)
             self._broadcast_worker_states()
 
             api_cfg = self.api_config or {}
             docker_enabled = bool(api_cfg.get("taskAgentMode"))
             if docker_enabled:
-                self.docker_runtime_status = await prepare_execution_runtime(
+                self.docker_runtime_status = await self._deps.prepare_execution_runtime(
                     enabled=True,
                     image=api_cfg.get("taskDockerImage"),
                 )
             else:
-                self.docker_runtime_status = await get_local_docker_status(enabled=False)
+                self.docker_runtime_status = await self._deps.get_local_docker_status(enabled=False)
             self._emit_runtime_status()
 
             execution_layout = self.execution_layout
@@ -232,7 +233,7 @@ class ExecutionRunner(
                     if task["task_id"] in to_reset:
                         task["status"] = "undone"
                         if self.idea_id and self.plan_id:
-                            await delete_task_artifact(self.idea_id, self.plan_id, task["task_id"])
+                            await self._deps.delete_task_artifact(self.idea_id, self.plan_id, task["task_id"])
                         self.pending_tasks.add(task["task_id"])
                         self.completed_tasks.discard(task["task_id"])
                         self._clear_task_failure_counts(task["task_id"])
@@ -244,7 +245,7 @@ class ExecutionRunner(
                 for task in self.chain_cache:
                     task["status"] = "undone"
             if self.idea_id and self.plan_id and self.chain_cache:
-                await save_execution({"tasks": self.chain_cache}, self.idea_id, self.plan_id)
+                await self._deps.save_execution({"tasks": self.chain_cache}, self.idea_id, self.plan_id)
 
             self._emit("task-start", {})
             self._emit("execution-layout", {"layout": execution_layout})
@@ -257,9 +258,9 @@ class ExecutionRunner(
         finally:
             self.is_running = False
             await self._stop_all_task_containers()
-            self.docker_runtime_status = await get_local_docker_status(enabled=bool((self.api_config or {}).get("taskAgentMode")))
+            self.docker_runtime_status = await self._deps.get_local_docker_status(enabled=bool((self.api_config or {}).get("taskAgentMode")))
             self._emit_runtime_status()
-            worker_manager["initialize_workers"]()
+            self._deps.initialize_workers()
             self._broadcast_worker_states()
 
 

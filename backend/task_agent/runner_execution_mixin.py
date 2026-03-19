@@ -9,12 +9,6 @@ from loguru import logger
 from .runner_task_execution_mixin import RunnerTaskExecutionMixin
 
 
-def _runner_module():
-    from . import runner as runner_mod
-
-    return runner_mod
-
-
 class RunnerExecutionMixin(RunnerTaskExecutionMixin):
     def _find_dependency_gap(self) -> Optional[Dict[str, str]]:
         """Find a task waiting on a dependency that is in neither todo nor completed sets."""
@@ -45,7 +39,7 @@ class RunnerExecutionMixin(RunnerTaskExecutionMixin):
         output_format: str,
         on_thinking: Optional[Any] = None,
     ) -> Dict[str, Any]:
-        runner_mod = _runner_module()
+
         task_id = str(task.get("task_id") or "")
         validation = task.setdefault("validation", {})
         if not isinstance(validation, dict):
@@ -80,7 +74,7 @@ class RunnerExecutionMixin(RunnerTaskExecutionMixin):
             }
 
         try:
-            reviewed = await runner_mod.review_contract_adjustment(
+            reviewed = await self._deps.review_contract_adjustment(
                 packet,
                 api_config=self.api_config,
                 abort_event=self.abort_event,
@@ -111,7 +105,7 @@ class RunnerExecutionMixin(RunnerTaskExecutionMixin):
         error: str,
         decision: Optional[Dict[str, Any]] = None,
     ) -> None:
-        runner_mod = _runner_module()
+
         task_id = str(task.get("task_id") or "")
         attempt = self._next_retry_attempt(task_id)
         last_retry_attempt = int(self.task_last_retry_attempt.get(task_id) or 0)
@@ -139,7 +133,7 @@ class RunnerExecutionMixin(RunnerTaskExecutionMixin):
         await self._append_step_event(task_id, "task-error", payload)
 
         async with self._worker_lock:
-            runner_mod.worker_manager["release_worker_by_task_id"](task_id)
+            self._deps.release_worker(task_id)
         self._broadcast_worker_states()
 
         self.running_tasks.discard(task_id)

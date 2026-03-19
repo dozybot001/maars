@@ -7,16 +7,6 @@ from loguru import logger
 
 
 class RunnerMemoryMixin:
-    @staticmethod
-    def _runner_module_db_call(name: str):
-        # Keep compatibility with existing tests that monkeypatch task_agent.runner DB symbols.
-        from . import runner as runner_mod
-
-        fn = getattr(runner_mod, name, None)
-        if fn is None:
-            raise AttributeError(f"runner module has no DB helper '{name}'")
-        return fn
-
     async def _record_task_attempt_failure(
         self,
         *,
@@ -43,8 +33,7 @@ class RunnerMemoryMixin:
             self.task_attempt_history[task_id] = history[-8:]
         if self.research_id:
             latest = self.task_attempt_history.get(task_id, [])[-1]
-            save_fn = self._runner_module_db_call("save_task_attempt_memory")
-            await save_fn(
+            await self._deps.save_task_attempt_memory(
                 self.research_id,
                 task_id,
                 int(attempt),
@@ -65,8 +54,7 @@ class RunnerMemoryMixin:
         if not self.research_id:
             return
         try:
-            list_fn = self._runner_module_db_call("list_task_attempt_memories")
-            rows = await list_fn(self.research_id)
+            rows = await self._deps.list_task_attempt_memories(self.research_id)
         except Exception:
             logger.exception("Failed to load task attempt memories research_id={}", self.research_id)
             return
@@ -96,8 +84,7 @@ class RunnerMemoryMixin:
             self.task_attempt_history.pop(task_id, None)
             if self.research_id:
                 try:
-                    delete_fn = self._runner_module_db_call("delete_task_attempt_memories")
-                    await delete_fn(self.research_id, task_id)
+                    await self._deps.delete_task_attempt_memories(self.research_id, task_id)
                 except Exception:
                     logger.exception("Failed to clear task attempt memories research_id={} task_id={}", self.research_id, task_id)
 

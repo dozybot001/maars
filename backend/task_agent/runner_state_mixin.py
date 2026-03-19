@@ -9,13 +9,6 @@ from typing import Any, Dict, List, Set
 from loguru import logger
 
 from db import get_execution_task_step_dir
-from .pools import worker_manager
-
-
-def _runner_module():
-    from . import runner as runner_mod
-
-    return runner_mod
 
 
 class RunnerStateMixin:
@@ -41,7 +34,7 @@ class RunnerStateMixin:
             "error": str(error),
         })
         async with self._worker_lock:
-            worker_manager["release_worker_by_task_id"](task["task_id"])
+            self._deps.release_worker(task["task_id"])
         self._broadcast_worker_states()
         self.running_tasks.discard(task["task_id"])
         self.pending_tasks.discard(task["task_id"])
@@ -125,12 +118,12 @@ class RunnerStateMixin:
             f.write(line)
 
     async def _stop_all_task_containers(self) -> None:
-        runner_mod = _runner_module()
+
         containers = list(self.task_docker_containers.values())
         self.task_docker_containers.clear()
         for container_name in containers:
             try:
-                await runner_mod.stop_execution_container(container_name)
+                await self._deps.stop_execution_container(container_name)
             except Exception:
                 logger.exception("Failed to stop Docker execution container {}", container_name)
         self.docker_container_name = ""
@@ -143,7 +136,7 @@ class RunnerStateMixin:
         """Broadcast execution concurrency stats. (Frontend uses syncExecutionStateOnConnect for stats.)"""
 
     async def _rollback_task(self, task: Dict) -> None:
-        runner_mod = _runner_module()
+
         tasks_to_rollback: Set[str] = set()
         tasks_to_rollback.add(task["task_id"])
 
@@ -175,9 +168,9 @@ class RunnerStateMixin:
                     self.task_next_attempt_hint.pop(task_id, None)
                     self.task_execute_started_attempts.pop(task_id, None)
                     self.task_tasks.pop(task_id, None)
-                    worker_manager["release_worker_by_task_id"](task_id)
+                    self._deps.release_worker(task_id)
                 if self.idea_id and self.plan_id:
-                    await runner_mod.delete_task_artifact(self.idea_id, self.plan_id, task_id)
+                    await self._deps.delete_task_artifact(self.idea_id, self.plan_id, task_id)
 
         self._broadcast_worker_states()
 
@@ -226,7 +219,7 @@ class RunnerStateMixin:
                 })
 
     async def retry_task(self, task_id: str) -> bool:
-        runner_mod = _runner_module()
+
         if task_id not in self.task_map:
             return False
         tasks_to_reset = self._get_downstream_task_ids(task_id)
@@ -250,9 +243,9 @@ class RunnerStateMixin:
                     self.task_execute_started_attempts.pop(tid, None)
                 if tid in self.task_map:
                     self.task_map[tid]["status"] = "undone"
-                worker_manager["release_worker_by_task_id"](tid)
+                self._deps.release_worker(tid)
                 if self.idea_id and self.plan_id:
-                    await runner_mod.delete_task_artifact(self.idea_id, self.plan_id, tid)
+                    await self._deps.delete_task_artifact(self.idea_id, self.plan_id, tid)
 
         await self._clear_attempt_history_for_tasks(tasks_to_reset)
 
@@ -273,7 +266,7 @@ class RunnerStateMixin:
         return True
 
     async def stop_async(self) -> None:
-        runner_mod = _runner_module()
+
         self.is_running = False
         if self.abort_event:
             self.abort_event.set()
@@ -285,10 +278,10 @@ class RunnerStateMixin:
                 asyncio_task.cancel()
         async with self._worker_lock:
             for task_id in task_ids:
-                worker_manager["release_worker_by_task_id"](task_id)
+                self._deps.release_worker(task_id)
         self.task_tasks.clear()
         self.running_tasks.clear()
         await self._stop_all_task_containers()
-        self.docker_runtime_status = await runner_mod.get_local_docker_status(enabled=bool((self.api_config or {}).get("taskAgentMode")))
+        self.docker_runtime_status = await self._deps.get_local_docker_status(enabled=bool((self.api_config or {}).get("taskAgentMode")))
         self._emit_runtime_status()
         self._broadcast_worker_states()
