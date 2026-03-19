@@ -19,10 +19,11 @@ from shared.constants import (
 from shared.idea_utils import get_idea_text
 from db import save_execution as _db_save_execution
 from .runner_deps import RunnerDeps, build_default_deps
-from .runner_execution_mixin import RunnerExecutionMixin
+from . import runner_execution_mixin as exec_fns
 from . import runner_memory_mixin as memory_fns
 from . import runner_retry_mixin as retry_fns
 from . import runner_state_mixin as state_fns
+from . import runner_task_execution_mixin as task_exec_fns
 
 # --- Backward-compat symbols for test monkeypatching ---
 # Tests do: monkeypatch.setattr(runner_mod, "resolve_artifacts", fake)
@@ -53,9 +54,7 @@ def _env_float(name: str, default: float) -> float:
 _MOCK_VALIDATOR_CHUNK_DELAY = _env_float("MAARS_MOCK_VALIDATOR_CHUNK_DELAY", 0.03)
 
 
-class ExecutionRunner(
-    RunnerExecutionMixin,
-):
+class ExecutionRunner:
     def __init__(self, sio: Any, session_id: Optional[str] = None, deps: Optional[RunnerDeps] = None):
         self.sio = sio
         self.session_id = session_id
@@ -232,6 +231,51 @@ class ExecutionRunner(
 
     async def stop_async(self) -> None:
         await state_fns.stop_async(self)
+
+    # -- Execution orchestration delegates (from runner_execution_mixin) --
+
+    def _find_dependency_gap(self) -> Optional[Dict[str, str]]:
+        return exec_fns.find_dependency_gap(self)
+
+    async def _run_step_b_contract_review(self, *, task, result, reason, output_format, on_thinking=None):
+        return await exec_fns.run_step_b_contract_review(
+            self, task=task, result=result, reason=reason,
+            output_format=output_format, on_thinking=on_thinking,
+        )
+
+    async def _retry_or_fail(self, *, task, phase, error, decision=None):
+        await exec_fns.retry_or_fail(self, task=task, phase=phase, error=error, decision=decision)
+
+    def _get_ready_tasks(self) -> List[Dict]:
+        return exec_fns.get_ready_tasks(self)
+
+    async def _execute_tasks(self) -> None:
+        await exec_fns.execute_tasks(self)
+
+    # -- Task execution delegates (from runner_task_execution_mixin) --
+
+    async def _persist_attempt_prompt_snapshot(self, *, task_id, attempt, prompt_payload):
+        await task_exec_fns.persist_attempt_prompt_snapshot(
+            self, task_id=task_id, attempt=attempt, prompt_payload=prompt_payload,
+        )
+
+    def _make_on_thinking_callback(self, task: Dict, run_attempt: int):
+        return task_exec_fns.make_on_thinking_callback(self, task, run_attempt)
+
+    async def _phase_execute(self, task, run_attempt, on_thinking):
+        return await task_exec_fns.phase_execute(self, task, run_attempt, on_thinking)
+
+    async def _phase_validate(self, task, result, resolved_inputs, run_attempt, on_thinking):
+        return await task_exec_fns.phase_validate(self, task, result, resolved_inputs, run_attempt, on_thinking)
+
+    async def _phase_finalize_success(self, task, run_attempt, report, validation_summary):
+        await task_exec_fns.phase_finalize_success(self, task, run_attempt, report, validation_summary)
+
+    async def _execute_task(self, task: Dict) -> None:
+        await task_exec_fns.execute_task(self, task)
+
+    async def _reflect_on_task(self, task, result, on_thinking):
+        await task_exec_fns.reflect_on_task(self, task, result, on_thinking)
 
     # -- Task lifecycle --
 
