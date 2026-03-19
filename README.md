@@ -1,12 +1,14 @@
 # MAARS
 
-Multi-Agent Automated Research System — 多智能体自动研究系统。从模糊 idea 到论文草稿的一站式研究流水线。
+Multi-Agent Automated Research System — an end-to-end research pipeline from a vague idea to a paper draft, powered by four AI Agents.
+
+[中文版 README](README_CN.md) | **English**
 
 ---
 
-## 快速开始
+## Quick Start
 
-**前置**：Python 3.10+
+**Prerequisites**: Python 3.10+
 
 ```bash
 cd backend
@@ -14,93 +16,93 @@ pip install -r requirements.txt
 python -m uvicorn main:asgi_app --host 0.0.0.0 --port 3001 --loop asyncio --http h11
 ```
 
-或使用项目根目录的 `./start.sh`（macOS/Linux）或 `start.bat`（Windows）。
+Or use the launch script at the project root: `./start.sh` (macOS/Linux) or `start.bat` (Windows).
 
-访问 <http://localhost:3001> 进入首页。
+Open <http://localhost:3001> to access the homepage.
 
 ---
 
-## 使用流程
+## Workflow
 
-**Research** 是产品级工作单元。每个 Research 对应一个研究主题，贯穿 refine → plan → execute → paper 四阶段。
+A **Research** is the top-level work unit. Each Research corresponds to a research topic and progresses through four stages: refine, plan, execute, and paper.
 
 ```text
-首页输入 prompt → Create Research → 进入详情页 → Run 全流程 或 分阶段执行
+Enter prompt on homepage -> Create Research -> Enter detail page -> Run full pipeline or stage-by-stage
 ```
 
-| 页面 | 说明 |
+| Page | Description |
 | --- | --- |
-| **首页** (`/` 或 `index.html`) | 输入研究主题，点击 Create 创建 Research |
-| **Research 列表** (`research.html`) | 查看所有 Research，点击进入详情 |
-| **Research 详情** (`research_detail.html?researchId=xxx`) | 执行 refine / plan / execute / paper 四阶段 |
+| **Home** (`/` or `index.html`) | Enter a research topic, click Create to start a Research |
+| **Research List** (`research.html`) | View all Researches, click to enter details |
+| **Research Detail** (`research_detail.html?researchId=xxx`) | Execute the four stages: refine / plan / execute / paper |
 
-| 阶段 | 作用 |
+| Stage | Purpose |
 | --- | --- |
-| Refine | 提取关键词、arXiv 检索、生成 refined idea |
-| Plan | 将 idea 分解为可执行任务树 |
-| Execute | 执行原子任务、验证产出 |
-| Paper | 根据 Plan 与 Task 产出生成论文草稿（Markdown/LaTeX） |
+| Refine | Extract keywords, search arXiv, generate refined idea |
+| Plan | Decompose the idea into an executable task tree |
+| Execute | Run atomic tasks in parallel, validate outputs |
+| Paper | Generate a paper draft from Plan and Task outputs (Markdown/LaTeX) |
 
-每个阶段支持 **Run**（从头执行）、**Resume**（从 stopped/failed 恢复）、**Retry**（清空后重试）、**Stop**（中止）。
+Each stage supports **Run** (start fresh), **Resume** (continue from stopped/failed), **Retry** (clear and restart), and **Stop** (abort).
 
-Thinking 区域展示推理过程，Output 区域展示最终产出（文献、任务 artifact、论文）。
+The Thinking panel shows reasoning traces; the Output panel shows final artifacts (literature, task outputs, paper).
 
 ---
 
-## 四 Agent
+## Four Agents
 
-| Agent | 职责 |
+| Agent | Responsibility |
 | --- | --- |
-| Idea | 关键词提取、arXiv 检索、Refined Idea |
-| Plan | 任务分解（atomicity → decompose → format → quality） |
-| Task | 原子任务执行与验证 |
-| Paper | 论文草稿生成（Markdown/LaTeX） |
+| Idea | Keyword extraction, arXiv search, Refined Idea generation |
+| Plan | Task decomposition (atomicity -> decompose -> format -> quality) |
+| Task | Atomic task execution and validation |
+| Paper | Paper draft generation (Markdown/LaTeX) |
 
-每个 Agent 支持 **Mock**（模拟）、**LLM**（单轮）、**Agent**（工具循环）三种模式。
-Settings → AI Config 中切换。Paper Agent 的 Agent 模式当前为 MVP：outline → sections → assembly。
-
----
-
-## 配置
-
-**Alt+Shift+S** (Win/Linux) 或 **Cmd+Shift+S** (Mac) 打开 Settings：
-
-- **Theme** — 主题
-- **AI Config** — Agent 模式、Idea RAG、Self-Reflection、API Preset
-- **Data** — Restore recent plan、Clear all data
+Each Agent supports three modes: **Mock** (simulated), **LLM** (single-turn), and **Agent** (tool-use loop). Switch modes in Settings -> AI Config. The Paper Agent's Agent mode is currently an MVP: outline -> sections -> assembly.
 
 ---
 
-## 项目结构
+## Configuration
+
+**Alt+Shift+S** (Win/Linux) or **Cmd+Shift+S** (Mac) to open Settings:
+
+- **Theme** — Light / Dark / Black
+- **AI Config** — Agent mode, Idea RAG, Self-Reflection, API Preset
+- **Data** — Restore recent plan, Clear all data
+
+---
+
+## Project Structure
 
 ```text
 maars/
-├── .codex/            # 仓库级共享 Codex skills（含发版 workflow）
-├── backend/           # FastAPI + 实时事件桥接（前端使用 SSE）
-│   ├── api/           # 路由（idea、plan、execution、paper、research、plans、session、settings 等）
+├── backend/           # FastAPI + SSE realtime event bridge
+│   ├── api/           # Routes (idea, plan, execution, paper, research, session, settings, ...)
 │   ├── idea_agent/    # Idea Agent
 │   ├── plan_agent/    # Plan Agent
-│   ├── task_agent/    # Task Agent
+│   ├── task_agent/    # Task Agent (ExecutionRunner + 5 function modules + DI)
 │   ├── paper_agent/   # Paper Agent
-│   ├── shared/        # llm_client、skill_utils、reflection 等
-│   ├── visualization/ # 执行图布局
-│   └── db/            # SQLite 持久化封装（含 Research 元数据）+ sandbox 辅助
-├── frontend/          # 静态页面、SSE/EventSource
-│   ├── index.html     # 首页（创建 Research）
-│   ├── research.html  # Research 列表
-│   └── research_detail.html  # Research 详情（四阶段执行）
-└── start.sh / start.bat  # 启动脚本
+│   ├── validate_agent/# Step-B contract review (Task Agent sub-component)
+│   ├── shared/        # LLM client, constants, reflection, utilities
+│   ├── visualization/ # Execution graph layout computation
+│   └── db/            # SQLite persistence (Research metadata + sandbox)
+├── frontend/          # Static pages, SSE/EventSource, vanilla JS
+│   ├── index.html     # Homepage (create Research)
+│   ├── research.html  # Research list
+│   └── research_detail.html  # Research detail (four-stage execution)
+├── ARCHITECTURE.md    # Detailed architecture documentation
+└── start.sh / start.bat  # Launch scripts
 ```
 
 ---
 
-## 文档
+## Documentation
 
-| 文档 | 说明 |
+| Document | Description |
 | --- | --- |
-| [docs/README.md](docs/README.md) | 文档索引 |
-| [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) | 开发指南（架构、Research API、Skill 扩充与维护） |
-| [docs/workflow/](docs/workflow/) | 工作流说明（用户流程、Research 流程、四 Agent、实时事件） |
-| [docs/FRONTEND_SCRIPTS.md](docs/FRONTEND_SCRIPTS.md) | 前端脚本与模块依赖 |
-| [docs/RELEASE_NOTE_STANDARD.md](docs/RELEASE_NOTE_STANDARD.md) | Release Note 撰写标准 |
-| [AGENTS.md](AGENTS.md) | 仓库级共享技能入口（包含发版 skill） |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture overview |
+| [docs/README.md](docs/README.md) | Documentation index |
+| [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) | Development guide (architecture, Research API, Skill system) |
+| [docs/workflow/](docs/workflow/) | Workflow docs (user flow, Research pipeline, four Agents, realtime events) |
+| [docs/FRONTEND_SCRIPTS.md](docs/FRONTEND_SCRIPTS.md) | Frontend scripts and module dependencies |
+| [docs/RELEASE_NOTE_STANDARD.md](docs/RELEASE_NOTE_STANDARD.md) | Release note writing standard |
