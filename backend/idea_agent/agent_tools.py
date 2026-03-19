@@ -6,7 +6,6 @@ OpenAI function-calling format. Used when ideaAgentMode=True.
 
 import json
 import os
-import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -15,6 +14,7 @@ from loguru import logger
 
 from shared.constants import TEMP_ANALYSIS, TEMP_EXTRACT
 from shared.llm_client import chat_completion, merge_phase_config
+from shared.utils import extract_codeblock
 from shared.skill_utils import list_skills as _list_skills, load_skill as _load_skill, read_skill_file as _read_skill_file
 
 from .literature import search_literature
@@ -26,7 +26,7 @@ try:
 except ImportError:
     get_rag_engine = None
 
-from .tool_schemas import IDEA_AGENT_TOOLS, RAG_TOOLS, get_idea_agent_tools
+from .tool_schemas import get_idea_agent_tools
 
 _IDEA_SKILLS_DIR = os.environ.get("MAARS_IDEA_SKILLS_DIR")
 IDEA_SKILLS_ROOT = (
@@ -53,10 +53,7 @@ def _idea_agent_read_skill_file(skill: str, path: str) -> str:
 
 def _parse_json_block(text: str) -> Optional[Dict]:
     """Extract JSON from ```json...``` or raw JSON."""
-    cleaned = (text or "").strip()
-    m = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned)
-    if m:
-        cleaned = m.group(1).strip()
+    cleaned = extract_codeblock(text) or (text or "").strip()
     try:
         return json.loads(cleaned)
     except (json.JSONDecodeError, TypeError):

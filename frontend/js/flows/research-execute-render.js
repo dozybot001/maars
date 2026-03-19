@@ -413,5 +413,17 @@
     window.MAARS.researchExecuteRender = {
         renderExecuteStream,
         initExecuteStreamControls,
+        _helpers: {
+            _isExecuteStreamNearBottom,
+            _scrollExecuteStreamToLatest,
+            _updateExecuteJumpLatestButton,
+            _formatElapsedDuration,
+            _hasActiveExecuteBubble,
+            _syncExecuteElapsedTicker,
+            _getAttemptKey,
+            _getCurrentAttempt,
+            _getAttemptStatus,
+            _getAttemptSummary,
+        },
     };
 })();

@@ -4,7 +4,6 @@ Plan Agent - Google ADK 驱动实现。
 """
 
 import json
-from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from shared.adk_bridge import (
@@ -21,18 +20,7 @@ from shared.constants import PLAN_AGENT_MAX_TURNS
 
 from .agent_tools import PLAN_AGENT_TOOLS, execute_plan_agent_tool
 from .llm.executor import check_atomicity, decompose_task, format_task
-
-IDEA_DIR = Path(__file__).resolve().parent
-PROMPTS_DIR = IDEA_DIR / "prompts"
-_prompt_cache: Dict[str, str] = {}
-
-
-def _get_prompt_cached(filename: str) -> str:
-    """加载 plan agent prompt 文件。"""
-    if filename not in _prompt_cache:
-        path = PROMPTS_DIR / filename
-        _prompt_cache[filename] = path.read_text(encoding="utf-8").strip()
-    return _prompt_cache[filename]
+from .llm.executor_helpers import _get_prompt_cached
 
 
 async def run_plan_agent_adk(

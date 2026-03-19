@@ -12,14 +12,6 @@ class RunnerRetryMixin:
     def _get_failure_count(self, task_id: str, bucket: str) -> int:
         return int(self.task_phase_failure_count.get(self._failure_key(task_id, bucket), 0) or 0)
 
-    def _next_phase_attempt(self, task_id: str, *, phase: str, bucket: str) -> int:
-        history = self.task_attempt_history.get(task_id) or []
-        phase_attempts = sum(1 for item in history if str(item.get("phase") or "") == phase)
-        in_memory_attempts = self._get_failure_count(task_id, bucket)
-        next_count = max(phase_attempts, in_memory_attempts) + 1
-        self.task_phase_failure_count[self._failure_key(task_id, bucket)] = next_count
-        return next_count
-
     def _clear_task_failure_counts(self, task_id: str) -> None:
         prefix = f"{task_id}:"
         for key in list(self.task_phase_failure_count.keys()):

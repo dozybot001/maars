@@ -6,11 +6,11 @@ Supports streaming via on_chunk for real-time Thinking display.
 
 import asyncio
 import json
-import re
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from shared.constants import TEMP_DETERMINISTIC
 from shared.llm_client import chat_completion, merge_phase_config
+from shared.utils import extract_codeblock
 
 
 def _get_content_str(result: Any) -> str:
@@ -107,6 +107,52 @@ def classify_validation_failure(report: str, output_format: str = "") -> dict:
     if any(marker in text for marker in evidence_markers):
         return {"category": "evidence_missing", "retryable": True}
     return {"category": "semantic", "retryable": True}
+async def _run_validation_llm(
+    *,
+    system_prompt: str,
+    user_message: str,
+    task_id: str,
+    label: str,
+    api_config: Optional[Dict],
+    abort_event: Optional[Any],
+    on_thinking: Optional[Callable[[str, Optional[str], Optional[str], Optional[dict]], None]],
+) -> Tuple[bool, str]:
+    """Shared LLM validation pipeline: call LLM, extract JSON, return (passed, report)."""
+
+    def _stream_chunk(chunk: str):
+        if on_thinking and chunk:
+            r = on_thinking(chunk, task_id=task_id, operation="Validate", schedule_info=None)
+            if asyncio.iscoroutine(r):
+                return r
+
+    try:
+        cfg = merge_phase_config(api_config or {}, "validate")
+        stream = on_thinking is not None
+        response = await chat_completion(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            cfg,
+            on_chunk=_stream_chunk if stream else None,
+            abort_event=abort_event,
+            stream=stream,
+            temperature=TEMP_DETERMINISTIC,
+        )
+        text = response if isinstance(response, str) else (response.get("content") or "")
+        cleaned = extract_codeblock(text) or (text or "").strip()
+        try:
+            parsed = json.loads(cleaned) if cleaned else {}
+        except (json.JSONDecodeError, TypeError):
+            parsed = {}
+        passed = bool(parsed.get("passed"))
+        report = parsed.get("report") or f"# Validating Task {task_id}\n\n**Result: {'PASS' if passed else 'FAIL'}** ({label})"
+        return passed, report
+    except Exception as e:
+        report = f"# Validating Task {task_id}\n\n**Result: FAIL**\n\n{label} error: {e}"
+        return False, report
+
+
 async def validate_task_output_with_llm(
     result: Any,
     output_spec: Dict[str, Any],
@@ -120,7 +166,6 @@ async def validate_task_output_with_llm(
     Use LLM to validate task output against criteria.
     Returns (passed, report_markdown).
     Called only in LLM mode; Agent mode uses task-output-validator skill.
-    When on_thinking provided, streams LLM output for real-time Thinking display.
     """
     content = _get_content_str(result)
     validation = validation_spec or {}
@@ -149,44 +194,15 @@ Task output to validate:
 
 Output your reasoning first, then the JSON block."""
 
-    def _stream_chunk(chunk: str):
-        """转发 chunk 到 on_thinking，若为 async 则返回 coroutine 供 chat_completion await。"""
-        if on_thinking and chunk:
-            r = on_thinking(chunk, task_id=task_id, operation="Validate", schedule_info=None)
-            if asyncio.iscoroutine(r):
-                return r
-
-    try:
-        cfg = merge_phase_config(api_config or {}, "validate")
-        stream = on_thinking is not None
-        # 不使用 response_format，以便 LLM 先输出 reasoning 再输出 JSON（Thinking 显示推理）
-        response = await chat_completion(
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            cfg,
-            on_chunk=_stream_chunk if stream else None,
-            abort_event=abort_event,
-            stream=stream,
-            temperature=TEMP_DETERMINISTIC,
-        )
-        text = response if isinstance(response, str) else (response.get("content") or "")
-        # 从 reasoning + ```json...``` 中提取 JSON，若无代码块则尝试整体解析
-        cleaned = (text or "").strip()
-        m = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned)
-        if m:
-            cleaned = m.group(1).strip()
-        try:
-            parsed = json.loads(cleaned) if cleaned else {}
-        except (json.JSONDecodeError, TypeError):
-            parsed = {}
-        passed = bool(parsed.get("passed"))
-        report = parsed.get("report") or f"# Validating Task {task_id}\n\n**Result: {'PASS' if passed else 'FAIL'}** (LLM validation)"
-        return passed, report
-    except Exception as e:
-        report = f"# Validating Task {task_id}\n\n**Result: FAIL**\n\nLLM validation error: {e}"
-        return False, report
+    return await _run_validation_llm(
+        system_prompt=system_prompt,
+        user_message=user_message,
+        task_id=task_id,
+        label="LLM validation",
+        api_config=api_config,
+        abort_event=abort_event,
+        on_thinking=on_thinking,
+    )
 
 
 async def validate_task_output_with_readonly_agent(
@@ -245,38 +261,12 @@ Task output to validate:
 
 Output your reasoning first, then the JSON block."""
 
-    def _stream_chunk(chunk: str):
-        if on_thinking and chunk:
-            r = on_thinking(chunk, task_id=task_id, operation="Validate", schedule_info=None)
-            if asyncio.iscoroutine(r):
-                return r
-
-    try:
-        cfg = merge_phase_config(api_config or {}, "validate")
-        stream = on_thinking is not None
-        response = await chat_completion(
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            cfg,
-            on_chunk=_stream_chunk if stream else None,
-            abort_event=abort_event,
-            stream=stream,
-            temperature=TEMP_DETERMINISTIC,
-        )
-        text = response if isinstance(response, str) else (response.get("content") or "")
-        cleaned = (text or "").strip()
-        m = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned)
-        if m:
-            cleaned = m.group(1).strip()
-        try:
-            parsed = json.loads(cleaned) if cleaned else {}
-        except (json.JSONDecodeError, TypeError):
-            parsed = {}
-        passed = bool(parsed.get("passed"))
-        report = parsed.get("report") or f"# Validating Task {task_id}\n\n**Result: {'PASS' if passed else 'FAIL'}** (Read-only validation agent)"
-        return passed, report
-    except Exception as e:
-        report = f"# Validating Task {task_id}\n\n**Result: FAIL**\n\nRead-only validation agent error: {e}"
-        return False, report
+    return await _run_validation_llm(
+        system_prompt=system_prompt,
+        user_message=user_message,
+        task_id=task_id,
+        label="Read-only validation agent",
+        api_config=api_config,
+        abort_event=abort_event,
+        on_thinking=on_thinking,
+    )

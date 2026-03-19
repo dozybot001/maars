@@ -3,76 +3,19 @@
  */
 (function () {
 
-    function _isExecuteStreamNearBottom(ctx) {
-        const bodyEl = ctx.executeStreamBodyEl;
-        if (!bodyEl) return true;
-        return (bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight) < 48;
-    }
-
-    function _scrollExecuteStreamToLatest(ctx) {
-        const bodyEl = ctx.executeStreamBodyEl;
-        if (!bodyEl) return;
-        bodyEl.scrollTop = bodyEl.scrollHeight;
-    }
-
-    function _updateExecuteJumpLatestButton(ctx) {
-        const jumpBtnEl = ctx.executeJumpLatestBtnEl;
-        if (!jumpBtnEl || !ctx.executeStreamBodyEl) return;
-        const hasMessages = (ctx.executeState.messages || []).length > 0;
-        const shouldShow = hasMessages && !ctx.getExecuteAutoFollow() && !_isExecuteStreamNearBottom(ctx);
-        jumpBtnEl.hidden = !shouldShow;
-    }
-
-    function _formatElapsedDuration(ctx, ms) {
-        if (typeof ctx.executeUtils.formatElapsedDuration === 'function') {
-            return ctx.executeUtils.formatElapsedDuration(ms);
-        }
-        return '0s';
-    }
-
-    function _hasActiveExecuteBubble(ctx) {
-        return ctx.executeState.messages.some((msg) => {
-            if (msg.kind !== 'assistant') return false;
-            const taskId = String(msg.taskId || '').trim();
-            if (!taskId) return false;
-            const status = String(ctx.executeState.statuses.get(taskId) || '').trim();
-            return status === 'doing' || status === 'validating';
-        });
-    }
-
-    function _syncExecuteElapsedTicker(ctx) {
-        const shouldRun = ctx.getActiveStage() === 'execute' && _hasActiveExecuteBubble(ctx);
-        if (!shouldRun) {
-            if (ctx.getExecuteElapsedTimerId()) {
-                window.clearInterval(ctx.getExecuteElapsedTimerId());
-                ctx.setExecuteElapsedTimerId(0);
-            }
-            return;
-        }
-        if (ctx.getExecuteElapsedTimerId()) return;
-        const timerId = window.setInterval(() => {
-            if (ctx.getActiveStage() !== 'execute' || !_hasActiveExecuteBubble(ctx)) {
-                _syncExecuteElapsedTicker(ctx);
-                return;
-            }
-            ctx.renderExecuteStream();
-        }, 1000);
-        ctx.setExecuteElapsedTimerId(timerId);
-    }
-
-    function _getAttemptKey(ctx, taskId, attempt) {
-        if (typeof ctx.executeUtils.getAttemptKey === 'function') {
-            return ctx.executeUtils.getAttemptKey(taskId, attempt);
-        }
-        return `${String(taskId || '').trim()}:${Number(attempt) || 1}`;
-    }
-
-    function _getCurrentAttempt(ctx, taskId) {
-        const id = String(taskId || '').trim();
-        if (!id) return 1;
-        const current = Number(ctx.executeState.currentAttemptByTask.get(id));
-        return Number.isFinite(current) && current > 0 ? current : 1;
-    }
+    // Reuse helpers from research-execute-render.js (loaded first)
+    const {
+        _isExecuteStreamNearBottom,
+        _scrollExecuteStreamToLatest,
+        _updateExecuteJumpLatestButton,
+        _formatElapsedDuration,
+        _hasActiveExecuteBubble,
+        _syncExecuteElapsedTicker,
+        _getAttemptKey,
+        _getCurrentAttempt,
+        _getAttemptStatus,
+        _getAttemptSummary,
+    } = (window.MAARS && window.MAARS.researchExecuteRender && window.MAARS.researchExecuteRender._helpers) || {};
 
     function _setCurrentAttempt(ctx, taskId, attempt) {
         const id = String(taskId || '').trim();
@@ -85,26 +28,6 @@
         if (!ctx.executeState.attemptExpandedById.has(key)) {
             ctx.executeState.attemptExpandedById.set(key, true);
         }
-    }
-
-    function _getAttemptStatus(ctx, taskId, attempt, msgs, fallbackStatus) {
-        if (typeof ctx.executeUtils.getAttemptStatus === 'function') {
-            return ctx.executeUtils.getAttemptStatus({
-                taskId,
-                attempt,
-                msgs,
-                fallbackStatus,
-                currentAttempt: _getCurrentAttempt(ctx, taskId),
-            });
-        }
-        return String(fallbackStatus || 'doing').trim() || 'doing';
-    }
-
-    function _getAttemptSummary(ctx, msgs) {
-        if (typeof ctx.executeUtils.getAttemptSummary === 'function') {
-            return ctx.executeUtils.getAttemptSummary(msgs);
-        }
-        return '';
     }
 
     function appendExecuteMessage(ctx, message) {

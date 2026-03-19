@@ -4,17 +4,15 @@ import asyncio
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-import orjson
-
 from shared.constants import PLAN_MAX_CONCURRENT_CALLS
 from shared.llm_client import chat_completion as real_chat_completion, merge_phase_config
+from shared.mock_utils import get_mock_cached, load_mock_entry
 from test.mock_stream import mock_chat_completion
 
 PLAN_DIR = Path(__file__).resolve().parent.parent
 MOCK_AI_DIR = PLAN_DIR.parent / "test" / "mock-ai"
 
 _prompt_cache: Dict[str, str] = {}
-_mock_cache: Dict[str, Dict] = {}
 _call_semaphore: Optional[asyncio.Semaphore] = None
 
 
@@ -32,32 +30,17 @@ def _get_prompt_cached(filename: str) -> str:
     return _prompt_cache[filename]
 
 
-def _get_mock_cached(response_type: str) -> Dict:
-    if response_type not in _mock_cache:
-        path = MOCK_AI_DIR / f"{response_type}.json"
-        try:
-            _mock_cache[response_type] = orjson.loads(path.read_bytes())
-        except (FileNotFoundError, orjson.JSONDecodeError):
-            _mock_cache[response_type] = {}
-    return _mock_cache[response_type]
-
-
 async def _load_mock_response(response_type: str, task_id: str) -> Optional[Dict]:
     """Load mock from test/mock-ai/. Fallback to _default reasoning when empty."""
-    data = _get_mock_cached(response_type)
-    entry = data.get(task_id) or data.get("_default")
-    if not entry:
+    mock = load_mock_entry(MOCK_AI_DIR, response_type, task_id)
+    if not mock:
         return None
-    content = entry.get("content")
-    if isinstance(content, str):
-        content_str = content
-    else:
-        content_str = orjson.dumps(content).decode("utf-8")
-    default_entry = data.get("_default") or {}
-    reasoning = entry.get("reasoning")
-    if reasoning is None or (isinstance(reasoning, str) and not reasoning.strip()):
-        reasoning = default_entry.get("reasoning", "")
-    return {"content": content_str, "reasoning": reasoning or ""}
+    # Plan agent: fallback to _default reasoning when entry reasoning is empty
+    if not (mock.get("reasoning") or "").strip():
+        data = get_mock_cached(MOCK_AI_DIR, response_type)
+        default_entry = data.get("_default") or {}
+        mock["reasoning"] = default_entry.get("reasoning", "")
+    return mock
 
 
 _OP_LABELS = {

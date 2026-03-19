@@ -1,7 +1,6 @@
 """Emit/persist helper mixin for Task ExecutionRunner."""
 
 import asyncio
-from typing import Any
 
 from loguru import logger
 
@@ -41,22 +40,3 @@ class RunnerEmitMixin:
                 await self.sio.emit(event, data, to=self.session_id)
             except Exception as e:
                 logger.warning("%s emit failed: %s", event, e)
-
-    async def _safe_emit_thinking(
-        self,
-        *,
-        chunk: str,
-        task_id: str | None,
-        operation: str,
-        payload_extras: dict | None = None,
-    ) -> None:
-        """Optional helper for future emit consolidation; currently unused by caller."""
-        payload: dict[str, Any] = {
-            "chunk": chunk,
-            "source": "task",
-            "taskId": task_id,
-            "operation": operation,
-        }
-        if payload_extras:
-            payload.update(payload_extras)
-        await self._emit_await("task-thinking", payload)

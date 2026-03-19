@@ -12,20 +12,6 @@
         if (ideaInput) ideaInput.value = 'Compare Python vs JavaScript for backend development: define evaluation criteria (JSON), research each ecosystem (runtime, frameworks, tooling), and produce a comparison report with pros/cons and scenario-based recommendation.';
     }
 
-    async function loadExecution() {
-        try {
-            const { ideaId, planId } = await cfg.resolvePlanIds();
-            if (!ideaId || !planId) return null;
-            const response = await cfg.fetchWithSession(`${cfg.API_BASE_URL}/execution?ideaId=${encodeURIComponent(ideaId)}&planId=${encodeURIComponent(planId)}`);
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error || 'Failed to load execution');
-            return data.execution || null;
-        } catch (error) {
-            console.error('Error loading execution:', error);
-            return null;
-        }
-    }
-
     async function getExecutionRuntimeStatus(ideaId, planId) {
         const params = new URLSearchParams();
         if (ideaId) params.set('ideaId', ideaId);
@@ -183,7 +169,6 @@
 
     window.MAARS.api = {
         loadExampleIdea,
-        loadExecution,
         getExecutionRuntimeStatus,
         clearDb,
         fetchStatus,

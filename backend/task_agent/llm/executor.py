@@ -12,37 +12,27 @@ import json_repair
 
 from shared.constants import MAX_FORMAT_REPAIR_ATTEMPTS, TEMP_RETRY, TEMP_TASK_EXECUTE
 from shared.llm_client import chat_completion, merge_phase_config
+from shared.mock_utils import get_mock_cached
 from shared.structured_output import generate_with_repair
+from shared.utils import extract_codeblock
 from test.mock_stream import mock_chat_completion
 
 TASK_DIR = Path(__file__).resolve().parent.parent
 MOCK_AI_DIR = TASK_DIR.parent / "test" / "mock-ai"
 RESPONSE_TYPE = "execute"
 
-_mock_cache: Dict[str, dict] = {}
-
-
-def _get_mock_cached(response_type: str) -> dict:
-    if response_type not in _mock_cache:
-        path = MOCK_AI_DIR / f"{response_type}.json"
-        try:
-            _mock_cache[response_type] = orjson.loads(path.read_bytes())
-        except (FileNotFoundError, orjson.JSONDecodeError):
-            _mock_cache[response_type] = {}
-    return _mock_cache[response_type]
-
 
 def _load_mock_response(response_type: str, task_id: str, use_json_mode: bool) -> Optional[Dict]:
-    """从 test/mock-ai/ 加载 mock，与 Plan/Idea 对齐。"""
-    data = _get_mock_cached(response_type)
+    """从 test/mock-ai/ 加载 mock，与 Plan/Idea 对齐。
+
+    Precedence: task_id → _default_markdown (non-JSON only) → _default.
+    """
+    data = get_mock_cached(MOCK_AI_DIR, response_type)
     entry = data.get(task_id) or (data.get("_default_markdown") if not use_json_mode else None) or data.get("_default")
     if not entry:
         return None
     content = entry.get("content")
-    if isinstance(content, str):
-        content_str = content
-    else:
-        content_str = orjson.dumps(content).decode("utf-8")
+    content_str = content if isinstance(content, str) else orjson.dumps(content).decode("utf-8")
     return {"content": content_str, "reasoning": entry.get("reasoning", "")}
 
 
@@ -173,10 +163,7 @@ def _parse_task_agent_output(content: str, output_format: str) -> Any:
         raise ValueError("LLM returned empty response")
     mode = _get_output_mode(output_format)
     if mode in ("json", "structured"):
-        cleaned = content
-        m = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned)
-        if m:
-            cleaned = m.group(1).strip()
+        cleaned = extract_codeblock(content) or content
         # 若无 ```json``` 块，尝试从文本中提取 {...} 或整体解析
         if not cleaned or not cleaned.strip().startswith("{"):
             obj_match = re.search(r"\{[\s\S]*\}", content)

@@ -5,15 +5,15 @@ Refine 流程：Keywords（关键词提取）→ arXiv 检索 → Refine（基�
 """
 
 import json
-import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-import orjson
 from loguru import logger
 
 from shared.constants import TEMP_CREATIVE, TEMP_EXTRACT
 from shared.llm_client import chat_completion, merge_phase_config
+from shared.mock_utils import load_mock_entry
+from shared.utils import extract_codeblock
 from test.mock_stream import mock_chat_completion
 
 # 与 Plan/Task 统一的 on_thinking 签名：(chunk, task_id, operation, schedule_info)
@@ -24,32 +24,6 @@ MOCK_AI_DIR = IDEA_DIR.parent / "test" / "mock-ai"
 RESPONSE_TYPE_KEYWORDS = "refine"
 RESPONSE_TYPE_REFINE = "refine-idea"
 MOCK_KEY = "_default"
-
-_mock_cache: Dict[str, dict] = {}
-
-
-def _get_mock_cached(response_type: str) -> dict:
-    if response_type not in _mock_cache:
-        path = MOCK_AI_DIR / f"{response_type}.json"
-        try:
-            _mock_cache[response_type] = orjson.loads(path.read_bytes())
-        except (FileNotFoundError, orjson.JSONDecodeError):
-            _mock_cache[response_type] = {}
-    return _mock_cache[response_type]
-
-
-def _load_mock_response(response_type: str, key: str) -> Optional[Dict]:
-    """从 test/mock-ai/ 加载 mock，与 Plan 对齐。"""
-    data = _get_mock_cached(response_type)
-    entry = data.get(key) or data.get("_default")
-    if not entry:
-        return None
-    content = entry.get("content")
-    if isinstance(content, str):
-        content_str = content
-    else:
-        content_str = orjson.dumps(content).decode("utf-8")
-    return {"content": content_str, "reasoning": entry.get("reasoning", "")}
 
 
 # LLM 提示词：用于 arXiv 检索，输出英文关键词
@@ -66,10 +40,7 @@ Requirements:
 
 def _parse_keywords_response(text: str) -> List[str]:
     """解析 LLM 返回的 JSON，提取 keywords 列表。"""
-    cleaned = (text or "").strip()
-    m = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned)
-    if m:
-        cleaned = m.group(1).strip()
+    cleaned = extract_codeblock(text) or (text or "").strip()
     try:
         data = json.loads(cleaned)
         keywords = data.get("keywords")
@@ -94,7 +65,7 @@ async def extract_keywords(idea: str, api_config: dict, abort_event: Optional[An
 
     use_mock = api_config.get("ideaUseMock", True)
     if use_mock:
-        mock = _load_mock_response(RESPONSE_TYPE_KEYWORDS, MOCK_KEY)
+        mock = load_mock_entry(MOCK_AI_DIR, RESPONSE_TYPE_KEYWORDS, MOCK_KEY)
         if not mock:
             raise ValueError(f"No mock data for {RESPONSE_TYPE_KEYWORDS}/{MOCK_KEY}")
         return _parse_keywords_response(mock["content"])
@@ -136,7 +107,7 @@ async def extract_keywords_stream(
 
     use_mock = api_config.get("ideaUseMock", True)
     if use_mock:
-        mock = _load_mock_response(RESPONSE_TYPE_KEYWORDS, MOCK_KEY)
+        mock = load_mock_entry(MOCK_AI_DIR, RESPONSE_TYPE_KEYWORDS, MOCK_KEY)
         if not mock:
             raise ValueError(f"No mock data for {RESPONSE_TYPE_KEYWORDS}/{MOCK_KEY}")
         stream = on_chunk is not None
@@ -221,7 +192,7 @@ async def refine_idea_from_papers(
 
     use_mock = api_config.get("ideaUseMock", True)
     if use_mock:
-        mock = _load_mock_response(RESPONSE_TYPE_REFINE, MOCK_KEY)
+        mock = load_mock_entry(MOCK_AI_DIR, RESPONSE_TYPE_REFINE, MOCK_KEY)
         if not mock:
             return ""
         return (mock["content"] or "").strip()
@@ -266,7 +237,7 @@ async def refine_idea_from_papers_stream(
 
     use_mock = api_config.get("ideaUseMock", True)
     if use_mock:
-        mock = _load_mock_response(RESPONSE_TYPE_REFINE, MOCK_KEY)
+        mock = load_mock_entry(MOCK_AI_DIR, RESPONSE_TYPE_REFINE, MOCK_KEY)
         if not mock:
             return ""
         stream = on_chunk is not None

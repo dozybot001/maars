@@ -333,7 +333,7 @@ def test_retry_cleans_data_but_resume_does_not(client, session_headers, monkeypa
 
     anyio.run(_seed_state)
 
-    from api.routes import research as research_route
+    from api.routes import research_run_routes
 
     cleanup_calls = []
     started = []
@@ -345,8 +345,8 @@ def test_retry_cleans_data_but_resume_does_not(client, session_headers, monkeypa
     def fake_start(**kwargs):
         started.append(kwargs)
 
-    monkeypatch.setattr(research_route, 'clear_research_stage_data_for_retry', fake_cleanup)
-    monkeypatch.setattr(research_route, '_start_stage_pipeline_task', fake_start)
+    monkeypatch.setattr(research_run_routes, 'clear_research_stage_data_for_retry', fake_cleanup)
+    monkeypatch.setattr(research_run_routes, '_start_stage_pipeline_task', fake_start)
 
     retry_resp = client.post(f'/api/research/{rid}/stage/execute/retry', headers=session_headers, json={'format': 'markdown'})
     assert retry_resp.status_code == 200

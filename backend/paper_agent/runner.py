@@ -10,17 +10,15 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-import orjson
 from loguru import logger
 
 from shared.llm_client import chat_completion, merge_phase_config
+from shared.mock_utils import load_mock_entry
 from test.mock_stream import mock_chat_completion
 
 PAPER_DIR = Path(__file__).resolve().parent
 MOCK_AI_DIR = PAPER_DIR.parent / "test" / "mock-ai"
 MOCK_KEY = "_default"
-
-_mock_cache: Dict[str, dict] = {}
 
 
 async def _emit_thinking(on_thinking: Optional[Callable[..., Any]], chunk: str, operation: str = "Paper") -> None:
@@ -38,28 +36,9 @@ def _truncate_text(value: Any, limit: int = 1200) -> str:
     return text[: max(0, limit - 1)].rstrip() + "…"
 
 
-def _get_mock_cached() -> dict:
-    if "paper" not in _mock_cache:
-        path = MOCK_AI_DIR / "paper.json"
-        try:
-            _mock_cache["paper"] = orjson.loads(path.read_bytes())
-        except (FileNotFoundError, orjson.JSONDecodeError):
-            _mock_cache["paper"] = {}
-    return _mock_cache["paper"]
-
-
 def _load_mock_response() -> Optional[Dict]:
     """从 test/mock-ai/paper.json 加载 mock，与 idea/plan 对齐。"""
-    data = _get_mock_cached()
-    entry = data.get(MOCK_KEY) or data.get("_default")
-    if not entry:
-        return None
-    content = entry.get("content")
-    if isinstance(content, str):
-        content_str = content
-    else:
-        content_str = orjson.dumps(content).decode("utf-8")
-    return {"content": content_str, "reasoning": entry.get("reasoning", "")}
+    return load_mock_entry(MOCK_AI_DIR, "paper", MOCK_KEY)
 
 
 def _maars_plan_to_paper_format(plan: dict) -> dict:

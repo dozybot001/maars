@@ -11,7 +11,6 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from db import (
-    clear_research_stage_data_for_retry,
     create_research,
     delete_research_cascade,
     get_execution,
@@ -26,7 +25,7 @@ from db import (
 from .. import state as api_state
 from ..schemas import ResearchCreateRequest
 from .research_helpers import _load_latest_step_events
-from .research_pipeline import _cancel_research_running_tasks, _start_stage_pipeline_task
+from .research_pipeline import _cancel_research_running_tasks
 from .research_run_routes import router as research_run_router
 
 router = APIRouter()

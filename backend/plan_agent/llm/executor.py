@@ -4,7 +4,6 @@ Agent 实现放在 plan_agent/，单轮 LLM 放在 plan_agent/llm/。
 """
 
 import asyncio
-import re
 from typing import Any, Callable, Dict, List, Optional
 
 import networkx as nx
@@ -13,9 +12,9 @@ from loguru import logger
 
 from db import save_ai_response
 from shared.graph import build_dependency_graph, get_ancestor_path, get_parent_id
+from shared.utils import extract_codeblock
 from .executor_helpers import (
     _build_messages_for_context,
-    _build_user_message,
     _call_chat_completion,
     _call_real_chat_completion,
 )
@@ -57,10 +56,7 @@ async def real_chat_completion(
 
 def _parse_json_response(text: str) -> Any:
     """Parse JSON from AI response using json_repair for malformed output."""
-    cleaned = (text or "").strip()
-    m = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned)
-    if m:
-        cleaned = m.group(1).strip()
+    cleaned = extract_codeblock(text) or (text or "").strip()
     try:
         return json_repair.loads(cleaned)
     except Exception as e:
