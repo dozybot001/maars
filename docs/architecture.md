@@ -1,5 +1,7 @@
 # MAARS Architecture
 
+**English** | [中文版](architecture_cn.md)
+
 MAARS is a four-stage automated research pipeline: from a vague idea to a full paper draft, powered by four AI Agents working in relay.
 
 ```

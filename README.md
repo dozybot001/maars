@@ -100,7 +100,7 @@ maars/
 
 | Document | Description |
 | --- | --- |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture overview |
+| [Architecture](docs/architecture.md) | System architecture overview ([中文](docs/architecture_cn.md)) |
 | [docs/README.md](docs/README.md) | Documentation index |
 | [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) | Development guide (architecture, Research API, Skill system) |
 | [docs/workflow/](docs/workflow/) | Workflow docs (user flow, Research pipeline, four Agents, realtime events) |

@@ -100,7 +100,7 @@ maars/
 
 | 文档 | 说明 |
 | --- | --- |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | 系统架构总览 |
+| [架构文档](docs/architecture_cn.md) | 系统架构总览（[English](docs/architecture.md)） |
 | [docs/README.md](docs/README.md) | 文档索引 |
 | [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) | 开发指南（架构、Research API、Skill 扩充与维护） |
 | [docs/workflow/](docs/workflow/) | 工作流说明（用户流程、Research 流程、四 Agent、实时事件） |
