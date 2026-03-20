@@ -38,10 +38,6 @@
             el.setAttribute('data-task-data', JSON.stringify(getTaskDataForPopover(task)));
             el.setAttribute('title', desc);
 
-            const label = document.createElement('span');
-            label.className = 'tree-task-label';
-            label.textContent = title;
-            el.appendChild(label);
 
             return el;
         }
