@@ -613,33 +613,5 @@ async def execute_task(runner, task: Dict) -> None:
 
 
 async def reflect_on_task(runner, task: Dict, result: Any, on_thinking) -> None:
-    api_cfg = runner.api_config or {}
-    if not api_cfg.get("reflectionEnabled", False):
-        return
-    if api_cfg.get("taskUseMock", False):
-        return
-    try:
-        evaluation = await runner._deps.self_evaluate(
-            "task", result,
-            context={
-                "task_id": task["task_id"],
-                "description": task.get("description", ""),
-                "output_spec": task.get("output") or {},
-            },
-            on_thinking=on_thinking,
-            abort_event=runner.abort_event,
-            api_config=api_cfg,
-        )
-        suggestion = evaluation.get("skill_suggestion", {})
-        if suggestion.get("should_create") and suggestion.get("name"):
-            skill_content = await runner._deps.generate_skill_from_reflection(
-                "task", evaluation,
-                context={"task_id": task["task_id"], "description": task.get("description", "")},
-                api_config=api_cfg, abort_event=runner.abort_event,
-            )
-            if skill_content:
-                runner._deps.save_learned_skill("task", suggestion["name"], skill_content)
-    except asyncio.CancelledError:
-        raise
-    except Exception as e:
-        logger.warning("Task reflection failed for %s: %s", task["task_id"], e)
+    """Reflection removed. Kept as no-op stub for runner compatibility."""
+    return

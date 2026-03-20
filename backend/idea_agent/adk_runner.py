@@ -54,7 +54,6 @@ async def run_idea_agent_adk(
         "filtered_papers": [],
         "analysis": "",
         "refined_idea": "",
-        "rag_context": "",
     }
 
     on_thinking_fn = on_thinking or (lambda *a, **_: None)

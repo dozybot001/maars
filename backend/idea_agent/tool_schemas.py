@@ -4,10 +4,6 @@ OpenAI function-calling tool schema definitions for the Idea Agent.
 
 from typing import Dict, List, Optional
 
-try:
-    from .rag_engine import get_rag_engine
-except ImportError:
-    get_rag_engine = None
 
 # OpenAI function-calling tool definitions
 IDEA_AGENT_TOOLS = [
@@ -183,38 +179,6 @@ IDEA_AGENT_TOOLS = [
     },
 ]
 
-# RAG 工具：仅当 ideaUseRAG=True 时加入
-RAG_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "IndexPapers",
-            "description": "Index filtered papers (from FilterPapers) into PDF vector store for semantic retrieval. Call after FilterPapers when you need to query paper full-text for methodology or experimental details.",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "QueryKnowledgeBase",
-            "description": "Semantic search over indexed paper PDF content. Use when RefineIdea needs methodology, experimental setup, or specific details from paper body. Returns [Source ID: i] (Title)\ntext format.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "Search query for methodology, experiments, etc."},
-                },
-                "required": ["query"],
-            },
-        },
-    },
-]
-
-
 def get_idea_agent_tools(api_config: Optional[Dict] = None) -> List[dict]:
-    """返回 Idea Agent 工具列表，ideaUseRAG=True 时包含 IndexPapers 与 QueryKnowledgeBase。"""
-    tools = list(IDEA_AGENT_TOOLS)
-    if api_config and api_config.get("ideaUseRAG") and get_rag_engine:
-        engine = get_rag_engine()
-        if engine is not None:
-            tools = tools + RAG_TOOLS
-    return tools
+    """返回 Idea Agent 工具列表。"""
+    return list(IDEA_AGENT_TOOLS)

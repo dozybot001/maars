@@ -58,11 +58,5 @@ LLM_REQUEST_TIMEOUT = 120
 # 流式每个 chunk 间隔上限
 LLM_STREAM_CHUNK_TIMEOUT = 60
 
-# ── Self-Reflection（自迭代） ──────────────────────────────────
-REFLECT_MAX_ITERATIONS = 2
-REFLECT_QUALITY_THRESHOLD = 70
-TEMP_REFLECT = 0.2
-TEMP_SKILL_GEN = 0.4
-
 # ── Default Model ────────────────────────────────────────────────
 DEFAULT_MODEL = "gemini-2.5-flash"

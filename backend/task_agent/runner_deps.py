@@ -47,11 +47,6 @@ class RunnerDeps:
     validate_task_output: Callable[..., Awaitable[tuple]] = None
     review_contract_adjustment: Callable[..., Awaitable[Dict]] = None
 
-    # Reflection
-    self_evaluate: Callable[..., Awaitable[Dict]] = None
-    generate_skill_from_reflection: Callable[..., Awaitable[Optional[str]]] = None
-    save_learned_skill: Callable[..., None] = None
-
     # Utilities
     chunk_string: Callable[..., Any] = None
     SKILLS_ROOT: Any = None
@@ -70,7 +65,6 @@ def build_default_deps() -> RunnerDeps:
         save_task_attempt_memory,
         save_validation_report,
     )
-    from shared.reflection import generate_skill_from_reflection, save_learned_skill, self_evaluate
     from shared.utils import chunk_string
     from validate_agent import review_contract_adjustment
 
@@ -121,9 +115,6 @@ def build_default_deps() -> RunnerDeps:
         list_task_attempt_memories=list_task_attempt_memories,
         validate_task_output=validate_task_output_with_readonly_agent,
         review_contract_adjustment=review_contract_adjustment,
-        self_evaluate=self_evaluate,
-        generate_skill_from_reflection=generate_skill_from_reflection,
-        save_learned_skill=save_learned_skill,
         chunk_string=chunk_string,
         SKILLS_ROOT=SKILLS_ROOT,
         MOCK_VALIDATOR_CHUNK_DELAY=_env_float("MAARS_MOCK_VALIDATOR_CHUNK_DELAY", 0.03),

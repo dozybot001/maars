@@ -21,11 +21,6 @@ from .literature import search_literature
 from .llm import extract_keywords, refine_idea_from_papers
 from .llm.executor import _build_papers_context
 
-try:
-    from .rag_engine import get_rag_engine
-except ImportError:
-    get_rag_engine = None
-
 from .tool_schemas import get_idea_agent_tools
 
 _IDEA_SKILLS_DIR = os.environ.get("MAARS_IDEA_SKILLS_DIR")
@@ -203,41 +198,6 @@ async def execute_idea_agent_tool(
         return False, orjson.dumps(
             {"count": len(filtered), "indices": indices}, option=orjson.OPT_INDENT_2
         ).decode("utf-8")
-
-    if name == "IndexPapers":
-        if not api_config.get("ideaUseRAG"):
-            logger.info("Idea RAG: IndexPapers called but disabled (ideaUseRAG=False)")
-            return False, "Error: RAG not enabled (ideaUseRAG=False)"
-        engine = get_rag_engine() if get_rag_engine else None
-        if not engine:
-            logger.info("Idea RAG: IndexPapers called but dependencies unavailable")
-            return False, "Error: RAG dependencies not available"
-        papers = idea_state.get("filtered_papers") or []
-        logger.info("Idea RAG: IndexPapers start papers=%d", len(papers))
-        result = await engine.index_papers(papers)
-        logger.info("Idea RAG: IndexPapers done result=%s", (result or "")[:200])
-        return False, result
-
-    if name == "QueryKnowledgeBase":
-        if not api_config.get("ideaUseRAG"):
-            logger.info("Idea RAG: QueryKnowledgeBase called but disabled (ideaUseRAG=False)")
-            return False, "Error: RAG not enabled (ideaUseRAG=False)"
-        engine = get_rag_engine() if get_rag_engine else None
-        if not engine:
-            logger.info("Idea RAG: QueryKnowledgeBase called but dependencies unavailable")
-            return False, "Error: RAG dependencies not available"
-        q = (args.get("query") or "").strip()
-        if not q:
-            return False, "Error: query required"
-        logger.info("Idea RAG: QueryKnowledgeBase start query=%r", q[:200])
-        result = await engine.query(q, limit=30)
-        idea_state["rag_context"] = result
-        logger.info(
-            "Idea RAG: QueryKnowledgeBase done chars=%d preview=%r",
-            len(result or ""),
-            (result or "")[:120],
-        )
-        return False, result
 
     if name == "AnalyzePapers":
         papers_ctx = args.get("papers_context") or _build_papers_context(

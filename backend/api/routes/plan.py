@@ -18,7 +18,6 @@ from shared.utils import get_idea_text
 from shared.task_title import derive_task_title, ensure_task_titles
 from visualization import build_layout_from_execution, compute_decomposition_layout
 from plan_agent.index import run_plan
-from shared.reflection import reflection_loop
 from shared.realtime import build_thinking_emitter
 
 from ..schemas import PlanLayoutRequest, PlanRunRequest
@@ -132,43 +131,17 @@ async def _run_plan_inner(body: PlanRunRequest, idea_id: str, plan_id: str, sess
         )
         plan["tasks"] = result["tasks"]
         ensure_task_titles(plan["tasks"])
+        return {"tasks": plan["tasks"]}
 
-        async def _rerun():
-            rerun_plan = {"tasks": [{"task_id": "0", "description": idea, "dependencies": []}], "idea": idea}
-            r = await run_plan(
-                rerun_plan, None, on_thinking, abort_event, on_tasks_batch,
-                use_mock=use_mock, api_config=config, skip_quality_assessment=True,
-                idea_id=idea_id, plan_id=plan_id,
-            )
-            plan["tasks"] = r["tasks"]
-            plan.pop("qualityScore", None)
-            plan.pop("qualityComment", None)
-            return {"tasks": r["tasks"]}
-
-        reflected = await reflection_loop(
-            agent_type="plan", run_fn=_rerun, initial_output={"tasks": plan["tasks"]},
-            context={"idea": idea}, on_thinking=on_thinking, abort_event=abort_event, api_config=config,
-        )
-        plan["tasks"] = reflected["output"]["tasks"]
-        return reflected
-
-    async def _on_complete(reflected):
-        reflection_data = reflected.get("reflection")
+    async def _on_complete(result):
         plan_to_save = {"tasks": plan["tasks"], "qualityScore": plan.get("qualityScore"), "qualityComment": plan.get("qualityComment")}
         await save_plan(plan_to_save, idea_id, plan_id)
 
-        complete_payload = {
+        await api_state.emit(session_id, "plan-complete", {
             **_tree_update_payload(plan),
             "ideaId": idea_id, "planId": plan_id,
             "qualityScore": plan.get("qualityScore"), "qualityComment": plan.get("qualityComment"),
-        }
-        if reflection_data:
-            complete_payload["reflection"] = {
-                "iterations": reflection_data.get("iterations", 0),
-                "bestScore": reflection_data.get("best_score", 0),
-                "skillsCreated": [s["name"] for s in reflection_data.get("skills_created", [])],
-            }
-        await api_state.emit(session_id, "plan-complete", complete_payload)
+        })
 
     await guarded_agent_run(
         state, session_id, "Plan", _run_agent,

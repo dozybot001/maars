@@ -8,7 +8,6 @@ from loguru import logger
 
 from db import get_effective_config, get_idea, save_idea
 from idea_agent import collect_literature, run_idea_agent
-from shared.reflection import reflection_loop
 from shared.realtime import build_thinking_emitter
 
 from .. import state as api_state
@@ -43,36 +42,18 @@ async def _run_collect_inner(session_id: str, state, idea_id: str, idea: str, li
             result = await run_idea_agent(idea=idea, api_config=config, limit=limit, on_thinking=on_thinking, abort_event=abort_event)
         else:
             result = await collect_literature(idea=idea, api_config=config, limit=limit, on_thinking=on_thinking, abort_event=abort_event)
-
-        async def _rerun():
-            if config.get("ideaAgentMode"):
-                return await run_idea_agent(idea=idea, api_config=config, limit=limit, on_thinking=on_thinking, abort_event=abort_event)
-            return await collect_literature(idea=idea, api_config=config, limit=limit, on_thinking=on_thinking, abort_event=abort_event)
-
-        reflected = await reflection_loop(
-            agent_type="idea", run_fn=_rerun, initial_output=result,
-            context={"idea": idea}, on_thinking=on_thinking, abort_event=abort_event, api_config=config,
-        )
-        return reflected["output"], reflected.get("reflection")
+        return result
 
     async def _on_complete(result):
-        output, reflection_data = result
         idea_data = {
-            "idea": idea, "keywords": output.get("keywords", []),
-            "papers": output.get("papers", []), "refined_idea": output.get("refined_idea"),
+            "idea": idea, "keywords": result.get("keywords", []),
+            "papers": result.get("papers", []), "refined_idea": result.get("refined_idea"),
         }
         await save_idea(idea_data, idea_id)
-        complete_payload = {
+        await api_state.emit(session_id, "idea-complete", {
             "ideaId": idea_id, "keywords": idea_data["keywords"],
             "papers": idea_data["papers"], "refined_idea": idea_data["refined_idea"],
-        }
-        if reflection_data:
-            complete_payload["reflection"] = {
-                "iterations": reflection_data.get("iterations", 0),
-                "bestScore": reflection_data.get("best_score", 0),
-                "skillsCreated": [s["name"] for s in reflection_data.get("skills_created", [])],
-            }
-        await api_state.emit(session_id, "idea-complete", complete_payload)
+        })
         logger.info("Idea run complete session_id={} idea_id={}", session_id, idea_id)
 
     await guarded_agent_run(

@@ -9,10 +9,9 @@
     const presetHelpers = window.MAARS?.settingsPresetHelpers || {};
     const syncHelpers = window.MAARS?.settingsSyncHelpers || {};
 
-    const DEFAULT_AGENT_MODE = { ideaAgent: 'mock', planAgent: 'mock', taskAgent: 'mock', paperAgent: 'mock', ideaRAG: false, literatureSource: 'openalex' };
-    const DEFAULT_REFLECTION = { enabled: false, maxIterations: 2, qualityThreshold: 70 };
+    const DEFAULT_AGENT_MODE = { ideaAgent: 'mock', planAgent: 'mock', taskAgent: 'mock', paperAgent: 'mock', literatureSource: 'openalex' };
     const PANELS = ['settingsPanelTheme', 'settingsPanelAi', 'settingsPanelDb'];
-    let _configState = { agentMode: { ...DEFAULT_AGENT_MODE }, reflection: { ...DEFAULT_REFLECTION }, current: '', presets: {} };
+    let _configState = { agentMode: { ...DEFAULT_AGENT_MODE }, current: '', presets: {} };
     let _activePresetKey = '';
     let _openSettingsModal = null;
 
@@ -39,32 +38,17 @@
         syncHelpers.syncMatrixActive?.(_configState.agentMode || {});
     }
 
-    function _syncReflectionUI() {
-        syncHelpers.syncReflectionUI?.(_configState.reflection || DEFAULT_REFLECTION);
-    }
-
-    function _syncIdeaRAGUI() {
-        syncHelpers.syncIdeaRAGUI?.(_configState.agentMode || {});
-    }
 
     function _syncLiteratureSourceUI() {
         syncHelpers.syncLiteratureSourceUI?.(_configState.agentMode || {});
     }
 
-    function _readIdeaRAGFromUI() {
-        _configState.agentMode = syncHelpers.readIdeaRAGFromUI?.(_configState.agentMode, DEFAULT_AGENT_MODE)
-            || { ...DEFAULT_AGENT_MODE, ...(_configState.agentMode || {}) };
-    }
 
     function _readLiteratureSourceFromUI() {
         _configState.agentMode = syncHelpers.readLiteratureSourceFromUI?.(_configState.agentMode, DEFAULT_AGENT_MODE)
             || { ...DEFAULT_AGENT_MODE, ...(_configState.agentMode || {}) };
     }
 
-    function _readReflectionFromUI() {
-        _configState.reflection = syncHelpers.readReflectionFromUI?.(DEFAULT_REFLECTION)
-            || { ...DEFAULT_REFLECTION };
-    }
 
     function _renderPresetSelectItems() {
         presetHelpers.renderPresetSelectItems?.(_configState, _escapeHtml);
@@ -98,17 +82,13 @@
             current = 'default';
             presets = { default: { label: 'Default', baseUrl: '', apiKey: '', model: '' } };
         }
-        const reflection = raw.reflection && typeof raw.reflection === 'object'
-            ? { ...DEFAULT_REFLECTION, ...raw.reflection }
-            : { ...DEFAULT_REFLECTION };
-        if (agentMode.ideaRAG === undefined) agentMode.ideaRAG = false;
         if (agentMode.literatureSource === undefined) {
             agentMode.literatureSource = 'openalex';
         } else {
             const source = String(agentMode.literatureSource || '').trim().toLowerCase();
             agentMode.literatureSource = (source === 'arxiv') ? 'arxiv' : 'openalex';
         }
-        _configState = { theme, agentMode, reflection, current, presets };
+        _configState = { theme, agentMode, current, presets };
         _activePresetKey = current || Object.keys(presets)[0];
     }
 
@@ -153,8 +133,6 @@
             _showPanel('settingsPanelTheme');
             _syncThemeCardsActive();
             _syncMatrixActive();
-            _syncReflectionUI();
-            _syncIdeaRAGUI();
             _syncLiteratureSourceUI();
             _renderPresetSelectItems();
             const keys = Object.keys(_configState.presets);
@@ -191,7 +169,6 @@
             } else if (id === 'ai') {
                 _showPanel('settingsPanelAi');
                 _syncMatrixActive();
-                _syncIdeaRAGUI();
                 _syncLiteratureSourceUI();
                 _renderPresetSelectItems();
             } else if (id === 'db') {
@@ -271,9 +248,6 @@
 
         document.getElementById('settingsSaveBtn')?.addEventListener('click', async () => {
             _readFormIntoState();
-            _readReflectionFromUI();
-            _readIdeaRAGFromUI();
-            _readLiteratureSourceFromUI();
             _configState.theme = document.documentElement.getAttribute('data-theme') || 'light';
             try {
                 await cfg.saveSettings(_configState);
