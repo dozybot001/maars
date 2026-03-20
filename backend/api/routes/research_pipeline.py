@@ -71,25 +71,25 @@ async def _abort_stage_runners(session, include_execute: bool = True) -> None:
 
 async def _cancel_research_running_tasks(research_id: str, sessions: dict) -> None:
     """Stop and unregister all in-process pipeline tasks for a research id."""
-
-    for (sid, rid), entry in list(_RUNNING.items()):
-        if rid != research_id:
-            continue
-        session = sessions.get(sid)
-        runner = getattr(session, "runner", None) if session else None
-        if runner and getattr(runner, "is_running", False):
-            try:
-                await runner.stop_async()
-            except Exception:
-                logger.exception(
-                    "Failed to stop runner during research deletion research_id={} session_id={}",
-                    research_id,
-                    sid,
-                )
-        task = entry.get("task")
-        if task and not task.done():
-            task.cancel()
-        _RUNNING.pop((sid, rid), None)
+    async with _RUNNING_LOCK:
+        for (sid, rid), entry in list(_RUNNING.items()):
+            if rid != research_id:
+                continue
+            session = sessions.get(sid)
+            runner = getattr(session, "runner", None) if session else None
+            if runner and getattr(runner, "is_running", False):
+                try:
+                    await runner.stop_async()
+                except Exception:
+                    logger.exception(
+                        "Failed to stop runner during research deletion research_id={} session_id={}",
+                        research_id,
+                        sid,
+                    )
+            task = entry.get("task")
+            if task and not task.done():
+                task.cancel()
+            _RUNNING.pop((sid, rid), None)
 
 
 async def _run_stage_refine(session_id: str, session, research_id: str, prompt: str, idea_id: str) -> tuple[str, str | None]:
@@ -171,16 +171,18 @@ async def _run_stage_chain(
         plan_id = (research_live.get("currentPlanId") or "").strip() or None
 
         if start_stage == "refine":
-            if _RUNNING.get(key):
-                _RUNNING[key]["stage"] = "refine"
+            async with _RUNNING_LOCK:
+                if _RUNNING.get(key):
+                    _RUNNING[key]["stage"] = "refine"
             if reset_start_stage or not idea_id:
                 idea_id = f"idea_{int(time.time() * 1000)}"
             idea_id, _ = await _run_stage_refine(session_id, session, research_id, prompt, idea_id)
             start_stage = "plan"
 
         if start_stage == "plan":
-            if _RUNNING.get(key):
-                _RUNNING[key]["stage"] = "plan"
+            async with _RUNNING_LOCK:
+                if _RUNNING.get(key):
+                    _RUNNING[key]["stage"] = "plan"
             if not idea_id:
                 raise ValueError("Idea not found. Please run Refine first.")
             if reset_start_stage or not plan_id:
@@ -189,16 +191,18 @@ async def _run_stage_chain(
             start_stage = "execute"
 
         if start_stage == "execute":
-            if _RUNNING.get(key):
-                _RUNNING[key]["stage"] = "execute"
+            async with _RUNNING_LOCK:
+                if _RUNNING.get(key):
+                    _RUNNING[key]["stage"] = "execute"
             if not idea_id or not plan_id:
                 raise ValueError("Plan not found. Please run Plan first.")
             await _run_stage_execute(session_id, session, research_id, idea_id, plan_id)
             start_stage = "paper"
 
         if start_stage == "paper":
-            if _RUNNING.get(key):
-                _RUNNING[key]["stage"] = "paper"
+            async with _RUNNING_LOCK:
+                if _RUNNING.get(key):
+                    _RUNNING[key]["stage"] = "paper"
             if not idea_id or not plan_id:
                 raise ValueError("Plan not found. Please run Plan first.")
             await _run_stage_paper(session_id, session, research_id, idea_id, plan_id, paper_format)
@@ -209,7 +213,6 @@ async def _run_stage_chain(
         stage = _normalize_stage((research_live or {}).get("stage") or "refine")
         await update_research_stage(research_id, stage_status="stopped", error="Research pipeline stopped by user")
         await _emit_stage(session_id, research_id, stage, "stopped")
-        raise
     except Exception as e:
         logger.exception("Research pipeline failed research_id={} session_id={}", research_id, session_id)
         research_live = await get_research(research_id)
@@ -218,10 +221,11 @@ async def _run_stage_chain(
         await _emit_stage(session_id, research_id, stage, "failed", str(e))
         await api_state.emit_safe(session_id, "research-error", {"researchId": research_id, "error": str(e)})
     finally:
-        _RUNNING.pop(key, None)
+        async with _RUNNING_LOCK:
+            _RUNNING.pop(key, None)
 
 
-def _start_stage_pipeline_task(
+async def _start_stage_pipeline_task(
     *,
     session_id: str,
     session,
@@ -231,6 +235,14 @@ def _start_stage_pipeline_task(
     reset_start_stage: bool,
 ) -> None:
     key = (session_id, research_id)
+
+    async with _RUNNING_LOCK:
+        old = _RUNNING.get(key)
+        if old:
+            old_task = old.get("task")
+            if old_task and not old_task.done():
+                old_task.cancel()
+                logger.warning("Cancelled stale pipeline task for key={}", key)
 
     async def _run():
         await _run_stage_chain(
@@ -243,4 +255,5 @@ def _start_stage_pipeline_task(
         )
 
     task = asyncio.create_task(_run())
-    _RUNNING[key] = {"task": task, "stage": _normalize_stage(start_stage)}
+    async with _RUNNING_LOCK:
+        _RUNNING[key] = {"task": task, "stage": _normalize_stage(start_stage)}

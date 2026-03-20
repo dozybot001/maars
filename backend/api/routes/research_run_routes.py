@@ -117,7 +117,7 @@ async def run_research_route(research_id: str, body: ResearchRunRequest, request
         "refine",
     )
 
-    _start_stage_pipeline_task(
+    await _start_stage_pipeline_task(
         session_id=session_id,
         session=session,
         research_id=research_id,
@@ -186,7 +186,7 @@ async def retry_research_route(research_id: str, body: ResearchRunRequest, reque
         research.get("currentPlanId"),
         start_stage,
     )
-    _start_stage_pipeline_task(
+    await _start_stage_pipeline_task(
         session_id=session_id,
         session=session,
         research_id=research_id,
@@ -211,7 +211,7 @@ async def run_research_stage_route(research_id: str, stage: str, body: ResearchR
         return error
     session_id, session, _research, stage = prepared
     paper_format = _normalize_paper_format(body.format)
-    _start_stage_pipeline_task(
+    await _start_stage_pipeline_task(
         session_id=session_id,
         session=session,
         research_id=research_id,
@@ -241,7 +241,7 @@ async def resume_research_stage_route(research_id: str, stage: str, body: Resear
             },
         )
     paper_format = _normalize_paper_format(body.format)
-    _start_stage_pipeline_task(
+    await _start_stage_pipeline_task(
         session_id=session_id,
         session=session,
         research_id=research_id,
@@ -264,7 +264,7 @@ async def retry_research_stage_route(research_id: str, stage: str, body: Researc
         research.get("currentPlanId"),
         stage,
     )
-    _start_stage_pipeline_task(
+    await _start_stage_pipeline_task(
         session_id=session_id,
         session=session,
         research_id=research_id,
