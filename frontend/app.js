@@ -4,7 +4,7 @@
 (function () {
     'use strict';
 
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
         const cfg = window.MAARS?.config;
         const theme = window.MAARS?.theme;
         const task = window.MAARS?.task;
@@ -13,19 +13,17 @@
 
         if (theme) theme.initTheme().catch(e => console.warn('[MAARS]', e));
         const settings = window.MAARS?.settings;
-        if (settings) settings.initSettingsModal();
+        if (settings) await settings.initSettingsModal();
         const sidebar = window.MAARS?.sidebar;
         if (sidebar) sidebar.initSidebar();
         if (task) task.init();
         if (research) research.init();
-        (async () => {
-            try {
-                if (cfg?.ensureSession) await cfg.ensureSession();
-                if (ws) await ws.init();
-            } catch (_) {
-                /* ignore bootstrap failures */
-            }
-        })();
+        try {
+            if (cfg?.ensureSession) await cfg.ensureSession();
+            if (ws) await ws.init();
+        } catch (_) {
+            /* ignore bootstrap failures */
+        }
 
         const taskTree = window.MAARS?.taskTree;
         if (taskTree?.initClickHandlers) taskTree.initClickHandlers();

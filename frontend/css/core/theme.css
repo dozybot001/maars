@@ -4,9 +4,6 @@
  * Import this file before styles.css.
  */
 
-@import "./theme-dark.css";
-@import "./theme-black.css";
-
 :root {
     /* ========== Base Palette ========== */
     --color-white: #ffffff;

@@ -3,8 +3,6 @@
  * 合并 theme 色板与 base 布局/组件变量
  */
 
-@import "./theme.css";
-
 :root {
     /* 全局字体：仅 JetBrains Mono */
     --font-family: "JetBrains Mono", monospace;

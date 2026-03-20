@@ -126,15 +126,13 @@
         _activePresetKey = presetHelpers.selectPreset?.(key, _activePresetKey, _configState, _escapeHtml) || key;
     }
 
-    function initSettingsModal() {
+    async function initSettingsModal() {
         // Dynamically load settings modal HTML from shared partial
         const slot = document.getElementById('settingsModalSlot');
         if (slot && !document.getElementById('settingsModal')) {
             try {
-                const xhr = new XMLHttpRequest();
-                xhr.open('GET', 'partials/settings-modal.html', false); // sync for init
-                xhr.send();
-                if (xhr.status === 200) slot.outerHTML = xhr.responseText;
+                const resp = await fetch('partials/settings-modal.html');
+                if (resp.ok) slot.outerHTML = await resp.text();
             } catch (_) { /* fallback: modal HTML may be inline */ }
         }
 
