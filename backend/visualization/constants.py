@@ -4,7 +4,7 @@ Unified spacing ensures consistent connection line lengths across both views.
 """
 
 # Node dimensions (compact rounded rectangle)
-DEFAULT_NODE_W = 52
+DEFAULT_NODE_W = 36
 DEFAULT_NODE_H = 24
 
 # Horizontal spacing between sibling nodes
