@@ -7,7 +7,7 @@ import json
 import re
 from typing import Any, Callable, Dict, Optional
 
-import json_repair
+from shared.utils import parse_json_response
 
 from db import ensure_execution_task_dirs, ensure_sandbox_dir
 from shared.adk_bridge import (
@@ -49,12 +49,8 @@ def _parse_task_agent_output(content: str, use_json_mode: bool) -> Any:
     if not content:
         raise ValueError("LLM returned empty response")
     if use_json_mode:
-        cleaned = content
-        m = re.search(r"```(?:json)?\s*([\s\S]*?)```", cleaned)
-        if m:
-            cleaned = m.group(1).strip()
         try:
-            return json_repair.loads(cleaned)
+            return parse_json_response(content)
         except Exception as e:
             raise ValueError(f"Failed to parse JSON from LLM response: {e}") from e
     return content
@@ -62,7 +58,7 @@ def _parse_task_agent_output(content: str, use_json_mode: bool) -> Any:
 
 def _safe_json_loads(raw: str) -> Any:
     try:
-        return json_repair.loads(raw)
+        return parse_json_response(raw)
     except Exception:
         return None
 

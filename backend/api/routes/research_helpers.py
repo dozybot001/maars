@@ -13,7 +13,7 @@ from db import (
     list_plan_outputs,
 )
 from plan_agent.execution_builder import build_execution_from_plan
-from shared.idea_utils import get_idea_text
+from shared.utils import get_idea_text
 
 
 def _run_sort_key(run_id: str) -> tuple[int, str]:

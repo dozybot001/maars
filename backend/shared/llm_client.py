@@ -11,7 +11,7 @@ from google.genai import types
 
 from loguru import logger
 
-from shared.constants import DEFAULT_MODEL, LLM_REQUEST_TIMEOUT, LLM_STREAM_CHUNK_TIMEOUT
+from .constants import DEFAULT_MODEL, LLM_REQUEST_TIMEOUT, LLM_STREAM_CHUNK_TIMEOUT
 
 
 def merge_phase_config(api_config: dict, phase: str) -> dict:

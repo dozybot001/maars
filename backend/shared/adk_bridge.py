@@ -9,7 +9,7 @@ from typing import Any, Callable, List
 from google.genai import types
 from google.adk.tools import BaseTool
 
-from shared.constants import DEFAULT_MODEL
+from .constants import DEFAULT_MODEL
 
 
 class ExecutorTool(BaseTool):

@@ -3,17 +3,19 @@ Plan Agent - Google ADK 驱动 (planAgentMode=True)。
 替代自实现 ReAct 循环，使用 backend/plan_agent/adk_runner.py。
 """
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional
+
+from shared.utils import OnThinking
 
 from . import adk_runner
 
 
 async def run_plan_agent(
     plan: Dict,
-    on_thinking: Callable[[str], None],
-    abort_event: Optional[Any],
-    on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]],
-    api_config: Optional[Dict],
+    on_thinking: OnThinking = None,
+    abort_event=None,
+    on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]] = None,
+    api_config: Optional[Dict] = None,
     idea_id: Optional[str] = None,
     plan_id: Optional[str] = None,
 ) -> Dict:

@@ -1,8 +1,8 @@
 """Idea Agent - collect papers and generate refined idea."""
 
-from typing import Any, Optional
-
 from loguru import logger
+
+from shared.utils import OnThinking
 
 from . import arxiv
 from .agent import run_idea_agent
@@ -12,7 +12,6 @@ from .llm import (
     refine_idea_from_papers,
     refine_idea_from_papers_stream,
 )
-from .llm.executor import OnThinkingCallback  # 统一 on_thinking 签名
 from .literature import search_literature
 
 __all__ = [
@@ -30,8 +29,8 @@ async def collect_literature(
     idea: str,
     api_config: dict,
     limit: int = 10,
-    on_thinking: Optional[OnThinkingCallback] = None,
-    abort_event: Optional[Any] = None,
+    on_thinking: OnThinking = None,
+    abort_event=None,
 ) -> dict:
     """
     根据模糊 idea 收集文献并生成可执行 refined idea。

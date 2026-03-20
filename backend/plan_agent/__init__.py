@@ -1,4 +1,6 @@
-"""
-Plan Agent - atomicity check, decompose, format.
-Multi Agent: Plan Agent (plan_agent) + Task Agent (task_agent).
-"""
+"""Plan Agent - atomicity check, decompose, format."""
+
+from .agent import run_plan_agent
+from .index import run_plan
+
+__all__ = ["run_plan", "run_plan_agent"]

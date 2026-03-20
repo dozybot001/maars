@@ -106,11 +106,11 @@ def test_single_task_1_data_preparation_execution_debug(
         print(f"\n>>> EMIT: {event} = {json.dumps(data, indent=2)[:200]}...", flush=True)
         original_emit(event, data)
 
-    async def mock_run_task_agent(**kwargs):
-        task_id = kwargs.get("task_id")
+    async def mock_run_task_agent(ctx):
+        task_id = ctx.task_id
         print(f"\n=== AGENT CALLED FOR TASK {task_id} ===", flush=True)
-        print(f"docker_container_name: {kwargs.get('docker_container_name')}", flush=True)
-        print(f"execution_run_id: {kwargs.get('execution_run_id')}", flush=True)
+        print(f"docker_container_name: {ctx.docker_container_name}", flush=True)
+        print(f"execution_run_id: {ctx.execution_run_id}", flush=True)
 
         # Simulate agent output
         nonlocal agent_output

@@ -15,7 +15,7 @@ from shared.constants import (
     MOCK_EXECUTION_PASS_PROBABILITY,
     MOCK_VALIDATION_PASS_PROBABILITY,
 )
-from shared.idea_utils import get_idea_text
+from shared.utils import get_idea_text
 from db import save_execution as _db_save_execution
 from .runner_deps import RunnerDeps, build_default_deps
 from . import runner_orchestration as exec_fns

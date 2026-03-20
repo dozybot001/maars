@@ -7,11 +7,9 @@ import asyncio
 from typing import Any, Callable, Dict, List, Optional
 
 import networkx as nx
-import json_repair
-
 from db import save_ai_response
 from shared.graph import build_dependency_graph, get_ancestor_path, get_parent_id
-from shared.utils import extract_codeblock
+from shared.utils import parse_json_response
 from .executor_helpers import (
     _build_messages_for_context,
     _call_real_chat_completion,
@@ -55,9 +53,8 @@ async def real_chat_completion(
 
 def _parse_json_response(text: str) -> Any:
     """Parse JSON from AI response using json_repair for malformed output."""
-    cleaned = extract_codeblock(text) or (text or "").strip()
     try:
-        return json_repair.loads(cleaned)
+        return parse_json_response(text)
     except Exception as e:
         raise ValueError(f"Failed to parse JSON from AI response: {e}") from e
 

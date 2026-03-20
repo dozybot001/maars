@@ -1,4 +1,4 @@
-from shared.idea_utils import get_idea_text
+from shared.utils import get_idea_text
 
 
 def test_get_idea_text_none_or_non_str():

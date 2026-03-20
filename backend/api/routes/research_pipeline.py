@@ -23,6 +23,7 @@ from .research_helpers import (
 )
 
 _RUNNING: dict[tuple[str, str], dict] = {}
+_RUNNING_LOCK = asyncio.Lock()
 
 
 async def _emit_stage(session_id: str, research_id: str, stage: str, status: str, error: str | None = None) -> None:

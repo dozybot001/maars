@@ -59,7 +59,7 @@ def test_single_first_task_basic_execution(
     sid = session_headers["X-MAARS-SESSION-ID"]
     runner = api_state.sessions[sid].runner
 
-    async def fake_run_task_agent(**kwargs):
+    async def fake_run_task_agent(ctx):
         return {"status": "success", "data": "task output data"}
 
     async def fake_validate_task_output(*args, **kwargs):

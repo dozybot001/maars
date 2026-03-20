@@ -308,7 +308,7 @@
                     const msg = String(e?.message || '').trim();
                     if (/already running|409/i.test(msg)) {
                         // Keep UI in sync with backend state and avoid noisy alerts.
-                        ctx.loadResearch?.(researchId).catch(() => {});
+                        ctx.loadResearch?.(researchId).catch(e => console.warn('[MAARS]', e));
                     } else {
                         toast.error(msg || `Failed to ${action} stage`);
                     }

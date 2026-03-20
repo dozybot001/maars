@@ -127,6 +127,17 @@
     }
 
     function initSettingsModal() {
+        // Dynamically load settings modal HTML from shared partial
+        const slot = document.getElementById('settingsModalSlot');
+        if (slot && !document.getElementById('settingsModal')) {
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', 'partials/settings-modal.html', false); // sync for init
+                xhr.send();
+                if (xhr.status === 200) slot.outerHTML = xhr.responseText;
+            } catch (_) { /* fallback: modal HTML may be inline */ }
+        }
+
         const modal = document.getElementById('settingsModal');
         const deleteBtn = document.getElementById('settingsPresetDeleteBtn');
         const nav = document.querySelector('.settings-nav');

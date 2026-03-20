@@ -74,7 +74,7 @@
 
         function stopExecution() {
             resetExecutionButtons();
-            api?.stopAgent?.('task').catch(() => {});
+            api?.stopAgent?.('task').catch(e => console.warn('[MAARS]', e));
         }
 
         function onTaskError(e) {

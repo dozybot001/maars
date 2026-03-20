@@ -11,7 +11,7 @@
         const ws = window.MAARS?.ws;
         const research = window.MAARS?.research;
 
-        if (theme) theme.initTheme().catch(() => {});
+        if (theme) theme.initTheme().catch(e => console.warn('[MAARS]', e));
         const settings = window.MAARS?.settings;
         if (settings) settings.initSettingsModal();
         const sidebar = window.MAARS?.sidebar;

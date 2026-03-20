@@ -12,6 +12,7 @@ from loguru import logger
 
 from shared.graph import get_ancestor_path, get_parent_id
 from shared.task_title import ensure_task_titles
+from shared.utils import OnThinking
 
 from .agent import run_plan_agent
 from .agent_tools import _find_task_idx
@@ -43,7 +44,7 @@ def _plan_has_unformatted_leaves(all_tasks: List[Dict]) -> bool:
 async def _complete_existing_tree_recursive(
     task: Dict,
     all_tasks: List[Dict],
-    on_thinking: Callable[[str], None],
+    on_thinking: OnThinking,
     check_aborted: Callable[[], bool],
     abort_event: Optional[Any],
     on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]] = None,
@@ -133,7 +134,7 @@ async def _complete_existing_tree_recursive(
 async def _complete_existing_plan_tree(
     root_task: Dict,
     all_tasks: List[Dict],
-    on_thinking: Callable[[str], None],
+    on_thinking: OnThinking,
     check_aborted: Callable[[], bool],
     abort_event: Optional[Any],
     on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]] = None,
@@ -163,7 +164,7 @@ async def _atomicity_and_decompose_recursive(
     task: Dict,
     all_tasks: List[Dict],
     on_task: Optional[Callable[[Dict], None]],
-    on_thinking: Callable[[str], None],
+    on_thinking: OnThinking,
     depth: int,
     check_aborted: Callable[[], bool],
     abort_event: Optional[Any],
@@ -220,7 +221,7 @@ async def _atomicity_and_decompose_recursive(
 async def run_plan(
     plan: Dict,
     on_task: Optional[Callable[[Dict], None]],
-    on_thinking: Callable[[str], None],
+    on_thinking: OnThinking,
     abort_event: Optional[Any] = None,
     on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]] = None,
     use_mock: bool = False,

@@ -3,7 +3,7 @@ Idea Agent - Google ADK 驱动 (ideaAgentMode=True)。
 替代自实现 ReAct 循环，使用 backend/idea_agent/adk_runner.py。
 """
 
-from typing import Any, Callable, Optional
+from shared.utils import OnThinking
 
 from . import adk_runner
 
@@ -12,8 +12,8 @@ async def run_idea_agent(
     idea: str,
     api_config: dict,
     limit: int = 10,
-    on_thinking: Optional[Callable[..., Any]] = None,
-    abort_event: Optional[Any] = None,
+    on_thinking: OnThinking = None,
+    abort_event=None,
 ) -> dict:
     """
     Idea Agent 入口。使用 Google ADK 驱动。

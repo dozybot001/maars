@@ -4,6 +4,6 @@ Routes are split by domain: db, plan, plans, execution, settings.
 """
 
 from .routes import register_routes
-from .state import PlanRunState, IdeaRunState, PaperRunState
+from .state import AgentRunState, PlanRunState, IdeaRunState, PaperRunState
 
-__all__ = ["PlanRunState", "IdeaRunState", "PaperRunState", "register_routes"]
+__all__ = ["AgentRunState", "PlanRunState", "IdeaRunState", "PaperRunState", "register_routes"]

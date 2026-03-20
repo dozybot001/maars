@@ -123,9 +123,9 @@ def test_execution_run_uses_task_docker_flow_and_writes_step_events(
             "sandboxRoot": str(get_execution_task_step_dir(execution_run_id, task_id).resolve().parent.parent.parent),
         }
 
-    async def fake_run_task_agent(**kwargs):
-        run_agent_calls.append(kwargs)
-        task_id = kwargs.get("task_id") or "unknown"
+    async def fake_run_task_agent(ctx):
+        run_agent_calls.append(ctx)
+        task_id = ctx.task_id or "unknown"
         return {"content": f"docker-agent-output-{task_id}"}
 
     async def fake_validate_task_output(*args, **kwargs):

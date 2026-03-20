@@ -227,6 +227,6 @@
     window.MAARS = window.MAARS || {};
     window.MAARS.sidebar = {
         initSidebar,
-        refreshResearchList: () => (_refreshResearchList ? _refreshResearchList().catch(() => {}) : undefined),
+        refreshResearchList: () => (_refreshResearchList ? _refreshResearchList().catch(e => console.warn('[MAARS]', e)) : undefined),
     };
 })();

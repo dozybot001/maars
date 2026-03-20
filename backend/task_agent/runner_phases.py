@@ -10,6 +10,8 @@ from typing import Any, Dict, Optional, Tuple
 from loguru import logger
 from db import get_execution_task_step_dir
 
+from .task_context import TaskContext
+
 
 def write_text_file(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -185,17 +187,17 @@ async def phase_execute(
                     prompt_payload=prompt_payload,
                 )
 
-            result = await runner._deps.run_task_agent(
+            ctx = TaskContext(
                 task_id=task["task_id"],
                 description=task.get("description") or "",
                 input_spec=input_spec,
                 output_spec=output_spec,
                 resolved_inputs=resolved_inputs,
                 api_config=api_cfg,
-                abort_event=runner.abort_event,
-                on_thinking=on_thinking,
                 idea_id=runner.idea_id or "",
                 plan_id=runner.plan_id or "",
+                abort_event=runner.abort_event,
+                on_thinking=on_thinking,
                 execution_run_id=runner.execution_run_id,
                 docker_container_name=task_container_name,
                 validation_spec=task.get("validation"),
@@ -203,6 +205,7 @@ async def phase_execute(
                 execution_context=execution_context,
                 on_prompt_built=_on_prompt_built,
             )
+            result = await runner._deps.run_task_agent(ctx)
         else:
             result = await runner._deps.execute_task(
                 task_id=task["task_id"],

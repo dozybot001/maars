@@ -24,25 +24,21 @@ from .realtime_emitter import RealtimeEmitter
 
 
 @dataclass
-class PlanRunState:
-    """Plan Agent 运行状态：abort 信号、run_task。供 /api/plan/stop 使用。"""
+class AgentRunState:
+    """Per-agent run state: abort signal, background task, concurrency lock."""
     abort_event: Optional[Any] = None
     run_task: Optional[Any] = None
-    lock: Optional[Any] = None
+    lock: Optional[asyncio.Lock] = None
+
+    def __post_init__(self):
+        if self.lock is None:
+            self.lock = asyncio.Lock()
 
 
-@dataclass
-class IdeaRunState:
-    """Idea Agent 运行状态：run_task、abort_event。供 /api/idea/stop 使用。"""
-    run_task: Optional[Any] = None
-    abort_event: Optional[Any] = None
-
-
-@dataclass
-class PaperRunState:
-    """Paper Agent 运行状态：run_task、abort_event。供 /api/paper/stop 使用。"""
-    run_task: Optional[Any] = None
-    abort_event: Optional[Any] = None
+# Backward-compat aliases
+PlanRunState = AgentRunState
+IdeaRunState = AgentRunState
+PaperRunState = AgentRunState
 
 
 @dataclass
@@ -60,7 +56,7 @@ class SessionState:
 _sio_raw: Any = None
 sio: Any = None
 sessions: Dict[str, SessionState] = {}
-_sessions_lock: Optional[asyncio.Lock] = None
+_sessions_lock: asyncio.Lock = asyncio.Lock()
 _socket_session_map: Dict[str, str] = {}
 _sse_subscribers: Dict[str, Set[asyncio.Queue]] = {}
 SESSION_IDLE_TTL_SECONDS = int(os.getenv("MAARS_SESSION_IDLE_TTL_SECONDS", "7200"))
@@ -71,13 +67,11 @@ _last_session_sweep_ts = 0.0
 def init_api_state(
     sio_instance,
 ):
-    global sio, _sio_raw, _sessions_lock
+    global sio, _sio_raw
     _sio_raw = sio_instance
     # Expose a proxy emitter so internal components that call api_state.sio.emit
     # automatically publish to SSE as well.
     sio = RealtimeEmitter(sio_instance, _publish_sse) if sio_instance is not None else None
-    if _sessions_lock is None:
-        _sessions_lock = asyncio.Lock()
 
 
 def _get_sse_subscribers(session_id: str) -> Set[asyncio.Queue]:
@@ -171,9 +165,7 @@ async def _cleanup_stale_sessions_locked(now_ts: float) -> None:
 
 async def cleanup_stale_sessions(force: bool = False) -> None:
     """Sweep stale session states that are idle and unbound."""
-    global _sessions_lock, _last_session_sweep_ts
-    if _sessions_lock is None:
-        _sessions_lock = asyncio.Lock()
+    global _last_session_sweep_ts
     now_ts = time.time()
     if (not force) and (now_ts - _last_session_sweep_ts < _session_sweep_interval_seconds):
         return
@@ -187,9 +179,7 @@ async def cleanup_stale_sessions(force: bool = False) -> None:
 
 async def get_or_create_session_state(session_id: str) -> SessionState:
     """Get session state, creating isolated runner and run states if absent."""
-    global _sessions_lock, _last_session_sweep_ts
-    if _sessions_lock is None:
-        _sessions_lock = asyncio.Lock()
+    global _last_session_sweep_ts
     normalized = normalize_session_id(session_id)
     async with _sessions_lock:
         existing = sessions.get(normalized)
@@ -203,9 +193,9 @@ async def get_or_create_session_state(session_id: str) -> SessionState:
 
         from task_agent import ExecutionRunner
 
-        plan_state = PlanRunState(lock=asyncio.Lock())
-        idea_state = IdeaRunState()
-        paper_state = PaperRunState()
+        plan_state = AgentRunState()
+        idea_state = AgentRunState()
+        paper_state = AgentRunState()
         runner = ExecutionRunner(sio, session_id=normalized)
         created = SessionState(
             session_id=normalized,
@@ -232,12 +222,9 @@ def bind_socket_to_session(socket_id: str, session_id: str) -> str:
 
 async def unbind_socket(socket_id: str) -> None:
     """Unbind disconnected socket and cleanup idle session state when safe."""
-    global _sessions_lock
     session_id = _socket_session_map.pop(socket_id, None)
     if not session_id:
         return
-    if _sessions_lock is None:
-        _sessions_lock = asyncio.Lock()
     async with _sessions_lock:
         if any(v == session_id for v in _socket_session_map.values()):
             return
