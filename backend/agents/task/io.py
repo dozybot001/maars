@@ -14,7 +14,7 @@ from db import (
     get_task_artifact,
 )
 
-from .docker_runtime import run_command_in_container
+from agents.task.docker import run_command_in_container
 
 
 def get_plan_dir_path(idea_id: str, plan_id: str) -> Path:

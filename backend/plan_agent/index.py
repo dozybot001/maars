@@ -14,7 +14,6 @@ from shared.graph import get_ancestor_path, get_parent_id
 from shared.task_title import ensure_task_titles
 from shared.utils import OnThinking
 
-from .agent import run_plan_agent
 from .agent_tools import _find_task_idx
 from .execution_builder import _is_atomic as _task_has_io
 from llm.plan import assess_quality, check_atomicity, decompose_task, format_task, raise_if_aborted
@@ -49,7 +48,6 @@ async def _complete_existing_tree_recursive(
     abort_event: Optional[Any],
     on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]] = None,
     idea: Optional[str] = None,
-    use_mock: bool = False,
     api_config: Optional[Dict] = None,
     idea_id: Optional[str] = None,
     plan_id: Optional[str] = None,
@@ -69,7 +67,6 @@ async def _complete_existing_tree_recursive(
                 abort_event,
                 on_tasks_batch,
                 idea,
-                use_mock,
                 api_config,
                 idea_id,
                 plan_id,
@@ -90,9 +87,9 @@ async def _complete_existing_tree_recursive(
         "idea": idea or "",
         "siblings": siblings,
     }
-    verdict = await check_atomicity(task, on_thinking, abort_event, atomicity_context, use_mock, api_config, idea_id, plan_id)
+    verdict = await check_atomicity(task, on_thinking, abort_event, atomicity_context, api_config, idea_id, plan_id)
     if verdict.get("atomic"):
-        io_result = await format_task(task, on_thinking, abort_event, use_mock, api_config, idea_id, plan_id)
+        io_result = await format_task(task, on_thinking, abort_event, api_config, idea_id, plan_id)
         if not io_result:
             raise ValueError(f"Format failed for atomic task {tid}: missing input/output")
         idx = _find_task_idx(all_tasks, tid)
@@ -100,7 +97,7 @@ async def _complete_existing_tree_recursive(
             all_tasks[idx] = {**all_tasks[idx], **io_result}
         return
 
-    new_children = await decompose_task(task, on_thinking, abort_event, all_tasks, idea, depth, use_mock, api_config, idea_id, plan_id)
+    new_children = await decompose_task(task, on_thinking, abort_event, all_tasks, idea, depth, api_config, idea_id, plan_id)
     if not new_children:
         raise ValueError(f"Decompose returned no children for task {tid}")
 
@@ -124,7 +121,6 @@ async def _complete_existing_tree_recursive(
             abort_event,
             on_tasks_batch,
             idea,
-            use_mock,
             api_config,
             idea_id,
             plan_id,
@@ -139,7 +135,6 @@ async def _complete_existing_plan_tree(
     abort_event: Optional[Any],
     on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]] = None,
     idea: Optional[str] = None,
-    use_mock: bool = False,
     api_config: Optional[Dict] = None,
     idea_id: Optional[str] = None,
     plan_id: Optional[str] = None,
@@ -153,7 +148,6 @@ async def _complete_existing_plan_tree(
         abort_event,
         on_tasks_batch,
         idea,
-        use_mock,
         api_config,
         idea_id,
         plan_id,
@@ -170,7 +164,6 @@ async def _atomicity_and_decompose_recursive(
     abort_event: Optional[Any],
     on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]] = None,
     idea: Optional[str] = None,
-    use_mock: bool = False,
     api_config: Optional[Dict] = None,
     idea_id: Optional[str] = None,
     plan_id: Optional[str] = None,
@@ -186,11 +179,11 @@ async def _atomicity_and_decompose_recursive(
         "idea": idea or "",
         "siblings": siblings,
     }
-    v = await check_atomicity(task, on_thinking, abort_event, atomicity_context, use_mock, api_config, idea_id, plan_id)
+    v = await check_atomicity(task, on_thinking, abort_event, atomicity_context, api_config, idea_id, plan_id)
     atomic = v["atomic"]
 
     if atomic:
-        io_result = await format_task(task, on_thinking, abort_event, use_mock, api_config, idea_id, plan_id)
+        io_result = await format_task(task, on_thinking, abort_event, api_config, idea_id, plan_id)
         if not io_result:
             raise ValueError(f"Format failed for atomic task {task['task_id']}: missing input/output")
         idx = _find_task_idx(all_tasks, task["task_id"])
@@ -198,7 +191,7 @@ async def _atomicity_and_decompose_recursive(
             all_tasks[idx] = {**all_tasks[idx], **io_result}
         return
 
-    children = await decompose_task(task, on_thinking, abort_event, all_tasks, idea, depth, use_mock, api_config, idea_id, plan_id)
+    children = await decompose_task(task, on_thinking, abort_event, all_tasks, idea, depth, api_config, idea_id, plan_id)
     if not children:
         raise ValueError(f"Decompose returned no children for task {task['task_id']}")
 
@@ -212,25 +205,24 @@ async def _atomicity_and_decompose_recursive(
     await asyncio.gather(*[
         _atomicity_and_decompose_recursive(
             child, all_tasks, on_task, on_thinking, depth + 1, check_aborted, abort_event, on_tasks_batch,
-            idea, use_mock, api_config, idea_id, plan_id,
+            idea, api_config, idea_id, plan_id,
         )
         for child in children
     ])
 
 
-async def run_plan(
+async def run_plan_llm(
     plan: Dict,
-    on_task: Optional[Callable[[Dict], None]],
-    on_thinking: OnThinking,
+    on_task: Optional[Callable[[Dict], None]] = None,
+    on_thinking: OnThinking = None,
     abort_event: Optional[Any] = None,
     on_tasks_batch: Optional[Callable[[List[Dict], Dict, List[Dict]], None]] = None,
-    use_mock: bool = False,
     api_config: Optional[Dict] = None,
     skip_quality_assessment: bool = False,
     idea_id: Optional[str] = None,
     plan_id: Optional[str] = None,
 ) -> Dict:
-    """Run atomicity->decompose->format from root task, top-down to all atomic tasks. When planAgentMode=True, uses Plan Agent loop instead."""
+    """LLM mode: recursive atomicity->decompose->format for all tasks."""
 
     def check_aborted() -> bool:
         return abort_event is not None and abort_event.is_set()
@@ -250,46 +242,15 @@ async def run_plan(
     on_thinking_fn = on_thinking or (lambda *a, **_: None)
     idea = plan.get("idea") or root_task.get("description") or ""
 
-    if api_config and api_config.get("planAgentMode"):
-        result = await run_plan_agent(
-            plan, on_thinking_fn, abort_event, on_tasks_batch,
-            api_config=api_config, idea_id=idea_id, plan_id=plan_id,
-        )
-        all_tasks = result.get("tasks", all_tasks)
-        pending_queue = result.get("pending_queue") or []
-        finished = bool(result.get("finished"))
-        if pending_queue or not finished or _plan_has_unformatted_leaves(all_tasks):
-            logger.warning(
-                "Plan agent produced incomplete plan; running llm-style completion repair plan_id={} finished={} pending={} tasks={}",
-                plan_id,
-                finished,
-                len(pending_queue),
-                len(all_tasks),
-            )
-            await _complete_existing_plan_tree(
-                root_task,
-                all_tasks,
-                on_thinking_fn,
-                check_aborted,
-                abort_event,
-                on_tasks_batch,
-                idea=idea,
-                use_mock=use_mock,
-                api_config=api_config,
-                idea_id=idea_id,
-                plan_id=plan_id,
-            )
-        plan["tasks"] = all_tasks
-    else:
-        await _atomicity_and_decompose_recursive(
-            root_task, all_tasks, on_task, on_thinking_fn, 0, check_aborted, abort_event, on_tasks_batch,
-            idea=idea, use_mock=use_mock, api_config=api_config, idea_id=idea_id, plan_id=plan_id,
-        )
-        plan["tasks"] = all_tasks
+    await _atomicity_and_decompose_recursive(
+        root_task, all_tasks, on_task, on_thinking_fn, 0, check_aborted, abort_event, on_tasks_batch,
+        idea=idea, api_config=api_config, idea_id=idea_id, plan_id=plan_id,
+    )
+    plan["tasks"] = all_tasks
     ensure_task_titles(all_tasks)
     if not skip_quality_assessment:
         raise_if_aborted(abort_event)
-        quality = await assess_quality(plan, on_thinking_fn, abort_event, use_mock, api_config)
+        quality = await assess_quality(plan, on_thinking_fn, abort_event, api_config)
         plan["qualityScore"] = quality.get("score", 0)
         plan["qualityComment"] = quality.get("comment", "")
     else:

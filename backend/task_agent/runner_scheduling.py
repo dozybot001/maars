@@ -298,6 +298,6 @@ async def stop_async(runner) -> None:
     runner.task_tasks.clear()
     runner.running_tasks.clear()
     await runner._stop_all_task_containers()
-    runner.docker_runtime_status = await runner._deps.get_local_docker_status(enabled=bool((runner.api_config or {}).get("taskAgentMode")))
+    runner.docker_runtime_status = await runner._deps.get_local_docker_status(enabled=False)
     runner._emit_runtime_status()
     runner._broadcast_worker_states()

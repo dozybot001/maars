@@ -342,15 +342,7 @@ class ExecutionRunner:
             self._deps.initialize_workers(max_conc)
             self._broadcast_worker_states()
 
-            api_cfg = self.api_config or {}
-            docker_enabled = bool(api_cfg.get("taskAgentMode"))
-            if docker_enabled:
-                self.docker_runtime_status = await self._deps.prepare_execution_runtime(
-                    enabled=True,
-                    image=api_cfg.get("taskDockerImage"),
-                )
-            else:
-                self.docker_runtime_status = await self._deps.get_local_docker_status(enabled=False)
+            self.docker_runtime_status = await self._deps.get_local_docker_status(enabled=False)
             self._emit_runtime_status()
 
             execution_layout = self.execution_layout
@@ -408,7 +400,7 @@ class ExecutionRunner:
         finally:
             self.is_running = False
             await self._stop_all_task_containers()
-            self.docker_runtime_status = await self._deps.get_local_docker_status(enabled=bool((self.api_config or {}).get("taskAgentMode")))
+            self.docker_runtime_status = await self._deps.get_local_docker_status(enabled=False)
             self._emit_runtime_status()
             self._deps.initialize_workers()
             self._broadcast_worker_states()

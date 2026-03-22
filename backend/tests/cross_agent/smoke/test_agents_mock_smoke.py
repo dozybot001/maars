@@ -91,10 +91,10 @@ async def test_task_agent_llm_mock_execute_json():
 
 @pytest.mark.asyncio
 async def test_paper_agent_mock_run():
-    from paper_agent.runner import run_paper_agent
+    from paper_agent.runner import run_paper
 
     api_config = {"paperUseMock": True}
-    paper = await run_paper_agent(
+    paper = await run_paper(
         plan={"idea": "A test idea", "tasks": []},
         outputs={"1": "Example output"},
         api_config=api_config,

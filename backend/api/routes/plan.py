@@ -17,7 +17,7 @@ from db import (
 from shared.utils import get_idea_text
 from shared.task_title import derive_task_title, ensure_task_titles
 from visualization import build_layout_from_execution, compute_decomposition_layout
-from plan_agent.index import run_plan
+from mode import run_plan
 from shared.realtime import build_thinking_emitter
 
 from ..schemas import PlanLayoutRequest, PlanRunRequest
@@ -92,7 +92,6 @@ async def _run_plan_inner(body: PlanRunRequest, idea_id: str, plan_id: str, sess
         raise ValueError("Refine result is empty. Planning is blocked until Refine produces a non-empty refined idea.")
 
     config = await get_effective_config()
-    use_mock = config.get("planUseMock", True)
 
     plan = {
         "tasks": [{"task_id": "0", "title": derive_task_title(idea) or "Research Goal", "description": idea, "dependencies": []}],
@@ -125,7 +124,7 @@ async def _run_plan_inner(body: PlanRunRequest, idea_id: str, plan_id: str, sess
 
         result = await run_plan(
             plan, None, on_thinking, abort_event, on_tasks_batch,
-            use_mock=use_mock, api_config=config,
+            api_config=config,
             skip_quality_assessment=body.skip_quality_assessment,
             idea_id=idea_id, plan_id=plan_id,
         )

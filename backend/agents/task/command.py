@@ -1,6 +1,6 @@
 """Shell command tool execution helper for Task Agent tools."""
 
-from .docker_runtime import run_command_in_container
+from agents.task.docker import run_command_in_container
 
 
 async def run_run_command(

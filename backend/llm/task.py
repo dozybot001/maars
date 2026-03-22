@@ -1,6 +1,5 @@
 """
 Task Agent 单轮 LLM 实现 - 任务执行与验证。
-Mock 模式依赖 test/mock-ai/execute.json，通过 llm_call / llm_call_structured 的 mock 参数注入。
 Validation: LLM-based validation. Used in LLM mode only.
 Agent mode uses task-output-validator skill instead.
 Supports streaming via on_chunk for real-time Thinking display.
@@ -16,10 +15,7 @@ import orjson
 
 from llm.client import llm_call, llm_call_structured, load_prompt
 from shared.constants import MAX_FORMAT_REPAIR_ATTEMPTS, TEMP_DETERMINISTIC, TEMP_RETRY, TEMP_TASK_EXECUTE
-from mock import load_mock
 from shared.utils import extract_codeblock
-
-RESPONSE_TYPE = "execute"
 
 
 def _get_output_type(output_spec: Dict[str, Any]) -> str:
@@ -118,12 +114,6 @@ async def execute_task(
     raw_cfg = api_config or {}
     output_type = _get_output_type(output_spec)
 
-    mock = None
-    if raw_cfg.get("taskUseMock", True):
-        entry = load_mock(RESPONSE_TYPE, task_id, extra_fallback_key="_default_markdown" if output_type != "json" else "")
-        if not entry:
-            raise ValueError(f"No mock data for {RESPONSE_TYPE}/{task_id}")
-        mock = entry["content"]
     system_prompt, user_prompt = _build_task_agent_messages(
         task_id, description, input_spec, output_spec, resolved_inputs, idea_context
     )
@@ -143,7 +133,6 @@ async def execute_task(
             temperatures=temperatures,
             on_chunk=_on_chunk if stream else None,
             abort_event=abort_event,
-            mock=mock,
         )
         return parsed
 
@@ -154,7 +143,6 @@ async def execute_task(
         temperature=TEMP_TASK_EXECUTE,
         on_chunk=_on_chunk if stream else None,
         abort_event=abort_event,
-        mock=mock,
     )
     return _parse_task_agent_output(content, "markdown")
 
@@ -305,52 +293,6 @@ async def _run_validation_llm(
     except Exception as e:
         report = f"# Validating Task {task_id}\n\n**Result: FAIL**\n\n{label} error: {e}"
         return False, report
-
-
-async def validate_task_output_with_llm(
-    result: Any,
-    output_spec: Dict[str, Any],
-    task_id: str,
-    validation_spec: Optional[Dict[str, Any]] = None,
-    api_config: Optional[Dict] = None,
-    abort_event: Optional[Any] = None,
-    on_thinking: Optional[Callable[[str, Optional[str], Optional[str], Optional[dict]], None]] = None,
-) -> Tuple[bool, str]:
-    """
-    Use LLM to validate task output against criteria.
-    Returns (passed, report_markdown).
-    Called only in LLM mode; Agent mode uses task-output-validator skill.
-    """
-    content = _get_content_str(result)
-    validation = validation_spec or {}
-    criteria = validation.get("criteria") or []
-    output_format = (output_spec or {}).get("format") or ""
-
-    system_prompt = load_prompt("task-validate.txt")
-
-    criteria_text = "\n".join(f"- {c}" for c in criteria) if criteria else "Output should be complete and align with the task description."
-    user_message = f"""Task ID: {task_id}
-Output format expected: {output_format}
-
-Validation criteria:
-{criteria_text}
-
-Task output to validate:
-```
-{content[:8000]}
-```
-
-Output your reasoning first, then the JSON block."""
-
-    return await _run_validation_llm(
-        system_prompt=system_prompt,
-        user_message=user_message,
-        task_id=task_id,
-        label="LLM validation",
-        api_config=api_config,
-        abort_event=abort_event,
-        on_thinking=on_thinking,
-    )
 
 
 async def validate_task_output_with_readonly_agent(

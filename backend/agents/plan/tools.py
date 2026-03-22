@@ -1,6 +1,6 @@
 """
-Agent tools for Plan Agent: AddTasks, UpdateTask, GetPlan, GetNextTask, FinishPlan, ListSkills, LoadSkill, ReadSkillFile.
-Flat dict format. Used when planAgentMode=True.
+Tool schema definitions and execution logic for the Plan Agent.
+Extracted from plan_agent/agent_tools.py.
 """
 
 import json
@@ -12,16 +12,26 @@ import orjson
 
 from shared.graph import get_ancestor_path, get_parent_id
 from shared.task_title import ensure_task_title
-from shared.skill_utils import list_skills as _list_skills, load_skill as _load_skill, read_skill_file as _read_skill_file
+from agents.skill_utils import (
+    list_skills as _list_skills,
+    load_skill as _load_skill,
+    read_skill_file as _read_skill_file,
+)
 
-# Plan skills root: MAARS_PLAN_SKILLS_DIR env or backend/plan_agent/skills/
+# ---------------------------------------------------------------------------
+# Skills root
+# ---------------------------------------------------------------------------
+
 _PLAN_SKILLS_DIR = os.environ.get("MAARS_PLAN_SKILLS_DIR")
 PLAN_SKILLS_ROOT = (
     Path(_PLAN_SKILLS_DIR).resolve()
     if _PLAN_SKILLS_DIR
-    else Path(__file__).resolve().parent / "skills"
+    else Path(__file__).resolve().parent.parent / "skills"
 )
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def _find_task_idx(all_tasks: List[Dict], task_id: str) -> int:
     """Return index of task in all_tasks, or -1 if not found."""
@@ -43,6 +53,10 @@ def _plan_agent_read_skill_file(skill: str, path: str) -> str:
     return _read_skill_file(PLAN_SKILLS_ROOT, skill, path)
 
 
+# ---------------------------------------------------------------------------
+# Tool schemas
+# ---------------------------------------------------------------------------
+
 PLAN_AGENT_TOOLS = [
     {
         "name": "AddTasks",
@@ -58,7 +72,7 @@ PLAN_AGENT_TOOLS = [
                         "type": "object",
                         "properties": {
                             "task_id": {"type": "string"},
-                            "title": {"type": "string", "description": "2-4 word title capturing the task's core logic (e.g. 'Data Collection', 'Model Training', '定义范围')"},
+                            "title": {"type": "string", "description": "2-4 word title capturing the task's core logic (e.g. 'Data Collection', 'Model Training')"},
                             "description": {"type": "string"},
                             "dependencies": {"type": "array", "items": {"type": "string"}},
                         },
@@ -129,6 +143,10 @@ PLAN_AGENT_TOOLS = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Tool executor
+# ---------------------------------------------------------------------------
+
 async def execute_plan_agent_tool(
     name: str,
     arguments: str,
@@ -177,7 +195,7 @@ async def execute_plan_agent_tool(
         for t in all_tasks:
             tid = t.get("task_id", "")
             desc = (t.get("description", "") or "")[:60]
-            has_io = "✓" if (t.get("input") and t.get("output")) else ""
+            has_io = "+" if (t.get("input") and t.get("output")) else ""
             summary.append({"task_id": tid, "description": desc, "has_io": bool(has_io)})
         return False, orjson.dumps({
             "idea": idea,
@@ -193,7 +211,7 @@ async def execute_plan_agent_tool(
             return False, 'Error: parent_id and non-empty tasks array required'
         for t in tasks:
             if not isinstance(t, dict) or not t.get("task_id") or not t.get("description"):
-                return False, f'Error: each task must have task_id and description'
+                return False, 'Error: each task must have task_id and description'
             deps = t.get("dependencies")
             if not isinstance(deps, list):
                 t["dependencies"] = []

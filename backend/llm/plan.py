@@ -22,7 +22,6 @@ from shared.constants import (
     TEMP_STRUCTURED,
 )
 from shared.graph import build_dependency_graph, get_ancestor_path, get_parent_id
-from mock import load_mock
 from shared.utils import parse_json_response
 
 # ---------------------------------------------------------------------------
@@ -199,7 +198,6 @@ async def check_atomicity(
     on_thinking: Callable[[str], None],
     abort_event: Optional[Any],
     atomicity_context: Optional[Dict] = None,
-    use_mock: bool = False,
     api_config: Optional[Dict] = None,
     idea_id: Optional[str] = None,
     plan_id: Optional[str] = None,
@@ -217,13 +215,6 @@ async def check_atomicity(
             return False, "Atomicity response invalid: missing or invalid atomic field"
         return True, ""
 
-    mock = None
-    if use_mock:
-        entry = load_mock("atomicity", task["task_id"])
-        if not entry:
-            raise ValueError(f"No mock data for atomicity/{task['task_id']}")
-        mock = entry["content"]
-
     task_id = ctx["taskId"]
     op_label = _OP_LABELS.get("atomicity", "Atomicity")
     on_chunk = _make_on_chunk(on_thinking, task_id, op_label) if on_thinking else None
@@ -237,7 +228,6 @@ async def check_atomicity(
             temperatures=[TEMP_DETERMINISTIC] + [TEMP_RETRY] * PLAN_MAX_VALIDATION_RETRIES,
             on_chunk=on_chunk,
             abort_event=abort_event,
-            mock=mock,
         )
 
     out = {"atomic": bool(result.get("atomic"))}
@@ -256,7 +246,6 @@ async def decompose_task(
     all_tasks: List[Dict],
     idea: Optional[str] = None,
     depth: int = 0,
-    use_mock: bool = False,
     api_config: Optional[Dict] = None,
     idea_id: Optional[str] = None,
     plan_id: Optional[str] = None,
@@ -279,13 +268,6 @@ async def decompose_task(
         ok, err_msg = _validate_decompose_response(parsed, pid)
         return ok, err_msg or "Decompose validation failed"
 
-    mock = None
-    if use_mock:
-        entry = load_mock("decompose", pid)
-        if not entry:
-            raise ValueError(f"No mock data for decompose/{pid}")
-        mock = entry["content"]
-
     task_id = ctx["taskId"]
     op_label = _OP_LABELS.get("decompose", "Decompose")
     on_chunk = _make_on_chunk(on_thinking, task_id, op_label) if on_thinking else None
@@ -299,7 +281,6 @@ async def decompose_task(
             temperatures=[TEMP_AGENT_LOOP] + [TEMP_RETRY] * PLAN_MAX_VALIDATION_RETRIES,
             on_chunk=on_chunk,
             abort_event=abort_event,
-            mock=mock,
         )
 
     tasks = result.get("tasks") or []
@@ -320,7 +301,6 @@ async def format_task(
     task: Dict,
     on_thinking: Callable[[str], None],
     abort_event: Optional[Any],
-    use_mock: bool = False,
     api_config: Optional[Dict] = None,
     idea_id: Optional[str] = None,
     plan_id: Optional[str] = None,
@@ -337,13 +317,6 @@ async def format_task(
             return False, "FormatTask returned no input/output"
         return True, ""
 
-    mock = None
-    if use_mock:
-        entry = load_mock("format", task.get("task_id", ""))
-        if not entry:
-            raise ValueError(f"No mock data for format/{task.get('task_id', '')}")
-        mock = entry["content"]
-
     task_id = ctx["taskId"]
     op_label = _OP_LABELS.get("format", "Format")
     on_chunk = _make_on_chunk(on_thinking, task_id, op_label) if on_thinking else None
@@ -357,7 +330,6 @@ async def format_task(
             temperatures=temps,
             on_chunk=on_chunk,
             abort_event=abort_event,
-            mock=mock,
         )
 
     validation = result.get("validation") if isinstance(result.get("validation"), dict) else None
@@ -378,7 +350,6 @@ async def assess_quality(
     plan: Dict,
     on_thinking: Callable[[str], None],
     abort_event: Optional[Any],
-    use_mock: bool = False,
     api_config: Optional[Dict] = None,
 ) -> Dict[str, Any]:
     """Assess plan quality. Plan Agent LLM single-turn. Returns {score, comment}."""
@@ -409,13 +380,6 @@ async def assess_quality(
                 return False, "Quality response missing score"
             return True, ""
 
-        mock = None
-        if use_mock:
-            entry = load_mock("quality", "_")
-            if not entry:
-                raise ValueError("No mock data for quality/_")
-            mock = entry["content"]
-
         task_id = ctx["taskId"]
         op_label = _OP_LABELS.get("quality", "Quality")
         on_chunk = _make_on_chunk(on_thinking, task_id, op_label) if on_thinking else None
@@ -429,7 +393,6 @@ async def assess_quality(
                 temperatures=[TEMP_STRUCTURED] + [TEMP_RETRY] * PLAN_MAX_VALIDATION_RETRIES,
                 on_chunk=on_chunk,
                 abort_event=abort_event,
-                mock=mock,
             )
 
         score = result.get("score")
@@ -441,3 +404,10 @@ async def assess_quality(
         return {"score": score, "comment": str(comment)}
     except Exception:
         return {"score": 0, "comment": "Assessment skipped"}
+
+
+# ── Full orchestration ───────────────────────────────────────────────
+# Recursive decompose logic lives in plan_agent/index.py.
+# Re-export so mode.py can import from llm.plan.
+
+from plan_agent.index import run_plan_llm  # noqa: E402, F401

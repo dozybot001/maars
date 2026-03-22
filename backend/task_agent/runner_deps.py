@@ -68,7 +68,23 @@ def build_default_deps() -> RunnerDeps:
     from shared.utils import chunk_string
     from validate_agent import review_contract_adjustment
 
-    from .agent import run_task_agent
+    from mode import run_task
+    from .task_context import TaskContext
+
+    async def run_task_via_ctx(ctx: TaskContext):
+        return await run_task(
+            task_id=ctx.task_id, description=ctx.description,
+            input_spec=ctx.input_spec, output_spec=ctx.output_spec,
+            resolved_inputs=ctx.resolved_inputs, api_config=ctx.api_config,
+            abort_event=ctx.abort_event, on_thinking=ctx.on_thinking,
+            idea_id=ctx.idea_id, plan_id=ctx.plan_id,
+            execution_run_id=ctx.execution_run_id,
+            docker_container_name=ctx.docker_container_name,
+            validation_spec=ctx.validation_spec,
+            idea_context=ctx.idea_context,
+            execution_context=ctx.execution_context,
+            on_prompt_built=ctx.on_prompt_built,
+        )
     from .agent_tools import SKILLS_ROOT
     from .artifact_resolver import resolve_artifacts
     from .docker_runtime import (
@@ -77,7 +93,6 @@ def build_default_deps() -> RunnerDeps:
         prepare_execution_runtime,
         stop_execution_container,
     )
-    from llm.task import execute_task
     from llm.task import validate_task_output_with_readonly_agent
     from .pools import worker_manager
 
@@ -99,8 +114,8 @@ def build_default_deps() -> RunnerDeps:
         initialize_workers=worker_manager["initialize_workers"],
         get_worker_stats=worker_manager.get("get_worker_stats"),
         resolve_artifacts=resolve_artifacts,
-        run_task_agent=run_task_agent,
-        execute_task=execute_task,
+        run_task_agent=run_task_via_ctx,
+        execute_task=run_task_via_ctx,
         ensure_execution_container=ensure_execution_container,
         stop_execution_container=stop_execution_container,
         prepare_execution_runtime=prepare_execution_runtime,

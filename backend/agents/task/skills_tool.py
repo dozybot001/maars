@@ -4,14 +4,14 @@ import asyncio
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from shared.skill_utils import (
+from agents.skill_utils import (
     list_skills as _list_skills,
     load_skill as _load_skill,
     read_skill_file as _read_skill_file,
 )
 
-from .docker_runtime import run_skill_script_in_container
-from .agent_tool_io import get_task_root_dir
+from agents.task.docker import run_skill_script_in_container
+from agents.task.io import get_task_root_dir
 
 
 def run_list_skills(skills_root: Path) -> str:

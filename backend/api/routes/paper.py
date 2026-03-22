@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 
 from db import get_effective_config, get_plan, list_plan_outputs, save_paper
-from paper_agent import run_paper_agent
+from mode import run_paper
 from shared.realtime import build_thinking_emitter
 
 from .. import state as api_state
@@ -35,7 +35,7 @@ async def _run_paper_inner(session_id: str, state, idea_id: str, plan_id: str, f
     outputs = await list_plan_outputs(idea_id, plan_id)
 
     async def _run_agent(abort_event):
-        content = await run_paper_agent(
+        content = await run_paper(
             plan=plan, outputs=outputs, api_config=config,
             format_type=format_type, on_thinking=on_thinking, abort_event=abort_event,
         )

@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from db import get_effective_config, get_execution, get_plan, save_execution
 from task_agent.pools import get_stats
 from plan_agent.execution_builder import build_execution_from_plan
-from task_agent.docker_runtime import get_local_docker_status
+from agents.task.docker import get_local_docker_status
 
 from .. import state as api_state
 from ..schemas import ExecutionRequest, ExecutionRetryRequest, ExecutionRunRequest
@@ -84,7 +84,7 @@ async def get_execution_runtime_status(request: Request, idea_id: str | None = Q
     """Return local Docker connectivity and current execution runtime status for the session."""
     _, session = await api_state.require_session(request)
     runner = session.runner
-    enabled = bool((runner.api_config or {}).get("taskAgentMode"))
+    enabled = (runner.api_config or {}).get("mode") == "agent"
     status = await get_local_docker_status(enabled=enabled, container_name=runner.docker_container_name or None)
     runner_runtime = runner.docker_runtime_status if isinstance(getattr(runner, "docker_runtime_status", None), dict) else {}
     for key in ("image", "taskId", "srcDir", "stepDir", "sandboxRoot", "error"):

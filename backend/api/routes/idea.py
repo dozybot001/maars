@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 
 from db import get_effective_config, get_idea, save_idea
-from idea_agent import collect_literature, run_idea_agent
+from mode import run_idea
 from shared.realtime import build_thinking_emitter
 
 from .. import state as api_state
@@ -30,7 +30,7 @@ async def _run_collect_inner(session_id: str, state, idea_id: str, idea: str, li
     logger.info(
         "Idea run start session_id={} idea_id={} chars={} limit={} mode={}",
         session_id, idea_id, len((idea or "").strip()), limit,
-        "agent" if config.get("ideaAgentMode") else ("mock" if config.get("ideaUseMock") else "llm"),
+        config.get("mode", "mock"),
     )
     on_thinking = build_thinking_emitter(
         api_state.sio, event_name="idea-thinking", source="idea",
@@ -38,11 +38,7 @@ async def _run_collect_inner(session_id: str, state, idea_id: str, idea: str, li
     )
 
     async def _run_agent(abort_event):
-        if config.get("ideaAgentMode"):
-            result = await run_idea_agent(idea=idea, api_config=config, limit=limit, on_thinking=on_thinking, abort_event=abort_event)
-        else:
-            result = await collect_literature(idea=idea, api_config=config, limit=limit, on_thinking=on_thinking, abort_event=abort_event)
-        return result
+        return await run_idea(idea=idea, api_config=config, limit=limit, on_thinking=on_thinking, abort_event=abort_event)
 
     async def _on_complete(result):
         idea_data = {

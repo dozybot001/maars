@@ -83,7 +83,7 @@ async def _run_agent_plan_repair(monkeypatch):
     monkeypatch.setattr(plan_index, "check_atomicity", fake_check_atomicity)
     monkeypatch.setattr(plan_index, "format_task", fake_format_task)
 
-    result = await plan_index.run_plan(
+    result = await plan_index.run_plan_llm(
         {"tasks": [{"task_id": "0", "title": "Root", "description": "Root task", "dependencies": []}], "idea": "Root task"},
         on_task=None,
         on_thinking=lambda *args, **kwargs: None,

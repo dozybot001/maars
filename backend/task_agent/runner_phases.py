@@ -157,69 +157,33 @@ async def phase_execute(
 
         api_cfg = runner.api_config or {}
         execution_context = runner._build_task_execution_context(task, resolved_inputs)
-        if api_cfg.get("taskAgentMode"):
-            if not (runner.idea_id and runner.plan_id):
-                raise ValueError("Docker task execution requires idea_id and plan_id")
-            runtime = await runner._deps.ensure_execution_container(
-                execution_run_id=runner.execution_run_id,
-                idea_id=runner.idea_id,
-                plan_id=runner.plan_id,
-                task_id=task["task_id"],
-                skills_dir=runner._deps.SKILLS_ROOT,
-                image=api_cfg.get("taskDockerImage"),
-            )
-            task_container_name = runtime.get("containerName") or ""
-            if task_container_name:
-                runner.task_docker_containers[task["task_id"]] = task_container_name
-            runner.docker_container_name = task_container_name
-            runner.docker_runtime_status = {
-                **runtime,
-                "enabled": True,
-                "executionRunId": runner.execution_run_id,
-                "taskId": task["task_id"],
-            }
-            runner._emit_runtime_status()
 
-            async def _on_prompt_built(prompt_payload: Dict[str, Any]) -> None:
-                await runner._persist_attempt_prompt_snapshot(
-                    task_id=task["task_id"],
-                    attempt=run_attempt,
-                    prompt_payload=prompt_payload,
-                )
+        async def _on_prompt_built(prompt_payload: Dict[str, Any]) -> None:
+            await runner._persist_attempt_prompt_snapshot(
+                task_id=task["task_id"],
+                attempt=run_attempt,
+                prompt_payload=prompt_payload,
+            )
 
-            ctx = TaskContext(
-                task_id=task["task_id"],
-                description=task.get("description") or "",
-                input_spec=input_spec,
-                output_spec=output_spec,
-                resolved_inputs=resolved_inputs,
-                api_config=api_cfg,
-                idea_id=runner.idea_id or "",
-                plan_id=runner.plan_id or "",
-                abort_event=runner.abort_event,
-                on_thinking=on_thinking,
-                execution_run_id=runner.execution_run_id,
-                docker_container_name=task_container_name,
-                validation_spec=task.get("validation"),
-                idea_context=runner._idea_text,
-                execution_context=execution_context,
-                on_prompt_built=_on_prompt_built,
-            )
-            result = await runner._deps.run_task_agent(ctx)
-        else:
-            result = await runner._deps.execute_task(
-                task_id=task["task_id"],
-                description=task.get("description") or "",
-                input_spec=input_spec,
-                output_spec=output_spec,
-                resolved_inputs=resolved_inputs,
-                api_config=api_cfg,
-                abort_event=runner.abort_event,
-                on_thinking=on_thinking,
-                idea_id=runner.idea_id or "",
-                plan_id=runner.plan_id or "",
-                idea_context=runner._idea_text,
-            )
+        ctx = TaskContext(
+            task_id=task["task_id"],
+            description=task.get("description") or "",
+            input_spec=input_spec,
+            output_spec=output_spec,
+            resolved_inputs=resolved_inputs,
+            api_config=api_cfg,
+            idea_id=runner.idea_id or "",
+            plan_id=runner.plan_id or "",
+            abort_event=runner.abort_event,
+            on_thinking=on_thinking,
+            execution_run_id=runner.execution_run_id,
+            docker_container_name="",
+            validation_spec=task.get("validation"),
+            idea_context=runner._idea_text,
+            execution_context=execution_context,
+            on_prompt_built=_on_prompt_built,
+        )
+        result = await runner._deps.run_task_agent(ctx)
         to_save = result if isinstance(result, dict) else {"content": result}
         await runner._deps.save_task_artifact(runner.idea_id or "", runner.plan_id or "", task["task_id"], to_save)
         runner._emit("task-output", {"taskId": task["task_id"], "attempt": run_attempt, "output": result})
@@ -247,7 +211,7 @@ async def phase_validate(
     """Run 3-step validation. Returns (passed, report, step_b_review, validation_summary)."""
     task_id = task["task_id"]
     output_spec = task.get("output") or {}
-    use_mock = (runner.api_config or {}).get("taskUseMock", True)
+    use_mock = (runner.api_config or {}).get("mode", "mock") == "mock"
     original_criteria = runner._get_original_validation_criteria(task)
 
     runner._deps.set_worker_status(task_id, "validating")

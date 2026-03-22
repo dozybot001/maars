@@ -1,7 +1,6 @@
 """
-Idea Agent 单轮 LLM 实现 - 关键词提取 + Refined Idea 生成。
-与 Plan 对齐：Mock 模式依赖 test/mock-ai/refine.json、refine-idea.json。
-Refine 流程：Keywords（关键词提取）→ arXiv 检索 → Refine（基于文献生成可执行 idea）。
+Idea LLM mode — keywords extraction, literature search, idea refinement.
+Full orchestration: Keywords → arXiv/OpenAlex search → Refine.
 """
 
 import json
@@ -11,14 +10,10 @@ from loguru import logger
 
 from shared.constants import TEMP_CREATIVE, TEMP_EXTRACT
 from llm.client import llm_call, llm_call_structured, load_prompt
-from mock import load_mock
 from shared.utils import extract_codeblock
 
 # 与 Plan/Task 统一的 on_thinking 签名：(chunk, task_id, operation, schedule_info)
 OnThinkingCallback = Callable[[str, Optional[str], Optional[str], Optional[dict]], None]
-
-RESPONSE_TYPE_KEYWORDS = "refine"
-RESPONSE_TYPE_REFINE = "refine-idea"
 
 
 # LLM 提示词：用于 arXiv 检索，输出英文关键词
@@ -51,13 +46,6 @@ async def extract_keywords(
     if not idea:
         return []
 
-    mock = None
-    if api_config.get("ideaUseMock", True):
-        entry = load_mock(RESPONSE_TYPE_KEYWORDS)
-        if not entry:
-            raise ValueError(f"No mock data for {RESPONSE_TYPE_KEYWORDS}/_default")
-        mock = entry["content"]
-
     def _stream_cb(chunk: str):
         if on_chunk:
             return on_chunk(chunk, None, "Keywords", None)
@@ -71,7 +59,6 @@ async def extract_keywords(
             temperatures=[TEMP_EXTRACT, TEMP_EXTRACT],
             on_chunk=_stream_cb if on_chunk else None,
             abort_event=abort_event,
-            mock=mock,
         )
         return keywords
     except Exception:
@@ -111,11 +98,6 @@ async def refine_idea_from_papers(
     idea = (idea or "").strip()
     papers = papers or []
 
-    mock = None
-    if api_config.get("ideaUseMock", True):
-        entry = load_mock(RESPONSE_TYPE_REFINE)
-        mock = entry["content"] if entry else None
-
     papers_ctx = _build_papers_context(papers)
     user_content = f"**User's idea:** {idea}\n\n**Retrieved papers:**\n{papers_ctx}\n\n**Output:**"
 
@@ -131,9 +113,39 @@ async def refine_idea_from_papers(
             temperature=TEMP_CREATIVE,
             on_chunk=_stream_cb if on_chunk else None,
             abort_event=abort_event,
-            mock=mock,
         )
         return (response or "").strip()
     except Exception as e:
         logger.warning("Refine idea failed: {}", e)
         return ""
+
+
+# ── Full orchestration ───────────────────────────────────────────────
+
+async def run_idea_llm(
+    idea: str,
+    api_config: dict,
+    limit: int = 10,
+    on_thinking=None,
+    abort_event=None,
+) -> dict:
+    """LLM mode full flow: keywords → search → refine. Returns {keywords, papers, refined_idea}."""
+    from agents.idea.literature import search_literature
+
+    cfg = api_config or {}
+    keywords = await extract_keywords(idea, cfg, on_chunk=on_thinking, abort_event=abort_event)
+    if not keywords:
+        keywords = ["research"]
+
+    query = "+".join(str(k).replace(" ", "+") for k in keywords)[:100] or "research"
+    source, papers = await search_literature(query, limit=limit, cat=None, source=cfg.get("literatureSource"))
+    if not papers:
+        raise ValueError(f"No papers retrieved from {source} for query '{query}'.")
+
+    refined = await refine_idea_from_papers(idea, papers, cfg, on_chunk=on_thinking, abort_event=abort_event)
+    if on_thinking and not (refined or "").strip():
+        refined = await refine_idea_from_papers(idea, papers, cfg, abort_event=abort_event)
+    if not (refined or "").strip():
+        raise ValueError("Refine stage produced empty refined idea.")
+
+    return {"keywords": keywords, "papers": papers, "refined_idea": refined}

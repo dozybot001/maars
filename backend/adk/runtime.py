@@ -15,7 +15,7 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 from loguru import logger
 
-from .constants import ADK_IDLE_TIMEOUT_SECONDS, ADK_TOOL_WAIT_TIMEOUT_SECONDS
+from shared.constants import ADK_IDLE_TIMEOUT_SECONDS, ADK_TOOL_WAIT_TIMEOUT_SECONDS
 
 ToolCallHook = Callable[[str, Dict[str, Any], int], Any]
 ToolResponseHook = Callable[[str, Any, int], Any]

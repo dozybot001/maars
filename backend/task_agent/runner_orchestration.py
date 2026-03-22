@@ -61,7 +61,7 @@ async def run_step_b_contract_review(
         "immutableItems": validation.get("immutableItems") or [],
     }
 
-    if (runner.api_config or {}).get("taskUseMock"):
+    if (runner.api_config or {}).get("mode", "mock") == "mock":
         return {
             "shouldAdjust": False,
             "immutableImpacted": False,

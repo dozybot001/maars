@@ -13,12 +13,12 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from shared.adk_bridge import (
+from adk.bridge import (
     create_executor_tools,
     get_model_for_adk,
     prepare_api_env,
 )
-from shared.adk_runtime import (
+from adk.runtime import (
     build_tool_args_preview,
     parse_function_response_payload,
     run_adk_agent_loop,
