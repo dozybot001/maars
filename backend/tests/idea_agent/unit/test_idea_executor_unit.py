@@ -1,4 +1,4 @@
-from idea_agent.llm import executor as idea_exec
+from llm import idea as idea_exec
 
 
 def test_parse_keywords_response_from_json_block():

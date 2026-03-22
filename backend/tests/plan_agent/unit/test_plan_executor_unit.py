@@ -1,7 +1,7 @@
 import pytest
 import anyio
 
-from plan_agent.llm import executor as plan_exec
+from llm import plan as plan_exec
 from plan_agent import index as plan_index
 
 

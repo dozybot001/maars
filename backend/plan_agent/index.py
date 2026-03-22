@@ -17,7 +17,7 @@ from shared.utils import OnThinking
 from .agent import run_plan_agent
 from .agent_tools import _find_task_idx
 from .execution_builder import _is_atomic as _task_has_io
-from .llm.executor import assess_quality, check_atomicity, decompose_task, format_task, raise_if_aborted
+from llm.plan import assess_quality, check_atomicity, decompose_task, format_task, raise_if_aborted
 
 
 def _get_direct_children(all_tasks: List[Dict], parent_id: str) -> List[Dict]:

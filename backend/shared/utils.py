@@ -40,3 +40,38 @@ def chunk_string(s: str, size: int):
     """Yield string in chunks for simulated streaming."""
     for i in range(0, len(s), size):
         yield s[i : i + size]
+
+
+# ── Paper data helpers ───────────────────────────────────────────────
+
+def truncate_text(value: Any, limit: int = 1200) -> str:
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + "…"
+
+
+def maars_plan_to_paper_format(plan: dict) -> dict:
+    """Convert MAARS plan shape to writing prompt format."""
+    tasks = plan.get("tasks") or []
+    return {
+        "title": plan.get("idea") or "Untitled",
+        "goal": plan.get("idea") or "N/A",
+        "steps": [{"description": t.get("description", "")} for t in tasks],
+    }
+
+
+def build_output_digest(outputs: dict) -> list[dict]:
+    """Build a compact digest of task outputs for paper generation."""
+    import json
+    digest = []
+    for task_id, out in (outputs or {}).items():
+        if isinstance(out, dict):
+            content = out.get("content") or out.get("summary") or json.dumps(out, ensure_ascii=False)
+        else:
+            content = str(out)
+        digest.append({
+            "task_id": task_id,
+            "summary": truncate_text(content, 1000),
+        })
+    return digest[:24]

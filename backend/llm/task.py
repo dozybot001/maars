@@ -1,16 +1,167 @@
 """
-Task output validation - LLM-based validation. Used in LLM mode only.
+Task Agent 单轮 LLM 实现 - 任务执行与验证。
+Mock 模式依赖 test/mock-ai/execute.json，通过 llm_call / llm_call_structured 的 mock 参数注入。
+Validation: LLM-based validation. Used in LLM mode only.
 Agent mode uses task-output-validator skill instead.
 Supports streaming via on_chunk for real-time Thinking display.
 """
 
 import asyncio
 import json
+import re
 from typing import Any, Callable, Dict, Optional, Tuple
 
-from shared.constants import TEMP_DETERMINISTIC
-from shared.llm_client import chat_completion, merge_phase_config
+import json_repair
+import orjson
+
+from llm.client import llm_call, llm_call_structured, load_prompt
+from shared.constants import MAX_FORMAT_REPAIR_ATTEMPTS, TEMP_DETERMINISTIC, TEMP_RETRY, TEMP_TASK_EXECUTE
+from mock import load_mock
 from shared.utils import extract_codeblock
+
+RESPONSE_TYPE = "execute"
+
+
+def _get_output_type(output_spec: Dict[str, Any]) -> str:
+    """Get output type from spec. Returns 'json' or 'markdown'."""
+    return "json" if (output_spec.get("type") or "").strip().lower() == "json" else "markdown"
+
+
+
+def _build_task_agent_messages(
+    task_id: str,
+    description: str,
+    input_spec: Dict[str, Any],
+    output_spec: Dict[str, Any],
+    resolved_inputs: Dict[str, Any],
+    idea_context: str = "",
+) -> tuple[str, str]:
+    """Build system prompt and user prompt for single-turn Task Agent."""
+    output_format = output_spec.get("format") or ""
+    output_desc = output_spec.get("description") or ""
+    output_type = _get_output_type(output_spec)
+    input_desc = input_spec.get("description") or ""
+
+    system_prompt = load_prompt("task-execute.txt")
+
+    if output_type == "json":
+        system_prompt += "\n6. For structured data outputs, return a valid JSON payload; do not return a prose-only summary."
+
+    inputs_str = "No input artifacts."
+    if resolved_inputs:
+        try:
+            inputs_str = orjson.dumps(resolved_inputs, option=orjson.OPT_INDENT_2).decode("utf-8")
+        except (TypeError, ValueError):
+            inputs_str = str(resolved_inputs)
+
+    idea_section = ""
+    if idea_context:
+        idea_section = f"\n**Research idea (project context):** {idea_context}\n"
+
+    user_prompt = f"""**Task ID:** {task_id}
+**Description:** {description}
+{idea_section}
+**Input description:** {input_desc}
+**Input artifacts:**
+```json
+{inputs_str}
+```
+
+**Output description:** {output_desc}
+**Output format:** {output_format}
+
+Produce the output now. You may reason first; then output the result."""
+
+    return system_prompt, user_prompt
+
+
+def _parse_task_agent_output(content: str, output_type: str) -> Any:
+    """Parse Task Agent output. output_type is 'json' or 'markdown'."""
+    content = (content or "").strip()
+    if not content:
+        raise ValueError("LLM returned empty response")
+    if output_type == "json":
+        cleaned = extract_codeblock(content) or content
+        if not cleaned or not cleaned.strip().startswith(("{", "[")):
+            obj_match = re.search(r"[\{\[][\s\S]*[\}\]]", content)
+            if obj_match:
+                cleaned = obj_match.group(0)
+        try:
+            parsed = json_repair.loads(cleaned)
+        except Exception as e:
+            raise ValueError(f"Failed to parse JSON from LLM response: {e}") from e
+        if isinstance(parsed, str):
+            raise ValueError("JSON output must be object/array, not a prose string")
+        return parsed
+    # Markdown: strip reasoning prefix if present
+    if "\n\n" in content and len(content.split("\n\n", 1)[0]) < 300:
+        return content.split("\n\n", 1)[1].strip()
+    return content
+
+
+async def execute_task(
+    task_id: str,
+    description: str,
+    input_spec: Dict[str, Any],
+    output_spec: Dict[str, Any],
+    resolved_inputs: Dict[str, Any],
+    api_config: Optional[Dict[str, Any]] = None,
+    abort_event: Optional[Any] = None,
+    on_thinking: Optional[Callable[[str, Optional[str], Optional[str]], None]] = None,
+    idea_id: Optional[str] = None,
+    plan_id: Optional[str] = None,
+    idea_context: str = "",
+) -> Any:
+    """
+    Execute task via single-turn LLM. Returns parsed output (dict for JSON, str for Markdown).
+    """
+    raw_cfg = api_config or {}
+    output_type = _get_output_type(output_spec)
+
+    mock = None
+    if raw_cfg.get("taskUseMock", True):
+        entry = load_mock(RESPONSE_TYPE, task_id, extra_fallback_key="_default_markdown" if output_type != "json" else "")
+        if not entry:
+            raise ValueError(f"No mock data for {RESPONSE_TYPE}/{task_id}")
+        mock = entry["content"]
+    system_prompt, user_prompt = _build_task_agent_messages(
+        task_id, description, input_spec, output_spec, resolved_inputs, idea_context
+    )
+    stream = on_thinking is not None
+
+    def _on_chunk(chunk: str):
+        if on_thinking and chunk:
+            return on_thinking(chunk, task_id=task_id, operation="Execute")
+
+    if output_type == "json":
+        temperatures = [TEMP_TASK_EXECUTE] + [TEMP_RETRY] * max(0, MAX_FORMAT_REPAIR_ATTEMPTS - 1)
+        parsed, _raw = await llm_call_structured(
+            system=system_prompt,
+            user=user_prompt,
+            api_config=raw_cfg,
+            parse_fn=lambda text: _parse_task_agent_output(text, "json"),
+            temperatures=temperatures,
+            on_chunk=_on_chunk if stream else None,
+            abort_event=abort_event,
+            mock=mock,
+        )
+        return parsed
+
+    content = await llm_call(
+        system=system_prompt,
+        user=user_prompt,
+        api_config=raw_cfg,
+        temperature=TEMP_TASK_EXECUTE,
+        on_chunk=_on_chunk if stream else None,
+        abort_event=abort_event,
+        mock=mock,
+    )
+    return _parse_task_agent_output(content, "markdown")
+
+
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
 
 
 def _get_content_str(result: Any) -> str:
@@ -60,6 +211,8 @@ _CONTRACT_MISMATCH_MARKERS = (
     "received string path",
     "received file path",
 )
+
+
 def classify_validation_failure(report: str, output_format: str = "") -> dict:
     """Best-effort local classification for retry policy decisions."""
     text = f"{output_format}\n{report or ''}".lower()
@@ -107,6 +260,17 @@ def classify_validation_failure(report: str, output_format: str = "") -> dict:
     if any(marker in text for marker in evidence_markers):
         return {"category": "evidence_missing", "retryable": True}
     return {"category": "semantic", "retryable": True}
+
+
+def _parse_validation_response(text: str) -> dict:
+    """Parse validation JSON from LLM response. Raises on failure to trigger retry."""
+    cleaned = extract_codeblock(text) or (text or "").strip()
+    parsed = json.loads(cleaned)
+    if not isinstance(parsed, dict) or "passed" not in parsed:
+        raise ValueError("Validation response must be a JSON object with 'passed' field")
+    return parsed
+
+
 async def _run_validation_llm(
     *,
     system_prompt: str,
@@ -126,25 +290,15 @@ async def _run_validation_llm(
                 return r
 
     try:
-        cfg = merge_phase_config(api_config or {}, "validate")
-        stream = on_thinking is not None
-        response = await chat_completion(
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            cfg,
-            on_chunk=_stream_chunk if stream else None,
+        parsed, _raw = await llm_call_structured(
+            system=system_prompt,
+            user=user_message,
+            api_config=api_config or {},
+            parse_fn=_parse_validation_response,
+            temperatures=[TEMP_DETERMINISTIC, TEMP_DETERMINISTIC],
+            on_chunk=_stream_chunk if on_thinking else None,
             abort_event=abort_event,
-            stream=stream,
-            temperature=TEMP_DETERMINISTIC,
         )
-        text = response if isinstance(response, str) else (response.get("content") or "")
-        cleaned = extract_codeblock(text) or (text or "").strip()
-        try:
-            parsed = json.loads(cleaned) if cleaned else {}
-        except (json.JSONDecodeError, TypeError):
-            parsed = {}
         passed = bool(parsed.get("passed"))
         report = parsed.get("report") or f"# Validating Task {task_id}\n\n**Result: {'PASS' if passed else 'FAIL'}** ({label})"
         return passed, report
@@ -172,13 +326,7 @@ async def validate_task_output_with_llm(
     criteria = validation.get("criteria") or []
     output_format = (output_spec or {}).get("format") or ""
 
-    system_prompt = (
-        "You are a validation assistant. Judge whether the task output meets the validation criteria.\n\n"
-        "Output in two parts:\n"
-        "1. **Reasoning** (1-2 sentences): Briefly explain your validation analysis. This will be shown as your thinking process.\n"
-        "2. **JSON**: Output a JSON block in ```json and ``` with: {\"passed\": true|false, \"report\": \"markdown string\"}\n"
-        "The report should list each criterion and PASS/FAIL, then a final Result line."
-    )
+    system_prompt = load_prompt("task-validate.txt")
 
     criteria_text = "\n".join(f"- {c}" for c in criteria) if criteria else "Output should be complete and align with the task description."
     user_message = f"""Task ID: {task_id}
@@ -227,19 +375,7 @@ async def validate_task_output_with_readonly_agent(
     output_format = (output_spec or {}).get("format") or ""
     context = validation_context or {}
 
-    system_prompt = (
-        "You are a READ-ONLY validation agent.\n"
-        "You are not allowed to execute commands, write files, or call tools.\n"
-        "Use only provided task context, attempt history, and output content to judge criteria.\n\n"
-        "Equivalent-format policy:\n"
-        "- If criteria explicitly allow equivalent representation (for example XML<->JSON, matrix<->CSV), "
-        "you may pass only when output provides verifiable equivalence evidence (conversion method, source/target, checks).\n"
-        "- If evidence is missing, fail the relevant criteria.\n\n"
-        "Output in two parts:\n"
-        "1. **Reasoning** (1-2 sentences): Briefly explain your validation analysis.\n"
-        "2. **JSON**: Output a JSON block in ```json and ``` with: {\"passed\": true|false, \"report\": \"markdown string\"}\n"
-        "The report should list each criterion and PASS/FAIL, then a final Result line."
-    )
+    system_prompt = load_prompt("task-validate-readonly.txt")
 
     criteria_text = "\n".join(f"- {c}" for c in criteria) if criteria else "Output should be complete and align with the task description."
     context_text = json.dumps(context, ensure_ascii=False)[:4000]

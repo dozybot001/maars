@@ -77,8 +77,8 @@ def build_default_deps() -> RunnerDeps:
         prepare_execution_runtime,
         stop_execution_container,
     )
-    from .llm.executor import execute_task
-    from .llm.validation import validate_task_output_with_readonly_agent
+    from llm.task import execute_task
+    from llm.task import validate_task_output_with_readonly_agent
     from .pools import worker_manager
 
     import os

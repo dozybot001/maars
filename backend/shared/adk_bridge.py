@@ -1,6 +1,7 @@
 """
-ADK 桥接层：将 MAARS api_config 与 OpenAI 风格工具转换为 Google ADK 可用格式。
-供 Idea/Plan/Task Agent 的 adk_runner 使用。
+ADK 桥接层：将 MAARS 工具定义与 api_config 转换为 Google ADK 可用格式。
+供所有 Agent 的 adk_runner 使用。
+工具定义为 flat dict: {"name": ..., "description": ..., "parameters": ...}
 """
 
 import os
@@ -14,7 +15,7 @@ from .constants import DEFAULT_MODEL
 
 class ExecutorTool(BaseTool):
     """
-    将 OpenAI 风格工具定义与异步 executor 封装为 ADK 可用的 BaseTool。
+    将 flat 工具定义与异步 executor 封装为 ADK 可用的 BaseTool。
     executor_fn: async (name: str, args: dict) -> (is_finish: bool, result: str)
     """
 
@@ -48,17 +49,15 @@ def create_executor_tools(
     executor_fn: Callable[..., Any],
 ) -> List[ExecutorTool]:
     """
-    从 OpenAI 风格工具列表创建 ExecutorTool 列表。
+    从 flat 工具定义列表创建 ExecutorTool 列表。
+    每个 tool_def: {"name": ..., "description": ..., "parameters": ...}
     executor_fn: async (name, args) -> (is_finish, result_str)
     """
     result = []
     for t in tools_def or []:
-        fn = t.get("function") if isinstance(t, dict) else t
-        if not fn:
-            continue
-        name = fn.get("name") or ""
-        desc = fn.get("description") or ""
-        params = fn.get("parameters") or {"type": "object", "properties": {}}
+        name = t.get("name") or ""
+        desc = t.get("description") or ""
+        params = t.get("parameters") or {"type": "object", "properties": {}}
         result.append(
             ExecutorTool(
                 name=name,

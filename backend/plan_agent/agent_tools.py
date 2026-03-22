@@ -1,6 +1,6 @@
 """
-Agent tools for Plan Agent: CheckAtomicity, Decompose, FormatTask, AddTasks, UpdateTask, GetPlan, GetNextTask, FinishPlan, ListSkills, LoadSkill, ReadSkillFile.
-OpenAI function-calling format. Used when planAgentMode=True.
+Agent tools for Plan Agent: AddTasks, UpdateTask, GetPlan, GetNextTask, FinishPlan, ListSkills, LoadSkill, ReadSkillFile.
+Flat dict format. Used when planAgentMode=True.
 """
 
 import json
@@ -43,177 +43,87 @@ def _plan_agent_read_skill_file(skill: str, path: str) -> str:
     return _read_skill_file(PLAN_SKILLS_ROOT, skill, path)
 
 
-# OpenAI function-calling tool definitions
 PLAN_AGENT_TOOLS = [
     {
-        "type": "function",
-        "function": {
-            "name": "CheckAtomicity",
-            "description": "Check if a task is atomic (executable in one step, clear outcome, no sub-phases). Call this first for each task before deciding to Decompose or FormatTask.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "task_id": {"type": "string", "description": "Task ID to check (e.g. 0, 1, 1_1)"},
-                    "description": {"type": "string", "description": "Task description"},
-                    "context": {
+        "name": "AddTasks",
+        "description": "Add child tasks to the plan after Decompose. Each task must have task_id, title, description, dependencies.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "parent_id": {"type": "string", "description": "Parent task ID (e.g. 0, 1)"},
+                "tasks": {
+                    "type": "array",
+                    "description": "List of {task_id, title, description, dependencies}. title is a 2-4 word phrase capturing the phase's core logic.",
+                    "items": {
                         "type": "object",
-                        "description": "Optional context: depth (int), ancestor_path (str), idea (str), siblings (list of {task_id, description})",
                         "properties": {
-                            "depth": {"type": "integer"},
-                            "ancestor_path": {"type": "string"},
-                            "idea": {"type": "string"},
-                            "siblings": {"type": "array", "items": {"type": "object"}},
+                            "task_id": {"type": "string"},
+                            "title": {"type": "string", "description": "2-4 word title capturing the task's core logic (e.g. 'Data Collection', 'Model Training', '定义范围')"},
+                            "description": {"type": "string"},
+                            "dependencies": {"type": "array", "items": {"type": "string"}},
                         },
+                        "required": ["task_id", "title", "description", "dependencies"],
                     },
                 },
-                "required": ["task_id", "description"],
             },
+            "required": ["parent_id", "tasks"],
         },
     },
     {
-        "type": "function",
-        "function": {
-            "name": "Decompose",
-            "description": "Decompose a non-atomic task into child tasks. Call only when CheckAtomicity returned atomic=false.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "task_id": {"type": "string", "description": "Parent task ID"},
-                    "description": {"type": "string", "description": "Parent task description"},
-                    "context": {
-                        "type": "object",
-                        "description": "Optional context: depth, ancestor_path, idea, siblings",
-                        "properties": {
-                            "depth": {"type": "integer"},
-                            "ancestor_path": {"type": "string"},
-                            "idea": {"type": "string"},
-                            "siblings": {"type": "array", "items": {"type": "object"}},
-                        },
-                    },
-                },
-                "required": ["task_id", "description"],
+        "name": "UpdateTask",
+        "description": "Update a task with input/output/validation from FormatTask. Call after FormatTask for atomic tasks.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "Task ID to update"},
+                "input": {"type": "object", "description": "Input spec from FormatTask"},
+                "output": {"type": "object", "description": "Output spec from FormatTask"},
+                "validation": {"type": "object", "description": "Optional validation spec"},
             },
+            "required": ["task_id", "input", "output"],
         },
     },
     {
-        "type": "function",
-        "function": {
-            "name": "FormatTask",
-            "description": "Generate input/output specification for an atomic task. Call only when CheckAtomicity returned atomic=true.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "task_id": {"type": "string", "description": "Task ID"},
-                    "description": {"type": "string", "description": "Task description"},
-                },
-                "required": ["task_id", "description"],
+        "name": "GetPlan",
+        "description": "Get current plan state: all tasks and pending queue. Use to understand progress.",
+        "parameters": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "GetNextTask",
+        "description": "Get the next task to process from the pending queue. Returns null when queue is empty (all tasks processed).",
+        "parameters": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "FinishPlan",
+        "description": "Call when all tasks have been processed (GetNextTask returns null). Completes the planning phase.",
+        "parameters": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "ListSkills",
+        "description": "List available Plan Agent Skills (decomposition patterns, research scoping, format specs). Use to discover skills before LoadSkill.",
+        "parameters": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "LoadSkill",
+        "description": "Load a Plan Agent skill's SKILL.md content. Use when you need reference for decomposition, scoping, or formatting.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Skill name (e.g. decomposition-patterns, research-scoping, format-specs)"},
             },
+            "required": ["name"],
         },
     },
     {
-        "type": "function",
-        "function": {
-            "name": "AddTasks",
-            "description": "Add child tasks to the plan after Decompose. Each task must have task_id, title, description, dependencies.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "parent_id": {"type": "string", "description": "Parent task ID (e.g. 0, 1)"},
-                    "tasks": {
-                        "type": "array",
-                        "description": "List of {task_id, title, description, dependencies}. title is a 2-4 word phrase capturing the phase's core logic.",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "task_id": {"type": "string"},
-                                "title": {"type": "string", "description": "2-4 word title capturing the task's core logic (e.g. 'Data Collection', 'Model Training', '定义范围')"},
-                                "description": {"type": "string"},
-                                "dependencies": {"type": "array", "items": {"type": "string"}},
-                            },
-                            "required": ["task_id", "title", "description", "dependencies"],
-                        },
-                    },
-                },
-                "required": ["parent_id", "tasks"],
+        "name": "ReadSkillFile",
+        "description": "Read a file from a Plan Agent skill (references/, scripts/). Use after LoadSkill when you need a specific file.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "skill": {"type": "string", "description": "Skill name"},
+                "path": {"type": "string", "description": "Path relative to skill dir, e.g. references/example.md"},
             },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "UpdateTask",
-            "description": "Update a task with input/output/validation from FormatTask. Call after FormatTask for atomic tasks.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "task_id": {"type": "string", "description": "Task ID to update"},
-                    "input": {"type": "object", "description": "Input spec from FormatTask"},
-                    "output": {"type": "object", "description": "Output spec from FormatTask"},
-                    "validation": {"type": "object", "description": "Optional validation spec"},
-                },
-                "required": ["task_id", "input", "output"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "GetPlan",
-            "description": "Get current plan state: all tasks and pending queue. Use to understand progress.",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "GetNextTask",
-            "description": "Get the next task to process from the pending queue. Returns null when queue is empty (all tasks processed).",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "FinishPlan",
-            "description": "Call when all tasks have been processed (GetNextTask returns null). Completes the planning phase.",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "ListSkills",
-            "description": "List available Plan Agent Skills (decomposition patterns, research scoping, format specs). Use to discover skills before LoadSkill.",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "LoadSkill",
-            "description": "Load a Plan Agent skill's SKILL.md content. Use when you need reference for decomposition, scoping, or formatting.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "description": "Skill name (e.g. decomposition-patterns, research-scoping, format-specs)"},
-                },
-                "required": ["name"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "ReadSkillFile",
-            "description": "Read a file from a Plan Agent skill (references/, scripts/). Use after LoadSkill when you need a specific file.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "skill": {"type": "string", "description": "Skill name"},
-                    "path": {"type": "string", "description": "Path relative to skill dir, e.g. references/example.md"},
-                },
-                "required": ["skill", "path"],
-            },
+            "required": ["skill", "path"],
         },
     },
 ]
@@ -224,13 +134,9 @@ async def execute_plan_agent_tool(
     arguments: str,
     plan_state: Dict[str, Any],
     *,
-    check_atomicity_fn: Callable,
-    decompose_fn: Callable,
-    format_fn: Callable,
     on_thinking: Optional[Callable] = None,
     on_tasks_batch: Optional[Callable] = None,
     abort_event: Optional[Any] = None,
-    use_mock: bool = False,
     api_config: Optional[Dict] = None,
     idea_id: Optional[str] = None,
     plan_id: Optional[str] = None,
@@ -317,69 +223,6 @@ async def execute_plan_agent_tool(
 
     if name == "FinishPlan":
         return True, orjson.dumps({"status": "complete", "tasks_count": len(all_tasks)}).decode("utf-8")
-
-    if name == "CheckAtomicity":
-        task_id = args.get("task_id", "")
-        description = args.get("description", "")
-        ctx = args.get("context") or {}
-        task = {"task_id": task_id, "description": description, "dependencies": []}
-        maybe_title = args.get("title")
-        if isinstance(maybe_title, str) and maybe_title.strip():
-            task["title"] = maybe_title.strip()
-        ensure_task_title(task)
-        siblings = ctx.get("siblings") or []
-        depth = ctx.get("depth", 0)
-        atomicity_context = {
-            "depth": depth,
-            "ancestor_path": ctx.get("ancestor_path") or get_ancestor_path(task_id),
-            "idea": ctx.get("idea") or idea,
-            "siblings": siblings,
-        }
-        try:
-            result = await check_atomicity_fn(
-                task, on_thinking, abort_event, atomicity_context, use_mock, api_config, idea_id, plan_id
-            )
-            return False, orjson.dumps({"atomic": result.get("atomic", False)}).decode("utf-8")
-        except Exception as e:
-            return False, f"Error: {e}"
-
-    if name == "Decompose":
-        task_id = args.get("task_id", "")
-        description = args.get("description", "")
-        ctx = args.get("context") or {}
-        parent_task = {"task_id": task_id, "description": description, "dependencies": []}
-        maybe_title = args.get("title")
-        if isinstance(maybe_title, str) and maybe_title.strip():
-            parent_task["title"] = maybe_title.strip()
-        ensure_task_title(parent_task)
-        depth = ctx.get("depth", 0)
-        siblings = ctx.get("siblings") or []
-        try:
-            children = await decompose_fn(
-                parent_task, on_thinking, abort_event, all_tasks,
-                idea=idea, depth=depth, use_mock=use_mock, api_config=api_config, idea_id=idea_id, plan_id=plan_id,
-            )
-            return False, orjson.dumps({"tasks": children}).decode("utf-8")
-        except Exception as e:
-            return False, f"Error: {e}"
-
-    if name == "FormatTask":
-        task_id = args.get("task_id", "")
-        description = args.get("description", "")
-        task = {"task_id": task_id, "description": description, "dependencies": []}
-        maybe_title = args.get("title")
-        if isinstance(maybe_title, str) and maybe_title.strip():
-            task["title"] = maybe_title.strip()
-        ensure_task_title(task)
-        try:
-            result = await format_fn(
-                task, on_thinking, abort_event, use_mock=use_mock, api_config=api_config, idea_id=idea_id, plan_id=plan_id,
-            )
-            if not result:
-                return False, "Error: FormatTask returned no input/output"
-            return False, orjson.dumps(result).decode("utf-8")
-        except Exception as e:
-            return False, f"Error: {e}"
 
     if name == "ListSkills":
         return False, _plan_agent_list_skills()

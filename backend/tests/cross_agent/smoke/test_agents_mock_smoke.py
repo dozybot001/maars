@@ -3,7 +3,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_idea_agent_llm_mock_extract_and_refine():
-    from idea_agent.llm.executor import extract_keywords, refine_idea_from_papers
+    from llm.idea import extract_keywords, refine_idea_from_papers
 
     api_config = {"ideaUseMock": True}
 
@@ -22,7 +22,7 @@ async def test_idea_agent_llm_mock_extract_and_refine():
 
 @pytest.mark.asyncio
 async def test_plan_agent_llm_mock_core_calls():
-    from plan_agent.llm.executor import assess_quality, check_atomicity, decompose_task, format_task
+    from llm.plan import assess_quality, check_atomicity, decompose_task, format_task
 
     def on_thinking(_chunk: str, **_kwargs):
         return None
@@ -74,7 +74,7 @@ async def test_plan_agent_llm_mock_core_calls():
 
 @pytest.mark.asyncio
 async def test_task_agent_llm_mock_execute_json():
-    from task_agent.llm.executor import execute_task
+    from llm.task import execute_task
 
     api_config = {"taskUseMock": True}
     output = await execute_task(

@@ -6,11 +6,9 @@ from shared.utils import OnThinking
 
 from . import arxiv
 from .agent import run_idea_agent
-from .llm import (
+from llm.idea import (
     extract_keywords,
-    extract_keywords_stream,
     refine_idea_from_papers,
-    refine_idea_from_papers_stream,
 )
 from .literature import search_literature
 
@@ -19,9 +17,7 @@ __all__ = [
     "run_idea_agent",
     "arxiv",
     "extract_keywords",
-    "extract_keywords_stream",
     "refine_idea_from_papers",
-    "refine_idea_from_papers_stream",
 ]
 
 
@@ -48,10 +44,7 @@ async def collect_literature(
     """
     logger.info("Idea collect start idea_chars={} limit={}", len((idea or "").strip()), limit)
     # 1. Keywords：提取检索关键词
-    if on_thinking is not None:
-        keywords = await extract_keywords_stream(idea, api_config, on_chunk=on_thinking, abort_event=abort_event)
-    else:
-        keywords = await extract_keywords(idea, api_config, abort_event=abort_event)
+    keywords = await extract_keywords(idea, api_config, on_chunk=on_thinking, abort_event=abort_event)
     if not keywords:
         keywords = ["research"]
     logger.info("Idea collect keywords extracted count={} keywords={}", len(keywords), keywords)
@@ -73,15 +66,11 @@ async def collect_literature(
         )
     logger.info("Idea collect papers retrieved count={} first_title='{}'", len(papers), (papers[0].get("title") or "")[:120])
     # 3. Refine：基于 idea + papers 生成可执行 refined idea
-    used_streaming_refine = on_thinking is not None
-    if used_streaming_refine:
-        refined_idea = await refine_idea_from_papers_stream(
-            idea, papers, api_config, on_chunk=on_thinking, abort_event=abort_event
-        )
-    else:
-        refined_idea = await refine_idea_from_papers(idea, papers, api_config, abort_event=abort_event)
+    refined_idea = await refine_idea_from_papers(
+        idea, papers, api_config, on_chunk=on_thinking, abort_event=abort_event
+    )
 
-    if used_streaming_refine and not (refined_idea or "").strip():
+    if on_thinking is not None and not (refined_idea or "").strip():
         logger.warning(
             "Idea collect refine returned empty in streaming mode; retrying non-streaming refine query='{}' papers={}",
             query,

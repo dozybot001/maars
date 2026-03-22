@@ -4,8 +4,7 @@ from typing import Any, Callable, Dict, Optional
 import json_repair
 
 from shared.constants import DECISION_AGENT_MAX_REPAIR_ATTEMPTS, TEMP_DETERMINISTIC, TEMP_RETRY
-from shared.llm_client import chat_completion, merge_phase_config
-from shared.structured_output import generate_with_repair
+from llm.client import llm_call_structured
 
 
 _DEFAULT_IMMUTABLE_ITEMS = [
@@ -16,7 +15,8 @@ _DEFAULT_IMMUTABLE_ITEMS = [
     "Do not bypass reproducibility and traceability requirements for final claims.",
 ]
 
-def _build_contract_messages(packet: Dict[str, Any]) -> list[dict]:
+def _build_contract_messages(packet: Dict[str, Any]) -> tuple[str, str]:
+    """Return (system_prompt, user_prompt) for contract review."""
     immutable_items = packet.get("immutableItems") or _DEFAULT_IMMUTABLE_ITEMS
     system_prompt = (
         "You are Step-B Contract Review Agent in a task retry pipeline. "
@@ -42,10 +42,7 @@ def _build_contract_messages(packet: Dict[str, Any]) -> list[dict]:
         f"Immutable items:\n{json.dumps(immutable_items, ensure_ascii=False, indent=2)}\n\n"
         f"Packet:\n```json\n{json.dumps(packet, ensure_ascii=False, indent=2)}\n```"
     )
-    return [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt},
-    ]
+    return system_prompt, user_prompt
 
 
 def _parse_contract_review(raw: str) -> Dict[str, Any]:
@@ -85,32 +82,22 @@ async def review_contract_adjustment(
     abort_event: Optional[Any] = None,
     on_thinking: Optional[Callable[..., Any]] = None,
 ) -> Dict[str, Any]:
-    messages = _build_contract_messages(packet)
-    cfg = merge_phase_config(api_config or {}, "validate")
-    stream = on_thinking is not None
+    system_prompt, user_prompt = _build_contract_messages(packet)
 
     def _on_chunk(chunk: str):
         if on_thinking and chunk:
             task_id = (packet.get("task") or {}).get("taskId")
             return on_thinking(chunk, task_id=task_id, operation="Step-B")
 
-    async def _model_call(message_list: list[dict], temperature: float) -> str:
-        raw = await chat_completion(
-            message_list,
-            cfg,
-            on_chunk=_on_chunk if stream else None,
-            abort_event=abort_event,
-            stream=stream,
-            temperature=temperature,
-            response_format={"type": "json_object"},
-        )
-        return raw if isinstance(raw, str) else (raw.get("content") or "")
-
     temps = [TEMP_DETERMINISTIC] + [TEMP_RETRY] * max(0, DECISION_AGENT_MAX_REPAIR_ATTEMPTS - 1)
-    parsed, _raw = await generate_with_repair(
-        base_messages=messages,
-        model_call=_model_call,
+    parsed, _ = await llm_call_structured(
+        system=system_prompt,
+        user=user_prompt,
+        api_config=api_config or {},
         parse_fn=_parse_contract_review,
         temperatures=temps,
+        json_output=True,
+        on_chunk=_on_chunk if on_thinking else None,
+        abort_event=abort_event,
     )
     return parsed

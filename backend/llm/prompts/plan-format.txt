@@ -19,7 +19,8 @@ Given an atomic task (task_id and description), output a JSON with clear **input
   "output": {
     "description": "<what the task produces>",
     "artifact": "<name/type of the produced artifact>",
-    "format": "<e.g. document, list, table, JSON>"
+    "type": "<exactly 'json' or 'markdown'>",
+    "format": "<detailed format description, e.g. 'JSON object with keys: keywords (string[]), databases (string[])' or 'Markdown report with ## sections'>"
   },
   "validation": {
     "description": "<brief description of what to validate>",
@@ -34,7 +35,7 @@ Given an atomic task (task_id and description), output a JSON with clear **input
 
 ### CRITICAL RULES
 1. **input**: What does this task need to start? Dependencies produce artifacts; list what this task consumes.
-2. **output**: What does this task produce? Be specific about artifact name and format.
+2. **output**: What does this task produce? **type** must be exactly `"json"` or `"markdown"` — use `"json"` when the output is structured data (objects, arrays, tables, time-series, CSV, numerical results), use `"markdown"` when the output is prose (reports, analysis, documentation). **format** gives detailed structure description.
 3. **validation**: List concrete, checkable criteria that align with the output format and content. The validator should know exactly what to check.
 4. **Research/Comparison reports**: When output is a Markdown research report, comparison report, or synthesis (e.g. 调研、对比、综合分析), include: "Document has ## References section" and "References section is non-empty" in criteria. This ensures source attribution for credibility.
 5. Keep it concise. The Task Agent and validator should understand exactly what to do.
@@ -55,7 +56,8 @@ Input from parent scope; output is search configuration (keywords + databases). 
   "output": {
     "description": "Defined keywords and selected databases.",
     "artifact": "search_config",
-    "format": "JSON: { keywords: string[], databases: string[] }"
+    "type": "json",
+    "format": "JSON object with keys: keywords (string[]), databases (string[])"
   },
   "validation": {
     "description": "Validate search_config meets research scope requirements.",

@@ -3,26 +3,17 @@ Task Agent - Google ADK 驱动实现。
 当 taskAgentMode=True 时使用，替代自实现 ReAct 循环。
 """
 
-import json
-import re
 from typing import Any, Callable, Dict, Optional
 
 from shared.utils import parse_json_response
 
+from adk.runner import run_agent
 from db import ensure_execution_task_dirs, ensure_sandbox_dir
-from shared.adk_bridge import (
-    create_executor_tools,
-    get_model_for_adk,
-    prepare_api_env,
-)
-from shared.adk_runtime import (
-    build_tool_args_preview,
-    run_adk_agent_loop,
-)
+from shared.adk_bridge import prepare_api_env
 from shared.constants import TASK_AGENT_MAX_TURNS
 from shared.constants import TASK_AGENT_CONTEXT_TARGET_TOKENS
 from shared.constants import TEMP_STRUCTURED
-from shared.llm_client import chat_completion, merge_phase_config
+from llm.client import llm_call
 
 from .agent_tools import TOOLS, execute_tool
 
@@ -36,11 +27,8 @@ from .adk_prompt import (
 )
 
 
-def _is_json_format(output_format: str) -> bool:
-    if not output_format:
-        return False
-    fmt = output_format.strip().upper()
-    return fmt.startswith("JSON") or "JSON" in fmt
+def _is_json_output(output_spec: dict) -> bool:
+    return (output_spec.get("type") or "").strip().lower() == "json"
 
 
 def _parse_task_agent_output(content: str, use_json_mode: bool) -> Any:
@@ -110,9 +98,6 @@ async def _compress_object_with_llm(
             "valid": True,
         }
 
-    llm_cfg = merge_phase_config(api_config or {}, phase="task")
-    llm_cfg["temperature"] = TEMP_STRUCTURED
-
     system_prompt = (
         "You are a strict JSON context compressor. "
         "Compress large JSON context while preserving task-critical semantics. "
@@ -139,18 +124,15 @@ Input JSON:
 """
 
     try:
-        resp = await chat_completion(
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            llm_cfg,
-            abort_event=abort_event,
-            stream=False,
-            response_format={"type": "json_object"},
+        resp = await llm_call(
+            system=system_prompt,
+            user=user_prompt,
+            api_config=api_config or {},
             temperature=TEMP_STRUCTURED,
+            json_output=True,
+            abort_event=abort_event,
         )
-        parsed = _safe_json_loads(str(resp or "")) if not isinstance(resp, dict) else resp
+        parsed = _safe_json_loads(resp)
         compressed = (parsed or {}).get("compressed") if isinstance(parsed, dict) else None
         ok, reason = _validate_compressed_object_shape(value, compressed, label)
         if ok:
@@ -222,7 +204,7 @@ async def run_task_agent_adk(
         await ensure_sandbox_dir(idea_id, plan_id, task_id)
 
     output_format = output_spec.get("format") or ""
-    use_json_mode = _is_json_format(output_format)
+    use_json_mode = _is_json_output(output_spec)
     on_thinking_fn = on_thinking or (lambda *a, **_: None)
 
     compressed_inputs, _inputs_compress_meta = await _compress_object_with_llm(
@@ -240,9 +222,12 @@ async def run_task_agent_adk(
         abort_event=abort_event,
     )
 
+    # Capture the real parsed task output from execute_tool (Finish handler).
+    # run_agent's finish_result only sees the generic success message we return,
+    # so we side-channel the actual value here.
     task_output: list = [None]
-    async def executor_fn(name: str, args: dict) -> tuple[bool, str]:
-        args_str = json.dumps(args, ensure_ascii=False)
+
+    async def executor_fn(name: str, args_str: str) -> tuple[bool, str]:
         out, tool_result = await execute_tool(
             name,
             args_str,
@@ -258,7 +243,6 @@ async def run_task_agent_adk(
             return True, '{"status": "success", "message": "Task completed."}'
         return False, tool_result
 
-    tools = create_executor_tools(TOOLS, executor_fn)
     system_prompt = _build_system_prompt(output_format, validation_spec, idea_context)
 
     user_message, _context_budget = _build_user_message(
@@ -289,56 +273,19 @@ async def run_task_agent_adk(
         if hasattr(maybe, "__await__"):
             await maybe
 
-    model = get_model_for_adk(api_config)
-
-    def _on_tool_call(name: str, args: dict, turn_count: int, token_usage: Optional[dict] = None):
-        # Use real ADK turn count so UI reflects actual agent execution progression.
-        display_turn = turn_count
-        args_preview = build_tool_args_preview(args, max_len=150)
-        tool_msg = f"Calling {name}({args_preview})"
-        return on_thinking_fn(
-            tool_msg,
-            task_id=task_id,
-            operation="Execute",
-            schedule_info={
-                "turn": display_turn,
-                "max_turns": TASK_AGENT_MAX_TURNS,
-                "tool_name": name,
-                "tool_args": build_tool_args_preview(args),
-                "tool_args_preview": None,
-                "operation": "Execute",
-                "task_id": task_id,
-                "token_usage": token_usage or {},
-            },
-        )
-
-    def _on_text(text: str, turn_count: int, token_usage: Optional[dict] = None):
-        display_turn = turn_count
-        return on_thinking_fn(
-            text,
-            task_id=task_id,
-            operation="Execute",
-            schedule_info={
-                "turn": display_turn,
-                "max_turns": TASK_AGENT_MAX_TURNS,
-                "operation": "Execute",
-                "task_id": task_id,
-                "token_usage": token_usage or {},
-            },
-        )
-
-    await run_adk_agent_loop(
-        app_name="maars_task",
-        agent_name="task_agent",
-        model=model,
-        instruction=system_prompt,
-        tools=tools,
+    _, turn_count = await run_agent(
+        name="task",
+        prompt=system_prompt,
         user_message=user_message,
+        tools=TOOLS,
+        executor_fn=executor_fn,
+        api_config=api_config,
         max_turns=TASK_AGENT_MAX_TURNS,
+        finish_tool="Finish",
+        operation="Execute",
+        on_thinking=on_thinking_fn,
         abort_event=abort_event,
-        abort_message="Task Agent aborted",
-        on_tool_call=_on_tool_call,
-        on_text=_on_text,
+        task_id=task_id,
     )
 
     if task_output[0] is not None:

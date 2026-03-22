@@ -2,11 +2,11 @@ import pytest
 
 from task_agent.agent_tools import run_finish
 from task_agent.runner import ExecutionRunner
-from task_agent.llm import executor as task_exec
-from task_agent.llm.validation import (
+from llm import task as task_exec
+from llm.task import (
     classify_validation_failure,
 )
-from plan_agent.llm import executor as plan_exec
+from llm import plan as plan_exec
 
 
 def test_run_finish_rejects_prose_for_structured_output():
