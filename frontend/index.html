@@ -1,133 +1,109 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MAARS</title>
-    <script>
-        (function() {
-            document.documentElement.setAttribute('data-theme', 'black');
-        })();
-    </script>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap">
-    <link rel="stylesheet" href="css/core/theme.css">
-    <link rel="stylesheet" href="css/core/theme-dark.css">
-    <link rel="stylesheet" href="css/core/theme-black.css">
-    <link rel="stylesheet" href="css/core/variables.css">
-    <link rel="stylesheet" href="css/core/reset.css">
-    <link rel="stylesheet" href="css/layout/page.css">
-    <link rel="stylesheet" href="css/components/markdown.css">
-    <link rel="stylesheet" href="css/components/buttons.css">
-    <link rel="stylesheet" href="css/components/modal.css">
-    <link rel="stylesheet" href="css/components/toast.css">
-    <link rel="stylesheet" href="css/regions/idea-input.css">
-    <link rel="stylesheet" href="css/regions/research.css">
-    <link rel="stylesheet" href="css/regions/research-stage-layout.css">
-    <link rel="stylesheet" href="css/regions/research-workbench.css">
-    <link rel="stylesheet" href="css/regions/research-execute-stream.css">
-    <link rel="stylesheet" href="css/regions/research-execute-stream-shell.css">
-    <link rel="stylesheet" href="css/regions/research-execute-task-cards.css">
-    <link rel="stylesheet" href="css/regions/thinking.css">
-    <link rel="stylesheet" href="css/regions/tree.css">
-    <link rel="stylesheet" href="css/regions/output.css">
-    <link rel="stylesheet" href="css/ui/settings.css">
-    <link rel="stylesheet" href="css/ui/settings-layout.css">
-    <link rel="stylesheet" href="css/ui/settings-theme-mode.css">
-    <link rel="stylesheet" href="css/ui/settings-preset-form.css">
-    <link rel="stylesheet" href="css/ui/sidebar.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAARS - Multi-Agent Automated Research System</title>
+  <link rel="stylesheet" href="css/main.css">
 </head>
 <body>
-    <button
-        id="appSidebarToggle"
-        class="app-sidebar-toggle"
-        type="button"
-        aria-label="Toggle sidebar"
-        aria-controls="appSidebar"
-        aria-expanded="false"
-    >
-        <span class="app-sidebar-toggle-icon" aria-hidden="true"></span>
-    </button>
-    <aside id="appSidebar" class="app-sidebar" aria-hidden="true">
-        <div id="appSidebarContent" class="app-sidebar-content" hidden></div>
-    </aside>
+  <header>
+    <h1>MAARS</h1>
+    <p class="subtitle">Multi-Agent Automated Research System</p>
+  </header>
 
-    <div class="container">
-        <header class="page-header">
-            <div class="header-title">
-                <h1>MAARS</h1>
-                <p class="subtitle">Multi-Agent Automated Research System</p>
-            </div>
-        </header>
+  <main>
+    <section id="input-area">
+      <div class="input-wrapper">
+        <input
+          type="text"
+          id="research-input"
+          placeholder="Enter your research idea and press Enter..."
+          autocomplete="off"
+        >
+        <button id="start-btn">Start</button>
+      </div>
+    </section>
 
-        <div id="settingsModalSlot"></div>
-        
-        <main class="main-content">
-            <section id="homeView" class="home-view">
-                <div class="home-view-inner">
-                    <div class="home-view-prompt">
-                        <input type="text" id="researchPromptInput" class="idea-input home-view-input" placeholder="Ask anything to start a new research..." />
-                        <button id="createResearchBtn" type="button" class="btn-default">Create</button>
-                    </div>
-                </div>
-            </section>
-        </main>
-    </div>
-
-    <!-- Task Output modal -->
-    <div id="taskAgentOutputModal" class="task-agent-output-modal" aria-hidden="true">
-        <div class="task-agent-output-modal-backdrop"></div>
-        <div class="task-agent-output-modal-dialog">
-            <div class="task-agent-output-modal-header">
-                <span class="task-agent-output-modal-title" id="taskAgentOutputModalTitle">Task Output</span>
-                <span class="task-agent-output-modal-actions">
-                    <button type="button" class="task-agent-output-modal-download" id="taskAgentOutputModalDownload" aria-label="Download" title="Download"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16"/><path d="M7 15l5 5 5-5"/></svg></button>
-                    <button type="button" class="task-agent-output-modal-close" id="taskAgentOutputModalClose" aria-label="Close">×</button>
-                </span>
-            </div>
-            <div class="task-agent-output-modal-body markdown-body" id="taskAgentOutputModalBody"></div>
+    <section id="pipeline-cards">
+      <div class="stage-card" data-stage="refine">
+        <div class="card-header">
+          <h3>Refine</h3>
+          <span class="stage-badge" data-status="idle">idle</span>
         </div>
-    </div>
+        <p class="card-desc">Clarify and refine the research idea</p>
+        <div class="stage-controls">
+          <button data-action="run" title="Run">&#9654;</button>
+          <button data-action="stop" title="Stop" disabled>&#9724;</button>
+          <button data-action="resume" title="Resume" disabled>&#9654;&#9654;</button>
+          <button data-action="retry" title="Retry" disabled>&#8634;</button>
+        </div>
+      </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script src="js/core/utils.js"></script>
-    <script src="js/ui/toast.js"></script>
-    <script src="js/core/config.js"></script>
-    <script src="js/core/logger.js"></script>
-    <script src="js/core/state.js"></script>
-    <script src="js/regions/tree/task-tree-popover.js"></script>
-    <script src="js/regions/tree/task-tree-events.js"></script>
-    <script src="js/regions/tree/task-tree-renderer.js"></script>
-    <script src="js/regions/tree/task-tree.js"></script>
-    <script src="js/ui/theme.js"></script>
+      <div class="stage-card" data-stage="plan">
+        <div class="card-header">
+          <h3>Plan</h3>
+          <span class="stage-badge" data-status="idle">idle</span>
+        </div>
+        <p class="card-desc">Design the research methodology</p>
+        <div class="stage-controls">
+          <button data-action="run" title="Run" disabled>&#9654;</button>
+          <button data-action="stop" title="Stop" disabled>&#9724;</button>
+          <button data-action="resume" title="Resume" disabled>&#9654;&#9654;</button>
+          <button data-action="retry" title="Retry" disabled>&#8634;</button>
+        </div>
+      </div>
 
-    <script src="js/api/research-api.js"></script>
-    <script src="js/api/api.js"></script>
-    <script src="js/flows/task-run-controls.js"></script>
-    <script src="js/flows/task-execution-state.js"></script>
-    <script src="js/flows/task.js"></script>
-    <script src="js/flows/research-execute-utils.js"></script>
-    <script src="js/flows/research-execution-graph.js"></script>
-    <script src="js/flows/research-nav-utils.js"></script>
-    <script src="js/flows/research-core-utils.js"></script>
-    <script src="js/flows/research-execute-render.js"></script>
-    <script src="js/flows/research-execute-state.js"></script>
-    <script src="js/flows/research-loader.js"></script>
-    <script src="js/flows/research-event-bridges.js"></script>
-    <script src="js/flows/research-stage-ui.js"></script>
-    <script src="js/flows/research.js"></script>
-    <script src="js/regions/output-utils.js"></script>
-    <script src="js/regions/output.js"></script>
-    <script src="js/regions/thinking-stream.js"></script>
-    <script src="js/regions/thinking.js"></script>
-    <script src="js/ws/handlers/thinking-handler.js"></script>
-    <script src="js/ws/websocket.js"></script>
-    <script src="js/ui/settings-presets.js"></script>
-    <script src="js/ui/settings-sync.js"></script>
-    <script src="js/ui/settings.js"></script>
-    <script src="js/ui/sidebar.js"></script>
-    <script src="app.js"></script>
+      <div class="stage-card" data-stage="execute">
+        <div class="card-header">
+          <h3>Execute</h3>
+          <span class="stage-badge" data-status="idle">idle</span>
+        </div>
+        <p class="card-desc">Execute experiments and analysis</p>
+        <div class="stage-controls">
+          <button data-action="run" title="Run" disabled>&#9654;</button>
+          <button data-action="stop" title="Stop" disabled>&#9724;</button>
+          <button data-action="resume" title="Resume" disabled>&#9654;&#9654;</button>
+          <button data-action="retry" title="Retry" disabled>&#8634;</button>
+        </div>
+      </div>
+
+      <div class="stage-card" data-stage="write">
+        <div class="card-header">
+          <h3>Write</h3>
+          <span class="stage-badge" data-status="idle">idle</span>
+        </div>
+        <p class="card-desc">Write the research paper</p>
+        <div class="stage-controls">
+          <button data-action="run" title="Run" disabled>&#9654;</button>
+          <button data-action="stop" title="Stop" disabled>&#9724;</button>
+          <button data-action="resume" title="Resume" disabled>&#9654;&#9654;</button>
+          <button data-action="retry" title="Retry" disabled>&#8634;</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="workspace">
+      <!-- Left: Reasoning Log -->
+      <div class="panel">
+        <div class="panel-header">
+          <h3>Reasoning Log</h3>
+        </div>
+        <div id="log-output" class="panel-body"></div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <!-- Right: Process & Output -->
+      <div class="panel">
+        <div class="panel-header">
+          <h3>Process & Output</h3>
+        </div>
+        <div id="process-body" class="panel-body"></div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>

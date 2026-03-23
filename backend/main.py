@@ -1,104 +1,48 @@
-"""
-MAARS Backend - FastAPI + Socket.io entry point.
-Python implementation of the MAARS backend.
-"""
-
-import asyncio
 from pathlib import Path
 
-import socketio
-from loguru import logger
-from starlette.middleware.base import BaseHTTPMiddleware
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from api import register_routes
-from api import state as api_state
-from shared.logging_config import configure_backend_file_logging
+from backend.config import settings
+from backend.pipeline.orchestrator import PipelineOrchestrator
+from backend.routes import pipeline as pipeline_routes
+from backend.routes import events as event_routes
 
-# Socket.io
-sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
-app = FastAPI(title="MAARS Backend")
+app = FastAPI(title="MAARS", version="0.1.0")
 
+# --- Pipeline stages ---
+orchestrator = PipelineOrchestrator()
 
-@app.on_event("startup")
-async def _print_browser_url():
-    """Print the URL to open in browser (0.0.0.0 is not openable in browser)."""
-    configure_backend_file_logging()
-    import sys
-    print("INFO:     Open in browser: http://localhost:3001", file=sys.stderr, flush=True)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Register API routes (Idea, Plan, Task, Paper, ...)
-register_routes(app, sio)
-
-
-# Disable cache for static files (dev: always fetch latest)
-NO_CACHE_HEADERS = {
-    "Cache-Control": "no-store, no-cache, must-revalidate",
-    "Pragma": "no-cache",
-    "Expires": "0",
-}
-
-
-class NoCacheMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        response = await call_next(request)
-        path = request.url.path
-        if path == "/" or path.endswith((".html", ".css", ".js")):
-            for k, v in NO_CACHE_HEADERS.items():
-                response.headers[k] = v
-        return response
-
-
-app.add_middleware(NoCacheMiddleware)
-
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """Centralized exception handler for unhandled errors."""
-    logger.exception("Unhandled exception: {}", exc)
-    return JSONResponse(
-        status_code=500,
-        content={"error": str(exc) or "Internal server error"},
+if settings.llm_mode == "agent":
+    from backend.agent import create_agent_stages
+    stages = create_agent_stages(
+        model=settings.gemini_model,
+        db=orchestrator.db,
     )
+elif settings.llm_mode == "gemini":
+    from backend.gemini import create_gemini_stages
+    stages = create_gemini_stages(
+        api_key=settings.google_api_key,
+        model=settings.gemini_model,
+        db=orchestrator.db,
+    )
+else:
+    from backend.mock import create_mock_stages
+    stages = create_mock_stages(chunk_delay=settings.mock_chunk_delay, db=orchestrator.db)
 
+orchestrator.stages.update(stages)
+for stage in orchestrator.stages.values():
+    stage._broadcast = orchestrator._broadcast
 
-# Frontend static files
-FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+# Inject orchestrator into route modules
+pipeline_routes.set_orchestrator(orchestrator)
+event_routes.set_orchestrator(orchestrator)
 
-if FRONTEND_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="static")
+# --- Routes ---
+app.include_router(pipeline_routes.router)
+app.include_router(event_routes.router)
 
-
-# Socket.io events
-@sio.event
-async def connect(sid, environ, auth):
-    try:
-        session_id = api_state.resolve_socket_session_id(auth)
-    except ValueError as e:
-        logger.warning("Socket auth rejected sid=%s error=%s", sid, e)
-        raise ConnectionRefusedError(str(e))
-    api_state.bind_socket_to_session(sid, session_id)
-    await sio.enter_room(sid, session_id)
-    await api_state.get_or_create_session_state(session_id)
-    logger.info("Client connected: %s session=%s", sid, session_id)
-
-
-@sio.event
-async def disconnect(sid):
-    await api_state.unbind_socket(sid)
-    logger.info("Client disconnected: %s", sid)
-
-
-# ASGI app for uvicorn (Socket.io + FastAPI)
-asgi_app = socketio.ASGIApp(sio, app)
+# --- Serve frontend static files ---
+frontend_dir = Path(__file__).parent.parent / "frontend"
+if frontend_dir.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")

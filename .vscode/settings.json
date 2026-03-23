@@ -1,6 +1,0 @@
-{
-    "python-envs.defaultPackageManager": "ms-python.python:conda",
-    "chat.tools.terminal.autoApprove": {
-        "./start.sh": true
-    }
-}

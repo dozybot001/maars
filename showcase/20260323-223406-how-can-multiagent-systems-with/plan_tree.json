@@ -1,0 +1,118 @@
+{
+  "id": "0",
+  "description": "Research Plan",
+  "dependencies": [],
+  "is_atomic": false,
+  "children": [
+    {
+      "id": "1",
+      "description": "Define the formal system prompts and persona constraints for the Orchestrator, Specialized Workers (Statistician, Historian, Writer), and the Skeptic agent.",
+      "dependencies": [],
+      "is_atomic": true,
+      "children": []
+    },
+    {
+      "id": "2",
+      "description": "Design the procedural protocol for the Dialectical Loop, defining the communication schema between the Orchestrator and the Specialized Workers.",
+      "dependencies": [
+        "1"
+      ],
+      "is_atomic": true,
+      "children": []
+    },
+    {
+      "id": "3",
+      "description": "Draft the 'Generation Phase' workflow documentation, specifying how Workers access and synthesize domain-specific corpora.",
+      "dependencies": [
+        "2"
+      ],
+      "is_atomic": true,
+      "children": []
+    },
+    {
+      "id": "4",
+      "description": "Draft the 'Critique Phase' workflow documentation, detailing the Skeptic agent's criteria for identifying logical fallacies and hallucinations.",
+      "dependencies": [
+        "2"
+      ],
+      "is_atomic": true,
+      "children": []
+    },
+    {
+      "id": "5",
+      "description": "Draft the 'Synthesis Phase' workflow documentation, outlining how the Orchestrator reconciles adversarial feedback into a final revision.",
+      "dependencies": [
+        "4"
+      ],
+      "is_atomic": true,
+      "children": []
+    },
+    {
+      "id": "6",
+      "description": "Develop the evaluation framework for the Factual Fidelity Score, including the rubric for comparing outputs against ground-truth data.",
+      "dependencies": [
+        "1"
+      ],
+      "is_atomic": true,
+      "children": []
+    },
+    {
+      "id": "7",
+      "description": "Develop the Logical Coherence Index rubric for the independent blind-evaluator LLM, ensuring consistent assessment of academic rigor.",
+      "dependencies": [
+        "1"
+      ],
+      "is_atomic": true,
+      "children": []
+    },
+    {
+      "id": "8",
+      "description": "Conduct a simulated trial of the Dialectical Loop on a sample scientific research topic to identify potential communication bottlenecks.",
+      "dependencies": [
+        "3",
+        "4",
+        "5"
+      ],
+      "is_atomic": true,
+      "children": []
+    },
+    {
+      "id": "9",
+      "description": "Analyze the simulated trial results to identify potential risks of 'consensus bias' where agents overly appease the Skeptic.",
+      "dependencies": [
+        "8"
+      ],
+      "is_atomic": true,
+      "children": []
+    },
+    {
+      "id": "10",
+      "description": "Refine the system prompts for the Skeptic agent to ensure high-quality critique without suppressing creative synthesis.",
+      "dependencies": [
+        "9"
+      ],
+      "is_atomic": true,
+      "children": []
+    },
+    {
+      "id": "11",
+      "description": "Document the final architecture specifications for the Hierarchical Multi-Agent Orchestration system.",
+      "dependencies": [
+        "10"
+      ],
+      "is_atomic": true,
+      "children": []
+    },
+    {
+      "id": "12",
+      "description": "Synthesize the methodological framework into a comprehensive proposal for implementing the dialectical orchestration protocol.",
+      "dependencies": [
+        "11",
+        "6",
+        "7"
+      ],
+      "is_atomic": true,
+      "children": []
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+How can multi-agent systems with role specialization outperform single-agent approaches in automated research paper generation?

@@ -1,0 +1,112 @@
+.stage-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  transition: border-color 0.2s;
+}
+
+.stage-card[data-active="true"] {
+  border-color: var(--accent);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.card-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.card-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+}
+
+/* Stage badge */
+.stage-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stage-badge[data-status="idle"] {
+  background: var(--bg-input);
+  color: var(--text-muted);
+}
+
+.stage-badge[data-status="running"] {
+  background: rgba(88, 166, 255, 0.15);
+  color: var(--blue);
+}
+
+.stage-badge[data-status="paused"] {
+  background: rgba(210, 153, 34, 0.15);
+  color: var(--yellow);
+}
+
+.stage-badge[data-status="completed"] {
+  background: rgba(63, 185, 80, 0.15);
+  color: var(--green);
+}
+
+.stage-badge[data-status="failed"] {
+  background: rgba(248, 81, 73, 0.15);
+  color: var(--red);
+}
+
+/* Control buttons */
+.stage-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.stage-controls button {
+  flex: 1;
+  padding: 6px 0;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+
+.stage-controls button:hover:not(:disabled) {
+  background: var(--border-light);
+  color: var(--text-primary);
+}
+
+.stage-controls button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.stage-controls button[data-action="run"]:hover:not(:disabled) {
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.stage-controls button[data-action="stop"]:hover:not(:disabled) {
+  color: var(--yellow);
+  border-color: var(--yellow);
+}
+
+.stage-controls button[data-action="resume"]:hover:not(:disabled) {
+  color: var(--blue);
+  border-color: var(--blue);
+}
+
+.stage-controls button[data-action="retry"]:hover:not(:disabled) {
+  color: var(--red);
+  border-color: var(--red);
+}

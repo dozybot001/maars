@@ -1,0 +1,53 @@
+@import url('variables.css');
+@import url('layout.css');
+@import url('cards.css');
+@import url('tree.css');
+@import url('workspace.css');
+
+/* Input area */
+.input-wrapper {
+  display: flex;
+  gap: 12px;
+}
+
+#research-input {
+  flex: 1;
+  padding: 12px 16px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 15px;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+#research-input:focus {
+  border-color: var(--accent);
+}
+
+#research-input::placeholder {
+  color: var(--text-muted);
+}
+
+#start-btn {
+  padding: 12px 28px;
+  background: var(--accent);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: var(--radius);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+#start-btn:hover {
+  background: var(--accent-hover);
+}
+
+#start-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

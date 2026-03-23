@@ -1,1 +1,3 @@
-"""Unified single-round LLM layer for all MAARS agents."""
+from .client import LLMClient
+
+__all__ = ["LLMClient"]
