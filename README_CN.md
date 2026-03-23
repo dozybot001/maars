@@ -124,8 +124,6 @@ MAARS 的构建语义历史现维护在 [Intent](https://github.com/dozybot001/I
 - [行为准则](.github/CODE_OF_CONDUCT.md)
 - [安全策略](.github/SECURITY.md)
 
-GitHub 中的 Issue 和 Pull Request 模板目前使用英文。
-
 ## 许可证
 
 MIT
