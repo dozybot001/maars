@@ -1,7 +1,5 @@
 # Code of Conduct
 
-[中文](CODE_OF_CONDUCT_CN.md) | English
-
 ### Our Pledge
 
 We are committed to making participation in this project a welcoming experience for everyone, regardless of background or identity.

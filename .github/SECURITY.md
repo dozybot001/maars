@@ -1,7 +1,5 @@
 # Security Policy
 
-[中文](SECURITY_CN.md) | English
-
 ### Reporting a Vulnerability
 
 If you discover a security vulnerability, please report it responsibly:

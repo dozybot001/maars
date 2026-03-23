@@ -1,7 +1,5 @@
 # Contributing
 
-[中文](CONTRIBUTING_CN.md) | English
-
 Thank you for your interest in MAARS! Here's how to get started.
 
 ### Development Setup

@@ -120,11 +120,11 @@ MAARS 的构建语义历史现维护在 [Intent](https://github.com/dozybot001/I
 
 ## 社区
 
-- [贡献指南](.github/CONTRIBUTING_CN.md)
-- [行为准则](.github/CODE_OF_CONDUCT_CN.md)
-- [安全策略](.github/SECURITY_CN.md)
+- [贡献指南](.github/CONTRIBUTING.md)
+- [行为准则](.github/CODE_OF_CONDUCT.md)
+- [安全策略](.github/SECURITY.md)
 
-GitHub 中的 Issue 和 Pull Request 模板也已提供双语提示。
+GitHub 中的 Issue 和 Pull Request 模板目前使用英文。
 
 ## 许可证
 

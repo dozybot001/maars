@@ -124,7 +124,7 @@ The semantic history for building MAARS is maintained in the [Intent](https://gi
 - [Code of Conduct](.github/CODE_OF_CONDUCT.md)
 - [Security Policy](.github/SECURITY.md)
 
-Issues and pull requests use bilingual templates in GitHub.
+Issues and pull requests use English templates in GitHub.
 
 ## License
 
