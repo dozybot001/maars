@@ -116,7 +116,7 @@ research/20260323-210300-how-does-framing-effect-in/
 | `20260323-210300-*` | Gemini | 认知缓冲假说 — 新闻框架效应的文化调节 | 31 |
 | `20260323-223406-*` | Agent | HMAO — 对抗式多 Agent 角色专业化 | 12 |
 
-构建过程本身通过 [Intent](https://github.com/dozybot001/Intent) 语义历史记录在 `showcase/.intent/` 中 — 8 个 snap 覆盖了从架构设计到 Agent 模式接入的全过程。
+MAARS 的构建语义历史现维护在 [Intent](https://github.com/dozybot001/Intent) 的官方 showcase 中：[`showcase/maars`](https://github.com/dozybot001/Intent/tree/main/showcase/maars)。其中包含 1 个 intent、8 个 snaps、3 个 decisions，覆盖了从架构设计到 Agent 模式接入的全过程。
 
 ## 许可证
 

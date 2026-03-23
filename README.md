@@ -116,7 +116,7 @@ Two complete research runs included in `showcase/`:
 | `20260323-210300-*` | Gemini | Cognitive Buffer Hypothesis — cultural modulation of news framing | 31 |
 | `20260323-223406-*` | Agent | HMAO — adversarial multi-agent role specialization | 12 |
 
-The build process itself is documented via [Intent](https://github.com/dozybot001/Intent) semantic history in `showcase/.intent/` — 8 snaps covering the full development from architecture design to agent mode integration.
+The semantic history for building MAARS is maintained in the [Intent](https://github.com/dozybot001/Intent) official showcase: [`showcase/maars`](https://github.com/dozybot001/Intent/tree/main/showcase/maars). It captures the MAARS build as 1 intent, 8 snaps, and 3 decisions, covering the path from architecture design to agent mode integration.
 
 ## License
 
