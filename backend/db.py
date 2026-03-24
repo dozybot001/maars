@@ -88,6 +88,33 @@ class ResearchDB:
         words = text.split()[:max_words]
         return "-".join(words) if words else ""
 
+    def get_plan_json(self) -> str:
+        self._ensure_root()
+        path = self._root / "plan.json"
+        if path.exists():
+            return path.read_text(encoding="utf-8")
+        return ""
+
+    def get_plan_tree(self) -> str:
+        self._ensure_root()
+        path = self._root / "plan_tree.json"
+        if path.exists():
+            return path.read_text(encoding="utf-8")
+        return ""
+
+    def list_completed_tasks(self) -> list[dict]:
+        """List all completed task IDs and their output sizes."""
+        self._ensure_root()
+        tasks_dir = self._root / "tasks"
+        if not tasks_dir.exists():
+            return []
+        results = []
+        for f in sorted(tasks_dir.glob("*.md")):
+            task_id = f.stem
+            size = f.stat().st_size
+            results.append({"id": task_id, "size_bytes": size})
+        return results
+
     def get_refined_idea(self) -> str:
         self._ensure_root()
         path = self._root / "refined_idea.md"

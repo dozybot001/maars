@@ -1,6 +1,6 @@
 from backend.agent.base import AgentStage
 from backend.agent.execute import ExecuteAgentStage
-from backend.agent.tools import create_db_tools, create_search_tools
+from backend.agent.tools import create_db_tools, create_search_tools, create_academic_tools
 from backend.llm.gemini_client import GeminiClient
 from backend.pipeline.plan import PlanStage
 
@@ -10,12 +10,17 @@ No human is in the loop. Make all decisions autonomously.
 
 Your job: take a vague research idea and refine it into a complete, well-structured research proposal.
 
-Process:
-1. Use Google Search to explore the real research landscape — find recent papers, trends, and open questions
-2. Evaluate directions on novelty, feasibility, and impact
-3. Produce a finalized research idea with: title, research question, methodology, expected contributions
+Available tools:
+- arxiv_search: Search arXiv for real papers (use specific technical terms)
+- semantic_scholar_search: Find papers with citation counts and impact metrics
+- Google Search: Broader web search for trends and context
 
-Ground your analysis in real sources. Cite actual papers and researchers.
+Process:
+1. Search arXiv and Semantic Scholar to map the real research landscape
+2. Identify gaps, trends, and promising directions grounded in actual literature
+3. Evaluate directions on novelty, feasibility, and impact
+4. Produce a finalized research idea citing real papers and researchers
+
 Output in markdown."""
 
 _WRITE_INSTRUCTION = """\
@@ -24,15 +29,22 @@ No human is in the loop. Make all decisions autonomously.
 
 Your job: write a complete research paper based on the provided task outputs.
 
-Process:
-1. Review all completed task outputs (use the read_task_output tool)
-2. Use Google Search to verify key claims and find additional citations
-3. Design a paper structure with standard academic sections
-4. Write each section based strictly on the task outputs — do not fabricate findings
-5. Polish the final paper for coherence and academic tone
+Available tools:
+- list_tasks: See all completed task IDs and sizes
+- read_task_output: Read a specific task's output by ID
+- read_refined_idea: Get the research context from Refine stage
+- read_plan_tree: See the full task decomposition structure
+- arxiv_search / semantic_scholar_search: Find and verify citations
+- Google Search: Broader verification
 
-Use the read_refined_idea tool to get the research context.
-Output the complete paper in markdown."""
+Process:
+1. Use list_tasks to see what's available, then read_task_output for each
+2. Use read_refined_idea for research context and read_plan_tree for structure
+3. Search academic sources to verify claims and add real citations
+4. Design paper structure, write each section based on task outputs
+5. Polish for coherence and academic tone
+
+Do not fabricate findings. Output in markdown."""
 
 
 def create_agent_stages(api_key: str, model: str = "gemini-2.0-flash", db=None) -> dict:
@@ -44,6 +56,7 @@ def create_agent_stages(api_key: str, model: str = "gemini-2.0-flash", db=None) 
     """
     db_tools = create_db_tools(db) if db else []
     search_tools = create_search_tools()
+    academic_tools = create_academic_tools()
 
     plan_client = GeminiClient(api_key=api_key, model=model)
 
@@ -51,19 +64,19 @@ def create_agent_stages(api_key: str, model: str = "gemini-2.0-flash", db=None) 
         "refine": AgentStage(
             name="refine",
             instruction=_REFINE_INSTRUCTION,
-            tools=search_tools,
+            tools=search_tools + academic_tools,
             model=model,
         ),
         "plan": PlanStage(llm_client=plan_client),
         "execute": ExecuteAgentStage(
             db=db,
-            tools=db_tools + search_tools,
+            tools=db_tools + search_tools + academic_tools,
             model=model,
         ),
         "write": AgentStage(
             name="write",
             instruction=_WRITE_INSTRUCTION,
-            tools=db_tools + search_tools,
+            tools=db_tools + search_tools + academic_tools,
             model=model,
         ),
     }
