@@ -16,6 +16,7 @@ orchestrator = PipelineOrchestrator()
 if settings.llm_mode == "agent":
     from backend.agent import create_agent_stages
     stages = create_agent_stages(
+        api_key=settings.google_api_key,
         model=settings.gemini_model,
         db=orchestrator.db,
     )

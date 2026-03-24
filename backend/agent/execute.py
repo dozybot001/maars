@@ -1,7 +1,11 @@
-"""Execute stage using ADK Agent — runs each task with an independent agent."""
+"""Execute stage using ADK Agent — runs each task with an independent agent.
+
+Each task gets: execute → verify → optional retry (once).
+"""
 
 import asyncio
 import json
+import re
 
 from google.adk import Agent, Runner
 from google.adk.sessions import InMemorySessionService
@@ -11,20 +15,40 @@ from backend.db import ResearchDB
 from backend.pipeline.stage import BaseStage, StageState
 from backend.pipeline.execute import topological_batches
 
+# ---------------------------------------------------------------------------
+# Prompts
+# ---------------------------------------------------------------------------
+
 _EXECUTE_INSTRUCTION = """\
 You are a research assistant executing a specific task in a fully automated LLM pipeline (MAARS).
 No human is in the loop. Make all decisions autonomously.
 
-You have NO access to internet, databases, or code execution beyond your provided tools.
-Produce a thorough, well-structured text result based on your knowledge and reasoning.
+You have access to Google Search — use it to find real papers, data, and evidence.
+Produce a thorough, well-structured text result grounded in real sources.
 
 Be substantive — aim for depth and insight, not generic summaries.
 Use concrete examples, evidence, and analytical frameworks.
+Cite real sources where possible.
 Output in markdown."""
 
+_VERIFY_INSTRUCTION = """\
+You are a research quality reviewer. Evaluate whether a task result:
+1. Directly addresses the task requirements
+2. Provides sufficient depth and specificity (not just generic statements)
+3. Is well-structured and clearly written
+4. Contains concrete evidence, examples, or reasoning (not just assertions)
+
+Respond with ONLY a JSON object (no markdown fencing, no extra text):
+If acceptable: {"pass": true}
+If needs improvement: {"pass": false, "review": "Specific feedback on what to fix."}"""
+
+
+# ---------------------------------------------------------------------------
+# ExecuteAgentStage
+# ---------------------------------------------------------------------------
 
 class ExecuteAgentStage(BaseStage):
-    """Agent-based task execution with parallel batches."""
+    """Agent-based task execution with parallel batches and verification."""
 
     def __init__(self, name: str = "execute", db: ResearchDB | None = None,
                  tools: list = None, model: str = "gemini-2.0-flash", **kwargs):
@@ -87,53 +111,100 @@ class ExecuteAgentStage(BaseStage):
                 self._emit("error", {"message": str(e)})
             raise
 
+    # ------------------------------------------------------------------
+    # Single task lifecycle: execute → verify → retry
+    # ------------------------------------------------------------------
+
     async def _execute_task(self, task: dict, my_run_id: int) -> str:
-        """Run a single task with its own agent."""
+        """Execute → verify → optionally retry once."""
         task_id = task["id"]
+        dep_context = self._build_dep_context(task)
+        prompt = self._build_task_prompt(task, dep_context)
+
+        # --- Execute ---
         self._emit("task_state", {"task_id": task_id, "status": "running"})
+        call_id = f"Exec {task_id}"
+        self._emit("chunk", {"text": call_id, "call_id": call_id, "label": True})
 
-        # Build context from dependencies
-        dep_context = ""
-        for dep_id in task.get("dependencies", []):
-            output = self._task_results.get(dep_id, "")
-            if not output and self.db:
-                output = self.db.get_task_output(dep_id)
-            if output:
-                dep_context += f"\n### Task [{dep_id}] output:\n{output}\n"
-
-        prompt = f"## Your task [{task_id}]:\n{task['description']}"
-        if dep_context:
-            prompt = f"## Context from prerequisite tasks:\n{dep_context}\n---\n{prompt}"
-
-        # Create and run agent
         agent = Agent(
             name=f"exec_{task_id}",
             model=self._model,
             instruction=_EXECUTE_INSTRUCTION,
             tools=self._tools,
         )
+        result = await self._run_agent(agent, prompt, call_id, my_run_id)
+        if self._is_stale(my_run_id):
+            return result
 
+        # --- Verify ---
+        self._emit("task_state", {"task_id": task_id, "status": "verifying"})
+        passed, review = await self._verify_task(task, result, my_run_id)
+        if self._is_stale(my_run_id):
+            return result
+
+        if not passed:
+            # --- Retry once with feedback ---
+            self._emit("task_state", {"task_id": task_id, "status": "running"})
+            retry_prompt = (
+                f"{prompt}\n\n"
+                f"Your previous output was reviewed and needs improvement:\n\n"
+                f"{review}\n\nPlease redo the task addressing the above feedback."
+            )
+            agent = Agent(
+                name=f"retry_{task_id}",
+                model=self._model,
+                instruction=_EXECUTE_INSTRUCTION,
+                tools=self._tools,
+            )
+            result = await self._run_agent(agent, retry_prompt, call_id, my_run_id)
+
+        self._emit("task_state", {"task_id": task_id, "status": "completed"})
+
+        if self.db:
+            self.db.save_task_output(task_id, result)
+        self._task_results[task_id] = result
+        return result
+
+    async def _verify_task(self, task: dict, result: str, my_run_id: int) -> tuple[bool, str]:
+        """Run a reviewer agent to verify task output quality."""
+        reviewer = Agent(
+            name=f"verify_{task['id']}",
+            model=self._model,
+            instruction=_VERIFY_INSTRUCTION,
+        )
+        prompt = (
+            f"Task [{task['id']}]: {task['description']}\n\n"
+            f"--- Execution result ---\n{result}"
+        )
+        call_id = f"Verify {task['id']}"
+        self._emit("chunk", {"text": call_id, "call_id": call_id, "label": True})
+
+        response = await self._run_agent(reviewer, prompt, call_id, my_run_id)
+        return _parse_verification(response)
+
+    # ------------------------------------------------------------------
+    # ADK agent runner (shared helper)
+    # ------------------------------------------------------------------
+
+    async def _run_agent(self, agent: Agent, prompt: str, call_id: str, my_run_id: int) -> str:
+        """Run an ADK agent, streaming events with given call_id.
+
+        Returns the agent's final text output.
+        """
         runner = Runner(
             app_name="maars",
             agent=agent,
             session_service=InMemorySessionService(),
         )
-
         session = await runner.session_service.create_session(
             app_name="maars", user_id="maars_user",
         )
-
         message = types.Content(
             role="user",
             parts=[types.Part(text=prompt)],
         )
 
-        call_id = f"Exec {task_id}"
-        self._emit("chunk", {"text": call_id, "call_id": call_id, "label": True})
-
         final_text = ""
-        step = 0
-
         async for event in runner.run_async(
             user_id="maars_user",
             session_id=session.id,
@@ -154,13 +225,29 @@ class ExecuteAgentStage(BaseStage):
                     args_str = ", ".join(f"{k}={v}" for k, v in (fc.args or {}).items())
                     self._emit("chunk", {"text": f"\n[{fc.name}({args_str})]\n", "call_id": call_id})
 
-        self._emit("task_state", {"task_id": task_id, "status": "completed"})
-
-        if self.db:
-            self.db.save_task_output(task_id, final_text)
-        self._task_results[task_id] = final_text
-
         return final_text
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _build_dep_context(self, task: dict) -> str:
+        """Gather dependency outputs as context string."""
+        parts = []
+        for dep_id in task.get("dependencies", []):
+            output = self._task_results.get(dep_id, "")
+            if not output and self.db:
+                output = self.db.get_task_output(dep_id)
+            if output:
+                parts.append(f"### Task [{dep_id}] output:\n{output}")
+        return "\n\n".join(parts)
+
+    def _build_task_prompt(self, task: dict, dep_context: str) -> str:
+        """Build the execution prompt for a task."""
+        prompt = f"## Your task [{task['id']}]:\n{task['description']}"
+        if dep_context:
+            prompt = f"## Context from prerequisite tasks:\n{dep_context}\n---\n{prompt}"
+        return prompt
 
     def _build_final_output(self) -> str:
         parts = []
@@ -171,3 +258,24 @@ class ExecuteAgentStage(BaseStage):
     def retry(self):
         super().retry()
         self._task_results.clear()
+
+
+# ---------------------------------------------------------------------------
+# Verification JSON parser
+# ---------------------------------------------------------------------------
+
+def _parse_verification(response: str) -> tuple[bool, str]:
+    """Parse verification JSON response. Falls back to pass on parse failure."""
+    text = response.strip()
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+        if match:
+            try:
+                data = json.loads(match.group(1).strip())
+            except json.JSONDecodeError:
+                return True, ""
+        else:
+            return True, ""
+    return data.get("pass", True), data.get("review", "")

@@ -2,138 +2,103 @@
 
 [中文](README_CN.md) | English
 
-**Multi-Agent Automated Research System** — From a single idea to a complete research paper, fully automated.
+**Multi-Agent Automated Research System** — From one idea to a full research paper, fully automated.
 
-## What it does
-
-You type a research idea. MAARS runs a 4-stage pipeline and produces a structured paper:
-
-```
-Idea → Refine → Plan → Execute → Write → Paper
+```mermaid
+flowchart LR
+    I[Idea] --> R["Refine\n3 rounds"] --> P["Plan\nrecursive DAG"] --> X["Execute\nparallel + verify"] --> W["Write\noutline → polish"] --> O[Paper]
 ```
 
-Each stage is powered by LLM calls or autonomous agents. The system decomposes your idea into atomic tasks, executes them (with dependency-aware parallelism and verification), and synthesizes the results into an academic paper.
+## Modes
 
-## Three modes
-
-| Mode | How it works | When to use |
-|------|-------------|-------------|
-| **Mock** | Replays recorded LLM outputs | Development, UI testing |
-| **Gemini** | Direct Google Gemini API calls | Fast, structured LLM pipeline |
-| **Agent** | Google ADK agents with ReAct loops | Autonomous reasoning with tool use |
-
-Switch with one line in `.env`:
+`.env` one-line switch:
 
 ```env
 MAARS_LLM_MODE=mock      # or gemini, or agent
 MAARS_GOOGLE_API_KEY=your-key
 ```
 
+| Stage | Gemini | Agent |
+|-------|--------|-------|
+| **Refine** | 3-round LLM: Explore → Evaluate → Crystallize | ADK Agent + Google Search |
+| **Plan** | Recursive decomposition → atomic task DAG (depth 3, batch-parallel) | **Same LLM recursive engine** — not an agent task |
+| **Execute** | Topo sort → parallel batches → verify → retry | ADK Agent per task + Google Search → verify → retry |
+| **Write** | Outline → section-by-section → polish | ADK Agent + DB tools + Google Search |
+
+> **Why does Agent Plan use the LLM pipeline?** Each decomposition step is a structured JSON judgment (atomic? → yes / no + subtasks). Deterministic LLM calls are faster and more reliable than ReAct loops for this.
+
+Mock mode replays recorded outputs at all stages — for development and UI testing.
+
 ## Architecture
 
 ```mermaid
 flowchart LR
-    subgraph FE["Frontend (Vanilla JS)"]
-        UI["Input + stage controls"]
+    subgraph FE["Frontend · Vanilla JS"]
+        UI["Input + controls"]
         LOG["LLM Output Log"]
         PROC["Process & Output"]
     end
 
-    subgraph BE["Backend (FastAPI)"]
-        ROUTES["routes/<br/>pipeline.py + events.py"]
-        ORCH["pipeline/orchestrator.py<br/>4-stage coordinator"]
-        STAGES["pipeline/<br/>stage.py + refine/plan/execute/write"]
-        LLM["llm/<br/>LLMClient interface"]
-        MODES["mode assembly<br/>mock / gemini / agent"]
-        DB["db.py<br/>file-based research DB"]
+    subgraph BE["Backend · FastAPI"]
+        ROUTES["routes/"]
+        ORCH["orchestrator"]
+        STAGES["pipeline stages"]
+        LLM["LLMClient"]
+        MODES["mock / gemini / agent"]
+        DB["file DB"]
     end
 
-    UI --> ROUTES
-    ROUTES --> ORCH
-    ORCH --> STAGES
+    UI --> ROUTES --> ORCH --> STAGES
     STAGES --> LLM
-    MODES -. injects concrete clients or agent stages .-> STAGES
+    MODES -."injects".-> STAGES
     STAGES --> DB
-    ORCH -. SSE events .-> LOG
-    ORCH -. trees, status, outputs .-> PROC
+    ORCH -."SSE".-> LOG
+    ORCH -."SSE".-> PROC
 ```
 
-**Key design decisions:**
-- **`llm/` → `pipeline/` → `mode/`**: three-layer decoupling. Pipeline never knows which mode is active.
-- **Unified `call_id` streaming**: every LLM call (sequential or parallel) emits tagged chunks. Frontend routes by `call_id`.
-- **String in, string out**: stages communicate via `stage.output`. No shared memory needed.
-
-## Pipeline stages
-
-### Refine
-3 rounds: **Explore** → **Evaluate** → **Crystallize**. Turns a vague idea into a structured research proposal.
-
-### Plan
-Recursive decomposition into atomic tasks with a dependency DAG. Parallel batch processing. Depth-limited (default 3). Dependency resolution via inherit + expand algorithm.
-
-### Execute
-Topological sort → parallel batch execution → verification → optional retry. Each task result stored in file DB. Dependency outputs injected as context.
-
-### Write
-Outline → section-by-section writing → polish. Each section only receives its relevant task outputs, keeping prompts focused.
+| Principle | Detail |
+|-----------|--------|
+| Three-layer decoupling | `llm/` → `pipeline/` → `mode/` — pipeline never knows which mode is active |
+| Unified streaming | Every LLM call emits `call_id`-tagged chunks; frontend routes by `call_id` |
+| String in, string out | Stages communicate via `stage.output` — no shared memory |
 
 ## Quick start
 
 ```bash
-git clone https://github.com/dozybot001/MAARS.git
-cd MAARS
+git clone https://github.com/dozybot001/MAARS.git && cd MAARS
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-
-# Configure
 cp .env.example .env  # add your API key
-
-# Run
 uvicorn backend.main:app --host 0.0.0.0 --port 8000
 # Open http://localhost:8000
 ```
 
-## Frontend
+## Output
 
-Dual-panel workspace:
-- **Left**: LLM Output Log — streaming output with collapsible stage sections
-- **Right**: Process & Output — decomposition tree, execution progress, file icons for refined idea and paper
-
-No build step. Vanilla HTML/CSS/JS with ES modules.
-
-## File DB
-
-Each research run creates a timestamped folder:
+Each run creates a timestamped folder:
 
 ```
-research/20260323-210300-how-does-framing-effect-in/
-├── idea.md              # Original input
-├── refined_idea.md      # Refine output
-├── plan.json            # Flat atomic task list
-├── plan_tree.json       # Full decomposition tree
-├── paper.md             # Final paper
-└── tasks/
-    ├── 1_1.md           # Individual task outputs
-    ├── 1_2.md
-    └── ...
+research/{timestamp}-{slug}/
+├── idea.md           # Input
+├── refined_idea.md   # Refine output
+├── plan.json         # Flat atomic task list
+├── plan_tree.json    # Decomposition tree
+├── paper.md          # Final paper
+└── tasks/            # Individual task outputs
 ```
 
 ## Showcase
-
-Two complete research runs included in `showcase/`:
 
 | Run | Mode | Topic | Tasks |
 |-----|------|-------|-------|
 | `20260323-210300-*` | Gemini | Cognitive Buffer Hypothesis — cultural modulation of news framing | 31 |
 | `20260323-223406-*` | Agent | HMAO — adversarial multi-agent role specialization | 12 |
 
-The semantic history for building MAARS is maintained in the [Intent](https://github.com/dozybot001/Intent) official showcase: [`showcase/maars`](https://github.com/dozybot001/Intent/tree/main/showcase/maars). It captures the MAARS build as 1 intent, 8 snaps, and 3 decisions, covering the path from architecture design to agent mode integration.
+Build history: [Intent showcase/maars](https://github.com/dozybot001/Intent/tree/main/showcase/maars)
 
 ## Community
 
-- [Contributing](.github/CONTRIBUTING.md)
-- [Code of Conduct](.github/CODE_OF_CONDUCT.md)
-- [Security Policy](.github/SECURITY.md)
+[Contributing](.github/CONTRIBUTING.md) · [Code of Conduct](.github/CODE_OF_CONDUCT.md) · [Security](.github/SECURITY.md)
 
 ## License
 

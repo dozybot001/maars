@@ -4,23 +4,12 @@
 
 **多智能体自动化研究系统** — 从一个想法到一篇完整论文，全自动。
 
-## 它做什么
-
-输入一个研究想法，MAARS 通过 4 阶段管线自动生成结构化论文：
-
-```
-想法 → 精炼 → 规划 → 执行 → 写作 → 论文
+```mermaid
+flowchart LR
+    I[想法] --> R["精炼\n3 轮"] --> P["规划\n递归 DAG"] --> X["执行\n并行 + 验证"] --> W["写作\n大纲 → 润色"] --> O[论文]
 ```
 
-每个阶段由 LLM 调用或自主 Agent 驱动。系统将想法分解为原子任务，按依赖关系并行执行（含验证），最终综合为学术论文。
-
-## 三种模式
-
-| 模式 | 工作方式 | 适用场景 |
-|------|---------|---------|
-| **Mock** | 回放录制的 LLM 输出 | 开发、UI 测试 |
-| **Gemini** | 直接调用 Google Gemini API | 快速、结构化的 LLM 管线 |
-| **Agent** | Google ADK Agent + ReAct 循环 | 自主推理 + 工具调用 |
+## 模式
 
 `.env` 一行切换：
 
@@ -29,111 +18,87 @@ MAARS_LLM_MODE=mock      # 或 gemini，或 agent
 MAARS_GOOGLE_API_KEY=your-key
 ```
 
+| 阶段 | Gemini | Agent |
+|------|--------|-------|
+| **精炼** | 3 轮 LLM：探索 → 评估 → 结晶 | ADK Agent + Google Search |
+| **规划** | 递归分解 → 原子任务 DAG（深度 3，批量并行） | **复用 LLM 递归引擎** — 结构化操作，非推理任务 |
+| **执行** | 拓扑排序 → 并行批次 → 验证 → 重试 | ADK Agent 逐任务 + Google Search → 验证 → 重试 |
+| **写作** | 大纲 → 逐章节 → 润色 | ADK Agent + DB 工具 + Google Search |
+
+> **为什么 Agent 规划用 LLM 管线？** 每步分解是结构化 JSON 判断（是否原子 → 是 / 否 + 子任务）。确定性 LLM 调用比 ReAct 循环更快更稳定。
+
+Mock 模式在所有阶段回放录制输出 — 用于开发和 UI 测试。
+
 ## 架构
 
 ```mermaid
 flowchart LR
-    subgraph FE["前端 (Vanilla JS)"]
-        UI["输入框 + 阶段控制"]
+    subgraph FE["前端 · Vanilla JS"]
+        UI["输入 + 控制"]
         LOG["LLM 输出日志"]
         PROC["过程与产出"]
     end
 
-    subgraph BE["后端 (FastAPI)"]
-        ROUTES["routes/<br/>pipeline.py + events.py"]
-        ORCH["pipeline/orchestrator.py<br/>四阶段调度器"]
-        STAGES["pipeline/<br/>stage.py + refine/plan/execute/write"]
-        LLM["llm/<br/>LLMClient 接口层"]
-        MODES["模式装配层<br/>mock / gemini / agent"]
-        DB["db.py<br/>文件型研究数据库"]
+    subgraph BE["后端 · FastAPI"]
+        ROUTES["routes/"]
+        ORCH["orchestrator"]
+        STAGES["pipeline stages"]
+        LLM["LLMClient"]
+        MODES["mock / gemini / agent"]
+        DB["文件 DB"]
     end
 
-    UI --> ROUTES
-    ROUTES --> ORCH
-    ORCH --> STAGES
+    UI --> ROUTES --> ORCH --> STAGES
     STAGES --> LLM
-    MODES -. 注入具体 client 或 Agent stage .-> STAGES
+    MODES -."注入".-> STAGES
     STAGES --> DB
-    ORCH -. SSE 事件流 .-> LOG
-    ORCH -. 树、状态、产物 .-> PROC
+    ORCH -."SSE".-> LOG
+    ORCH -."SSE".-> PROC
 ```
 
-**核心设计决策：**
-- **`llm/` → `pipeline/` → `mode/`**：三层解耦，管线层完全不知道当前运行哪种模式
-- **统一 `call_id` 流式模型**：每次 LLM 调用（顺序或并行）发射带标记的 chunk，前端按 `call_id` 路由
-- **字符串进，字符串出**：阶段间通过 `stage.output` 传递，无需共享记忆
-
-## 管线阶段
-
-### 精炼 (Refine)
-3 轮：**探索** → **评估** → **结晶**。将模糊想法转化为结构化研究提案。
-
-### 规划 (Plan)
-递归分解为原子任务 + 依赖 DAG。并行批次处理。深度限制（默认 3 层）。依赖解析采用继承 + 展开算法。
-
-### 执行 (Execute)
-拓扑排序 → 并行批次执行 → 验证 → 可选重试。每个任务结果存入文件 DB。依赖任务的输出作为上下文注入。
-
-### 写作 (Write)
-大纲 → 逐章节写作 → 润色。每个章节只接收相关任务输出，保持 prompt 聚焦。
+| 原则 | 细节 |
+|------|------|
+| 三层解耦 | `llm/` → `pipeline/` → `mode/` — 管线层不知道当前模式 |
+| 统一流式 | 每次 LLM 调用发射带 `call_id` 标记的 chunk；前端按 `call_id` 路由 |
+| 字符串进出 | 阶段间通过 `stage.output` 传递，无共享内存 |
 
 ## 快速开始
 
 ```bash
-git clone https://github.com/dozybot001/MAARS.git
-cd MAARS
+git clone https://github.com/dozybot001/MAARS.git && cd MAARS
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-
-# 配置
-cp .env.example .env  # 填入你的 API key
-
-# 运行
+cp .env.example .env  # 填入 API key
 uvicorn backend.main:app --host 0.0.0.0 --port 8000
 # 打开 http://localhost:8000
 ```
 
-## 前端
+## 产出
 
-双栏工作区：
-- **左侧**：LLM 输出日志 — 流式输出，阶段可折叠
-- **右侧**：过程与产出 — 分解树、执行进度、精炼想法和论文的文件图标
-
-零构建步骤。纯 HTML/CSS/JS + ES Modules。
-
-## 文件 DB
-
-每次研究运行创建带时间戳的文件夹：
+每次运行创建带时间戳的文件夹：
 
 ```
-research/20260323-210300-how-does-framing-effect-in/
-├── idea.md              # 原始输入
-├── refined_idea.md      # 精炼输出
-├── plan.json            # 扁平原子任务列表
-├── plan_tree.json       # 完整分解树
-├── paper.md             # 最终论文
-└── tasks/
-    ├── 1_1.md           # 各任务输出
-    ├── 1_2.md
-    └── ...
+research/{timestamp}-{slug}/
+├── idea.md           # 输入
+├── refined_idea.md   # 精炼输出
+├── plan.json         # 扁平原子任务列表
+├── plan_tree.json    # 分解树
+├── paper.md          # 最终论文
+└── tasks/            # 各任务输出
 ```
 
 ## 展示
-
-`showcase/` 中包含两次完整的研究运行：
 
 | 运行 | 模式 | 主题 | 任务数 |
 |------|------|------|-------|
 | `20260323-210300-*` | Gemini | 认知缓冲假说 — 新闻框架效应的文化调节 | 31 |
 | `20260323-223406-*` | Agent | HMAO — 对抗式多 Agent 角色专业化 | 12 |
 
-MAARS 的构建语义历史现维护在 [Intent](https://github.com/dozybot001/Intent) 的官方 showcase 中：[`showcase/maars`](https://github.com/dozybot001/Intent/tree/main/showcase/maars)。其中包含 1 个 intent、8 个 snaps、3 个 decisions，覆盖了从架构设计到 Agent 模式接入的全过程。
+构建历史：[Intent showcase/maars](https://github.com/dozybot001/Intent/tree/main/showcase/maars)
 
 ## 社区
 
-- [贡献指南](.github/CONTRIBUTING.md)
-- [行为准则](.github/CODE_OF_CONDUCT.md)
-- [安全策略](.github/SECURITY.md)
+[贡献指南](.github/CONTRIBUTING.md) · [行为准则](.github/CODE_OF_CONDUCT.md) · [安全策略](.github/SECURITY.md)
 
 ## 许可证
 
