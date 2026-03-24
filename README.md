@@ -31,20 +31,31 @@ MAARS_GOOGLE_API_KEY=your-key
 
 ## Architecture
 
-```
-Frontend (Vanilla JS)          Backend (FastAPI)
-┌─────────────────────┐       ┌──────────────────────────────┐
-│ Input + 4 Stage Cards│       │ pipeline/                    │
-│ LLM Output Log (L)  │◄─SSE──│   stage.py    (BaseStage)    │
-│ Process & Output (R) │       │   orchestrator.py            │
-└─────────────────────┘       │   refine.py / plan.py        │
-                               │   execute.py / write.py      │
-                               ├──────────────────────────────┤
-                               │ llm/          (LLMClient ABC)│
-                               ├──────────────────────────────┤
-                               │ mock/    gemini/    agent/    │
-                               │ (modes — swap via config)     │
-                               └──────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph FE["Frontend (Vanilla JS)"]
+        UI["Input + stage controls"]
+        LOG["LLM Output Log"]
+        PROC["Process & Output"]
+    end
+
+    subgraph BE["Backend (FastAPI)"]
+        ROUTES["routes/<br/>pipeline.py + events.py"]
+        ORCH["pipeline/orchestrator.py<br/>4-stage coordinator"]
+        STAGES["pipeline/<br/>stage.py + refine/plan/execute/write"]
+        LLM["llm/<br/>LLMClient interface"]
+        MODES["mode assembly<br/>mock / gemini / agent"]
+        DB["db.py<br/>file-based research DB"]
+    end
+
+    UI --> ROUTES
+    ROUTES --> ORCH
+    ORCH --> STAGES
+    STAGES --> LLM
+    MODES -. injects concrete clients or agent stages .-> STAGES
+    STAGES --> DB
+    ORCH -. SSE events .-> LOG
+    ORCH -. trees, status, outputs .-> PROC
 ```
 
 **Key design decisions:**

@@ -31,20 +31,31 @@ MAARS_GOOGLE_API_KEY=your-key
 
 ## 架构
 
-```
-前端 (Vanilla JS)               后端 (FastAPI)
-┌─────────────────────┐       ┌──────────────────────────────┐
-│ 输入框 + 4 阶段卡片   │       │ pipeline/                    │
-│ LLM 输出日志 (左)     │◄─SSE──│   stage.py    (BaseStage)    │
-│ 过程与产出 (右)       │       │   orchestrator.py            │
-└─────────────────────┘       │   refine.py / plan.py        │
-                               │   execute.py / write.py      │
-                               ├──────────────────────────────┤
-                               │ llm/          (LLMClient ABC)│
-                               ├──────────────────────────────┤
-                               │ mock/    gemini/    agent/    │
-                               │ (模式层 — 配置切换)            │
-                               └──────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph FE["前端 (Vanilla JS)"]
+        UI["输入框 + 阶段控制"]
+        LOG["LLM 输出日志"]
+        PROC["过程与产出"]
+    end
+
+    subgraph BE["后端 (FastAPI)"]
+        ROUTES["routes/<br/>pipeline.py + events.py"]
+        ORCH["pipeline/orchestrator.py<br/>四阶段调度器"]
+        STAGES["pipeline/<br/>stage.py + refine/plan/execute/write"]
+        LLM["llm/<br/>LLMClient 接口层"]
+        MODES["模式装配层<br/>mock / gemini / agent"]
+        DB["db.py<br/>文件型研究数据库"]
+    end
+
+    UI --> ROUTES
+    ROUTES --> ORCH
+    ORCH --> STAGES
+    STAGES --> LLM
+    MODES -. 注入具体 client 或 Agent stage .-> STAGES
+    STAGES --> DB
+    ORCH -. SSE 事件流 .-> LOG
+    ORCH -. 树、状态、产物 .-> PROC
 ```
 
 **核心设计决策：**
