@@ -19,11 +19,12 @@ class AgentStage(BaseStage):
     """
 
     def __init__(self, name: str, instruction: str, tools: list = None,
-                 model: str = "gemini-2.0-flash", **kwargs):
+                 model: str = "gemini-2.0-flash", code_executor=None, **kwargs):
         super().__init__(name=name, **kwargs)
         self._instruction = instruction
         self._tools = tools or []
         self._model = model
+        self._code_executor = code_executor
 
     def _create_agent(self) -> Agent:
         """Create a fresh ADK Agent. Called at the start of each run."""
@@ -32,6 +33,7 @@ class AgentStage(BaseStage):
             model=self._model,
             instruction=self._instruction,
             tools=self._tools,
+            code_executor=self._code_executor,
         )
 
     async def run(self, input_text: str) -> str:

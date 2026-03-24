@@ -51,11 +51,13 @@ class ExecuteAgentStage(BaseStage):
     """Agent-based task execution with parallel batches and verification."""
 
     def __init__(self, name: str = "execute", db: ResearchDB | None = None,
-                 tools: list = None, model: str = "gemini-2.0-flash", **kwargs):
+                 tools: list = None, model: str = "gemini-2.0-flash",
+                 code_executor=None, **kwargs):
         super().__init__(name=name, **kwargs)
         self.db = db
         self._tools = tools or []
         self._model = model
+        self._code_executor = code_executor
         self._task_results: dict[str, str] = {}
 
     async def run(self, input_text: str) -> str:
@@ -131,6 +133,7 @@ class ExecuteAgentStage(BaseStage):
             model=self._model,
             instruction=_EXECUTE_INSTRUCTION,
             tools=self._tools,
+            code_executor=self._code_executor,
         )
         result = await self._run_agent(agent, prompt, call_id, my_run_id)
         if self._is_stale(my_run_id):
@@ -155,6 +158,7 @@ class ExecuteAgentStage(BaseStage):
                 model=self._model,
                 instruction=_EXECUTE_INSTRUCTION,
                 tools=self._tools,
+                code_executor=self._code_executor,
             )
             result = await self._run_agent(agent, retry_prompt, call_id, my_run_id)
 

@@ -3,3 +3,5 @@ uvicorn[standard]>=0.32.0
 pydantic-settings>=2.0.0
 google-genai>=1.0.0
 google-adk>=1.0.0
+arxiv-mcp-server>=0.3.0
+mcp-server-fetch>=2025.1.0
