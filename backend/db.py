@@ -115,6 +115,13 @@ class ResearchDB:
             results.append({"id": task_id, "size_bytes": size})
         return results
 
+    def get_artifacts_dir(self) -> Path:
+        """Return the artifacts directory, creating it if needed."""
+        self._ensure_root()
+        artifacts = self._root / "artifacts"
+        artifacts.mkdir(exist_ok=True)
+        return artifacts
+
     def get_refined_idea(self) -> str:
         self._ensure_root()
         path = self._root / "refined_idea.md"

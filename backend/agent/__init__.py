@@ -1,6 +1,9 @@
 from backend.agent.base import AgentStage
 from backend.agent.execute import ExecuteAgentStage
-from backend.agent.tools import create_db_tools, create_arxiv_toolset, create_fetch_toolset
+from backend.agent.tools import (
+    create_db_tools, create_docker_tools,
+    create_arxiv_toolset, create_fetch_toolset,
+)
 from backend.llm.gemini_client import GeminiClient
 from backend.pipeline.plan import PlanStage
 
@@ -55,14 +58,17 @@ Available tools:
 - search / download / read_paper: Find and read arXiv papers for citations
 - fetch: Retrieve content from any URL for verification
 - Google Search: Broader verification
-- Code execution: You can write and run Python code for analysis
+- code_execute: Run Python in Docker — use for formal experiments, outputs persist as paper artifacts
+- list_artifacts: See all experiment scripts and outputs produced so far
+- Code execution (built-in): Quick calculations and data analysis
 
 Process:
 1. Use list_tasks to see what's available, then read_task_output for each
 2. Use read_refined_idea for research context and read_plan_tree for structure
 3. Search arXiv to verify claims and add real citations
-4. Design paper structure, write each section based on task outputs
-5. Polish for coherence and academic tone
+4. Use list_artifacts to reference experiment outputs in the paper
+5. Design paper structure, write each section based on task outputs
+6. Polish for coherence and academic tone
 
 Do not fabricate findings. Output in markdown."""
 
@@ -73,9 +79,10 @@ def create_agent_stages(api_key: str, model: str = "gemini-2.0-flash", db=None) 
     Uses:
     - ADK built-in: google_search, url_context, BuiltInCodeExecutor
     - MCP servers: arXiv, fetch
-    - Custom: DB tools (internal data access)
+    - Custom: DB tools, Docker tools
     """
     db_tools = create_db_tools(db) if db else []
+    docker_tools = create_docker_tools(db) if db else []
     arxiv_toolset = create_arxiv_toolset()
     fetch_toolset = create_fetch_toolset()
 
@@ -94,14 +101,14 @@ def create_agent_stages(api_key: str, model: str = "gemini-2.0-flash", db=None) 
         "plan": PlanStage(llm_client=plan_client),
         "execute": ExecuteAgentStage(
             db=db,
-            tools=db_tools + research_tools,
+            tools=db_tools + docker_tools + research_tools,
             model=model,
             code_executor=_code_executor,
         ),
         "write": AgentStage(
             name="write",
             instruction=_WRITE_INSTRUCTION,
-            tools=db_tools + research_tools,
+            tools=db_tools + docker_tools + research_tools,
             model=model,
             code_executor=_code_executor,
         ),

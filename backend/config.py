@@ -8,6 +8,13 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.0-flash"
     mock_chunk_delay: float = 0.08  # seconds between mock chunks
 
+    # Docker sandbox
+    docker_sandbox_image: str = "maars-sandbox:latest"
+    docker_sandbox_timeout: int = 120  # seconds
+    docker_sandbox_memory: str = "512m"
+    docker_sandbox_cpu: float = 1.0
+    docker_sandbox_network: bool = False
+
     class Config:
         env_prefix = "MAARS_"
         env_file = ".env"
