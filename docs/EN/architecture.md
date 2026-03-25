@@ -161,8 +161,7 @@ research/{id}/
 ├── plan_tree.json       (UI + Write)    ← Plan writes
 ├── tasks/*.md           Write reads     ← Execute writes
 ├── artifacts/           Write refs      ← Execute/Docker writes
-├── paper.md                             ← Write writes
-└── reasoning.log                        ← Frontend saves
+└── paper.md                             ← Write writes
 ```
 
 ## Stage Control: Stop / Resume / Retry

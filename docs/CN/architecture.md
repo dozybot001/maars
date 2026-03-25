@@ -161,8 +161,7 @@ research/{id}/
 ├── plan_tree.json       (UI + Write)   ← Plan 写入
 ├── tasks/*.md           Write 读取     ← Execute 写入
 ├── artifacts/           Write 引用     ← Execute/Docker 写入
-├── paper.md                            ← Write 写入
-└── reasoning.log                       ← 前端保存
+└── paper.md                            ← Write 写入
 ```
 
 ## 阶段控制：Stop / Resume / Retry

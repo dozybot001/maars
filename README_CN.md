@@ -103,7 +103,6 @@ research/{timestamp}-{slug}/
 ├── tasks/            # 各任务输出
 ├── artifacts/        # 代码脚本 + 实验产出（Agent 模式）
 ├── paper.md          # 最终论文
-├── reasoning.log     # 完整执行日志
 ├── Dockerfile.experiment  # 自动生成的 Docker 复现文件
 ├── run.sh            # 实验运行脚本
 └── docker-compose.yml

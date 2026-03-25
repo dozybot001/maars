@@ -103,7 +103,6 @@ research/{timestamp}-{slug}/
 ├── tasks/            # Individual task outputs
 ├── artifacts/        # Code scripts + experiment outputs (Agent mode)
 ├── paper.md          # Final paper
-├── reasoning.log     # Full execution log
 ├── Dockerfile.experiment  # Auto-generated Docker reproduction
 ├── run.sh            # Experiment runner script
 └── docker-compose.yml

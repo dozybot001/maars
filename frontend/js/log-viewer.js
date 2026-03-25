@@ -42,11 +42,6 @@ export function initLogViewer() {
   });
 
   on('stage:state', ({ stage, data }) => {
-    // Auto-save log when pipeline finishes or a stage fails
-    if ((stage === 'write' && data === 'completed') || data === 'failed') {
-      saveLogToDisk();
-    }
-
     if (data === 'idle') {
       logOutput.innerHTML = '';
       activeStage = null;
@@ -160,14 +155,4 @@ function updateTokenBadge() {
     ? `${(totalTokens / 1000).toFixed(1)}k tokens`
     : `${totalTokens} tokens`;
   tokenBadge.textContent = display;
-}
-
-function saveLogToDisk() {
-  const text = logOutput.innerText;
-  if (!text.trim()) return;
-  fetch('/api/pipeline/save-log', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content: text }),
-  }).catch(() => {});
 }
