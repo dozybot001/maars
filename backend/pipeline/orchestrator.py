@@ -140,14 +140,38 @@ class PipelineOrchestrator:
         task = asyncio.create_task(self.run_stage(stage_name))
         self._tasks[stage_name] = task
 
-    def stop_stage(self, stage_name: str):
+    async def stop_stage(self, stage_name: str):
+        """Stop a running stage by cancelling its task.
+
+        Sets state to PAUSED so the user can resume (checkpoint restart)
+        or retry (clean restart).
+        """
         stage = self.stages[stage_name]
+        if stage.state != StageState.RUNNING:
+            return
         if stage.llm_client:
             stage.llm_client.request_stop()
-        stage.stop()
+        # Invalidate current run so CancelledError handler won't change state
+        stage._run_id += 1
+        await self._cancel_task(stage_name)
+        await self._cancel_task("pipeline")
+        stage.state = StageState.PAUSED
+        stage._pause_event.set()
+        stage._emit("state", stage.state.value)
 
-    def resume_stage(self, stage_name: str):
-        self.stages[stage_name].resume()
+    async def resume_stage(self, stage_name: str):
+        """Resume a paused stage by restarting its run.
+
+        Execute stage loads checkpoint from DB and skips completed tasks.
+        Other stages restart from scratch (resume ≡ retry for single-session stages).
+        """
+        stage = self.stages[stage_name]
+        if stage.state != StageState.PAUSED:
+            return
+        stage.output = ""
+        stage.rounds = []
+        task = asyncio.create_task(self.run_stage(stage_name))
+        self._tasks[stage_name] = task
 
     async def retry_stage(self, stage_name: str):
         """Reset and re-run a stage from scratch.

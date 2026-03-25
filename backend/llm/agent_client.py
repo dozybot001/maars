@@ -116,6 +116,18 @@ class AgentClient(LLMClient):
             if self._stop_requested:
                 break
 
+            # Broadcast real token usage when available
+            if event.usage_metadata:
+                self._broadcast({
+                    "stage": "_agent",
+                    "type": "tokens",
+                    "data": {
+                        "input": event.usage_metadata.prompt_token_count or 0,
+                        "output": event.usage_metadata.candidates_token_count or 0,
+                        "total": event.usage_metadata.total_token_count or 0,
+                    },
+                })
+
             # --- Think ---
             if event.content and event.content.parts:
                 for part in event.content.parts:

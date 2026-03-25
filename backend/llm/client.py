@@ -18,6 +18,10 @@ class LLMClient(ABC):
         """Yield text chunks from the LLM response."""
         ...
 
+    def set_broadcast(self, fn):
+        """Inject the SSE broadcast callback (called by orchestrator)."""
+        pass
+
     def request_stop(self):
         """Signal the client to stop after the current in-flight event.
         Default no-op. AgentClient overrides to break the ReAct loop."""

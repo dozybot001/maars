@@ -123,6 +123,14 @@ class ResearchDB:
             results.append({"id": task_id, "size_bytes": size})
         return results
 
+    def clear_tasks(self):
+        """Delete all task output files for clean retry."""
+        self._ensure_root()
+        tasks_dir = self._root / "tasks"
+        if tasks_dir.exists():
+            for f in tasks_dir.glob("*.md"):
+                f.unlink()
+
     def get_root(self) -> Path:
         """Return the session root directory."""
         self._ensure_root()

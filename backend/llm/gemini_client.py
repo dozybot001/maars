@@ -20,6 +20,10 @@ class GeminiClient(LLMClient):
         self._client = genai.Client(api_key=api_key)
         self._model = model
         self._instruction = instruction
+        self._broadcast = lambda event: None
+
+    def set_broadcast(self, fn):
+        self._broadcast = fn
 
     async def stream(self, messages: list[dict]) -> AsyncIterator[str]:
         # Client's own instruction takes priority; fall back to
@@ -52,6 +56,21 @@ class GeminiClient(LLMClient):
             config=config,
         )
 
+        usage = None
         async for chunk in response:
             if chunk.text:
                 yield chunk.text
+            if chunk.usage_metadata:
+                usage = chunk.usage_metadata
+
+        if usage:
+            self._broadcast({
+                "stage": "_llm",
+                "type": "tokens",
+                "data": {
+                    "input": usage.prompt_token_count or 0,
+                    "output": getattr(usage, 'candidates_token_count', None)
+                             or getattr(usage, 'response_token_count', None) or 0,
+                    "total": usage.total_token_count or 0,
+                },
+            })

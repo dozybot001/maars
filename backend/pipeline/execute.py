@@ -141,7 +141,10 @@ class ExecuteStage(BaseStage):
         self.state = StageState.RUNNING
         self._emit("state", self.state.value)
         self.output = ""
+
+        # Checkpoint: load previously completed tasks from DB
         self._task_results = {}
+        self._load_checkpoint()
 
         try:
             tasks = json.loads(self.load_input())
@@ -163,10 +166,18 @@ class ExecuteStage(BaseStage):
                 if self._is_stale(my_run_id):
                     return self.output
 
-                coros = [self._execute_task(task, my_run_id) for task in batch]
+                # Checkpoint resume: skip already-completed tasks
+                pending = [t for t in batch if t["id"] not in self._task_results]
+                for t in batch:
+                    if t["id"] in self._task_results:
+                        self._emit("task_state", {"task_id": t["id"], "status": "completed"})
+                if not pending:
+                    continue
+
+                coros = [self._execute_task(task, my_run_id) for task in pending]
                 results = await asyncio.gather(*coros, return_exceptions=True)
 
-                for task, result in zip(batch, results):
+                for task, result in zip(pending, results):
                     if self._is_stale(my_run_id):
                         return self.output
                     if isinstance(result, Exception):
@@ -291,6 +302,19 @@ class ExecuteStage(BaseStage):
             parts.append(f"## Task [{task_id}]\n\n{self._task_results[task_id]}")
         return "\n\n---\n\n".join(parts)
 
+    def _load_checkpoint(self):
+        """Load completed task outputs from DB for checkpoint resume."""
+        if not self.db:
+            return
+        for info in self.db.list_completed_tasks():
+            task_id = info["id"]
+            output = self.db.get_task_output(task_id)
+            if output:
+                self._task_results[task_id] = output
+
     def retry(self):
         super().retry()
         self._task_results.clear()
+        # Clear DB task files for clean restart
+        if self.db:
+            self.db.clear_tasks()

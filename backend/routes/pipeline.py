@@ -62,7 +62,7 @@ async def run_stage(stage_name: str, request: Request):
 async def stop_stage(stage_name: str, request: Request):
     _validate_stage(stage_name)
     orch = _get_orchestrator(request)
-    orch.stop_stage(stage_name)
+    await orch.stop_stage(stage_name)
     return ActionResponse(
         stage=stage_name,
         state=orch.stages[stage_name].state.value,
@@ -74,7 +74,7 @@ async def stop_stage(stage_name: str, request: Request):
 async def resume_stage(stage_name: str, request: Request):
     _validate_stage(stage_name)
     orch = _get_orchestrator(request)
-    orch.resume_stage(stage_name)
+    await orch.resume_stage(stage_name)
     return ActionResponse(
         stage=stage_name,
         state=orch.stages[stage_name].state.value,
