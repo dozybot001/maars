@@ -1,1 +1,0 @@
-How does framing effect in news headlines influence reader perception across different cultures?

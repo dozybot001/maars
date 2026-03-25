@@ -1,0 +1,5 @@
+Solver,Success,Time (s),nfev,njev,nlu,Status,t_final,Steps
+RK45,True,0.14368700981140137,49718,0,0,The solver successfully reached the end of the integration interval.,10.0,7089
+Radau,True,0.027911901473999023,2875,78,384,The solver successfully reached the end of the integration interval.,100000000000.0,372
+BDF,True,0.02629399299621582,1826,17,131,The solver successfully reached the end of the integration interval.,100000000000.0,650
+LSODA,True,0.0027947425842285156,1186,125,125,The solver successfully reached the end of the integration interval.,100000000000.0,860

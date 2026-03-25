@@ -1,0 +1,5 @@
+mu,state
+0.1,Explicit faster
+1.0,Explicit faster
+10.0,Explicit faster
+100.0,Implicit faster

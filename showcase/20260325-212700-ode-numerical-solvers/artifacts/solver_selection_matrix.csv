@@ -1,0 +1,5 @@
+Stiffness,Low Prec (1e-3),Med Prec (1e-6),High Prec (1e-9)
+Non-Stiff,DP5,DP5,DP5/RK4
+Moderate Stiffness,DP5/BDF,BDF,Radau
+High Stiffness,BDF,BDF/Radau,Radau
+Extreme Stiffness,Radau,Radau,Radau
