@@ -46,11 +46,17 @@ def _build_execute_prompt(task: dict, dep_outputs: dict[str, str]) -> list[dict]
     messages = [{"role": "system", "content": _EXECUTE_SYSTEM}]
 
     parts = []
+    deps = task.get("dependencies", [])
+
     if dep_outputs:
+        # Gemini/Mock: full dep content inline
         parts.append("## Context from completed prerequisite tasks:\n")
         for dep_id, output in dep_outputs.items():
             parts.append(f"### Task [{dep_id}] output:\n{output}\n")
         parts.append("---\n")
+    elif deps:
+        # Agent mode: dep_outputs empty, list IDs for tool reading
+        parts.append(f"## Prerequisite tasks (use read_task_output to read): {', '.join(deps)}\n---\n")
 
     parts.append(f"## Your task [{task['id']}]:\n{task['description']}")
     messages.append({"role": "user", "content": "\n".join(parts)})
@@ -121,6 +127,8 @@ class ExecuteStage(BaseStage):
         self._task_results: dict[str, str] = {}
 
     def load_input(self) -> str:
+        # Execute always reads plan.json directly — it needs structured JSON
+        # for topological sorting, not a tool call
         return self.db.get_plan_json()
 
     async def run(self) -> str:
@@ -200,13 +208,16 @@ class ExecuteStage(BaseStage):
         client = self.llm_client
 
         # Gather dependency outputs
+        # Agent mode: Agent reads deps via tools, pipeline just lists dep IDs
+        # Gemini/Mock: pipeline pre-loads dep content into prompt
         dep_outputs = {}
-        for dep_id in task.get("dependencies", []):
-            output = self._task_results.get(dep_id, "")
-            if not output and self.db:
-                output = self.db.get_task_output(dep_id)
-            if output:
-                dep_outputs[dep_id] = output
+        if not client.has_broadcast:
+            for dep_id in task.get("dependencies", []):
+                output = self._task_results.get(dep_id, "")
+                if not output and self.db:
+                    output = self.db.get_task_output(dep_id)
+                if output:
+                    dep_outputs[dep_id] = output
 
         # --- Execute ---
         call_id = f"Exec {task_id}"

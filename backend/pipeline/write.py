@@ -113,8 +113,13 @@ class WriteStage(BaseStage):
         return ""
 
     def load_input(self) -> str:
-        """Write reads everything from DB, no stage-to-stage string passing."""
-        return ""  # not used — build_messages reads DB directly
+        if self.llm_client and self.llm_client.has_broadcast:
+            return (
+                "Use list_tasks and read_task_output tools to read completed research outputs. "
+                "Use read_refined_idea for context and read_plan_tree for structure. "
+                "Write the complete research paper."
+            )
+        return ""  # Gemini/Mock: build_messages reads DB directly
 
     def build_messages(self, input_text: str, round_index: int) -> list[dict]:
         if round_index == 0:

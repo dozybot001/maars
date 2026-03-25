@@ -84,6 +84,8 @@ class PlanStage(BaseStage):
         self._context: str = ""
 
     def load_input(self) -> str:
+        if self.llm_client and self.llm_client.has_broadcast:
+            return "Use read_refined_idea tool to get the research context, then decompose it into tasks."
         return self.db.get_refined_idea()
 
     async def run(self) -> str:
