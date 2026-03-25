@@ -1,8 +1,7 @@
 """Centralized ADK Agent factory.
 
 All Agent instances in MAARS should be created through create_agent()
-so that boilerplate config (model, code_executor, tool_config) is
-maintained in one place.
+so that boilerplate config (model, tool_config) is maintained in one place.
 """
 
 from google.adk import Agent
@@ -22,7 +21,6 @@ def create_agent(
     instruction: str,
     model: str = "gemini-2.0-flash",
     tools: list | None = None,
-    code_executor=None,
 ) -> Agent:
     """Create an ADK Agent with standard MAARS config.
 
@@ -34,6 +32,5 @@ def create_agent(
         model=model,
         instruction=instruction,
         tools=tools or [],
-        code_executor=code_executor,
         generate_content_config=_DEFAULT_CONFIG,
     )

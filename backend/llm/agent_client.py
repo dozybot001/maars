@@ -32,12 +32,10 @@ class AgentClient(LLMClient):
         instruction: str,
         model: str = "gemini-2.0-flash",
         tools: list | None = None,
-        code_executor=None,
     ):
         self._instruction = instruction
         self._model = model
         self._tools = tools or []
-        self._code_executor = code_executor
         self._stop_requested = False
 
     def request_stop(self):
@@ -78,7 +76,6 @@ class AgentClient(LLMClient):
             instruction=instruction,
             tools=tools,
             model=self._model,
-            code_executor=self._code_executor,
         )
 
         runner = Runner(

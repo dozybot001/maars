@@ -20,13 +20,6 @@ try:
 except (ImportError, AttributeError):
     _builtin_tools = []
 
-# ADK built-in code executor (Gemini native sandbox)
-try:
-    from google.adk.code_executors import BuiltInCodeExecutor
-    _code_executor = BuiltInCodeExecutor()
-except (ImportError, AttributeError):
-    _code_executor = None
-
 # ---------------------------------------------------------------------------
 # Agent-specific instructions (adapter layer — not pipeline flow)
 # ---------------------------------------------------------------------------
@@ -91,7 +84,6 @@ def create_agent_stages(api_key: str, model: str = "gemini-2.0-flash", db=None) 
         instruction=_REFINE_INSTRUCTION,
         tools=research_tools,
         model=model,
-        code_executor=_code_executor,
     )
     plan_client = AgentClient(
         instruction="",
@@ -117,7 +109,6 @@ PREFER DECOMPOSITION for the top-level idea. An atomic top-level task means the 
         instruction=_EXECUTE_INSTRUCTION,
         tools=db_tools + docker_tools + research_tools,
         model=model,
-        code_executor=_code_executor,
     )
     write_client = AgentClient(
         instruction=_WRITE_INSTRUCTION,
