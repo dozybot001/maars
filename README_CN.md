@@ -33,45 +33,51 @@ MAARS_GOOGLE_API_KEY=your-key
 
 | 阶段 | Mock | Gemini | Agent |
 |------|------|--------|-------|
-| **精炼** | 回放 | LLM | ADK Agent + Google Search |
-| **规划** | 回放 | LLM | LLM（同 Gemini） |
-| **执行** | 回放 | LLM | ADK Agent 逐任务 + Google Search |
-| **写作** | 回放 | LLM | ADK Agent + DB 工具 + Google Search |
+| **精炼** | 回放 | GeminiClient | AgentClient + 搜索工具 |
+| **规划** | 回放 | GeminiClient | AgentClient（无工具） |
+| **执行** | 回放 | GeminiClient | AgentClient + 搜索 + 代码 + DB 工具 |
+| **写作** | 回放 | GeminiClient | AgentClient + 搜索 + DB 工具 |
 
-> Agent 规划刻意保留 LLM 引擎 — 每步是结构化 JSON 判断（是否原子 → 是/否 + 子任务），确定性调用比 ReAct 循环更快更稳。
+> 三种模式使用相同的 pipeline stages，只有 `LLMClient` 实现不同。
 
 ## 架构
 
+三层解耦 — pipeline 依赖接口，适配器实现接口：
+
 ```mermaid
-flowchart LR
+flowchart TB
+    subgraph Pipeline["Pipeline 层 · 流程逻辑"]
+        ORCH["orchestrator"] --> STAGES["refine → plan → execute → write"]
+        STAGES --> DB["文件 DB"]
+    end
+
+    subgraph Interface["接口层"]
+        LLM["LLMClient.stream()"]
+    end
+
+    subgraph Adapters["适配层 · 可替换"]
+        MOCK["MockClient"]
+        GEMINI["GeminiClient"]
+        AGENT["AgentClient\n(ADK + 工具)"]
+    end
+
+    STAGES --> LLM
+    LLM -.-> MOCK
+    LLM -.-> GEMINI
+    LLM -.-> AGENT
+
     subgraph FE["前端 · Vanilla JS"]
         UI["输入 + 控制"]
-        LOG["LLM 输出日志"]
-        PROC["过程与产出"]
+        LOG["推理日志"]
+        PROC["流程 & 产出"]
     end
 
-    subgraph BE["后端 · FastAPI"]
-        ROUTES["routes/"]
-        ORCH["orchestrator"]
-        STAGES["pipeline stages"]
-        LLM["LLMClient"]
-        MODES["mock / gemini / agent"]
-        DB["文件 DB"]
-    end
-
-    UI --> ROUTES --> ORCH --> STAGES
-    STAGES --> LLM
-    MODES -."注入".-> STAGES
-    STAGES --> DB
+    UI --> ORCH
     ORCH -."SSE".-> LOG
     ORCH -."SSE".-> PROC
 ```
 
-| 原则 | 细节 |
-|------|------|
-| 三层解耦 | `llm/` → `pipeline/` → `mode/` — 管线层不知道当前模式 |
-| 统一流式 | 每次 LLM 调用发射带 `call_id` 标记的 chunk；前端按 `call_id` 路由 |
-| 字符串进出 | 阶段间通过 `stage.output` 传递，无共享内存 |
+详细架构与数据流见 [docs/CN/architecture.md](docs/CN/architecture.md)。
 
 ## 快速开始
 
@@ -94,8 +100,10 @@ research/{timestamp}-{slug}/
 ├── refined_idea.md   # 精炼输出
 ├── plan.json         # 扁平原子任务列表
 ├── plan_tree.json    # 分解树
+├── tasks/            # 各任务输出
+├── artifacts/        # 代码脚本 + 实验产出（Agent 模式）
 ├── paper.md          # 最终论文
-└── tasks/            # 各任务输出
+└── reasoning.log     # 完整执行日志
 ```
 
 ## 展示
