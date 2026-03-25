@@ -24,7 +24,7 @@ elif settings.llm_mode == "agno":
     from backend.agno import create_agno_stages
     stages = create_agno_stages(
         model_provider=settings.agno_model_provider,
-        model_id=settings.agno_model_id,
+        model_id=settings.agno_model_id or settings.gemini_model,
         api_key=settings.google_api_key,
         db=orchestrator.db,
     )

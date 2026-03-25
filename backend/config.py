@@ -4,13 +4,13 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     llm_mode: str = "mock"  # "mock", "gemini", "adk", or "agno"
-    google_api_key: str = ""  # shared across gemini and adk modes
-    gemini_model: str = "gemini-2.0-flash"
+    google_api_key: str = ""  # shared across all modes
+    gemini_model: str = "gemini-2.5-flash"  # shared across gemini, adk, and agno (google)
     mock_chunk_delay: float = 0.08  # seconds between mock chunks
 
-    # Agno mode
+    # Agno mode — non-google providers
     agno_model_provider: str = "google"  # "google", "anthropic", or "openai"
-    agno_model_id: str = "gemini-2.5-flash"
+    agno_model_id: str = ""  # override model for non-google providers (e.g. "claude-sonnet-4-5")
     openai_api_key: str = ""
     anthropic_api_key: str = ""
 
