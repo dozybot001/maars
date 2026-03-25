@@ -107,7 +107,7 @@ REFINE
   └── finalize() → db.save_refined_idea()
 
 PLAN
-  ├── load_input() → "Use read_refined_idea tool..."  [directive]
+  ├── load_input() → db.get_refined_idea()  [no tools, reads DB directly, same as Gemini]
   ├── AgentClient(tools=[]) → degrades to plain LLM
   ├── recursive decompose (same as Gemini)
   └── _finalize_output() → db.save_plan(json, tree)
@@ -136,7 +136,7 @@ WRITE
 
 | | Gemini | Agent |
 |---|---|---|
-| Read input | Pipeline pre-loads from DB | Agent reads via tools |
+| Read input | Pipeline pre-loads from DB | Refine/Plan: DB pre-loaded (same as Gemini); Execute/Write: Agent reads via tools |
 | Write output | `finalize()` writes DB | Same (deterministic) |
 | Dependencies | Content in prompt | Agent calls `read_task_output` |
 | Tools | None | search, code, DB, fetch |

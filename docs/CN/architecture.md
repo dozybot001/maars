@@ -107,7 +107,7 @@ REFINE
   └── finalize() → db.save_refined_idea()
 
 PLAN
-  ├── load_input() → "Use read_refined_idea tool..."  [指令]
+  ├── load_input() → db.get_refined_idea()  [无工具，直接从 DB 读，同 Gemini]
   ├── AgentClient(tools=[]) → 退化为普通 LLM 调用
   ├── 递归分解（同 Gemini 模式）
   └── _finalize_output() → db.save_plan(json, tree)
@@ -136,7 +136,7 @@ WRITE
 
 | | Gemini | Agent |
 |---|---|---|
-| 读输入 | Pipeline 从 DB 预加载 | Agent 用工具自主读取 |
+| 读输入 | Pipeline 从 DB 预加载 | Refine/Plan：DB 预加载（同 Gemini）；Execute/Write：Agent 用工具读取 |
 | 写输出 | `finalize()` 确定性写 DB | 同左 |
 | 依赖注入 | 内容塞进 prompt | 列出 ID，Agent 调 `read_task_output` |
 | 工具 | 无 | 搜索、代码执行、DB、网页抓取 |
