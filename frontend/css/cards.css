@@ -91,11 +91,6 @@
   cursor: not-allowed;
 }
 
-.stage-controls button[data-action="run"]:hover:not(:disabled) {
-  color: var(--green);
-  border-color: var(--green);
-}
-
 .stage-controls button[data-action="stop"]:hover:not(:disabled) {
   color: var(--yellow);
   border-color: var(--yellow);
