@@ -80,15 +80,20 @@ class AgentClient(LLMClient):
             session_id=session.id,
             new_message=message,
         ):
-            # --- Think: broadcast label + text, last text also yielded ---
+            # --- Think: stream partial chunks, label on complete ---
             if event.content and event.content.parts:
                 for part in event.content.parts:
-                    if part.text and not event.partial:
-                        label = f"Think {step}"
-                        self._broadcast_label(label)
-                        self._broadcast_chunk(part.text, call_id=label)
-                        step += 1
-                        final_text = part.text
+                    if part.text:
+                        if event.partial:
+                            # Streaming chunk — broadcast under current label
+                            self._broadcast_chunk(part.text, call_id=f"Think {step}")
+                        else:
+                            # Complete think step — emit label first, then full text
+                            label = f"Think {step}"
+                            self._broadcast_label(label)
+                            self._broadcast_chunk(part.text, call_id=label)
+                            step += 1
+                            final_text = part.text
 
             # --- Tool calls: broadcast label + args ---
             function_calls = event.get_function_calls()
