@@ -74,26 +74,33 @@ class AgentClient(LLMClient):
 
         final_text = ""
         step = 0
+        streaming = False  # True while receiving partial chunks for current step
 
         async for event in runner.run_async(
             user_id="maars_user",
             session_id=session.id,
             new_message=message,
         ):
-            # --- Think: stream partial chunks, label on complete ---
+            # --- Think: partial = streaming chunks, complete = step boundary ---
             if event.content and event.content.parts:
                 for part in event.content.parts:
                     if part.text:
                         if event.partial:
-                            # Streaming chunk — broadcast under current label
+                            # Streaming chunk — emit label on first partial, then stream
+                            if not streaming:
+                                self._broadcast_label(f"Think {step}")
+                                streaming = True
                             self._broadcast_chunk(part.text, call_id=f"Think {step}")
                         else:
-                            # Complete think step — emit label first, then full text
-                            label = f"Think {step}"
-                            self._broadcast_label(label)
-                            self._broadcast_chunk(part.text, call_id=label)
-                            step += 1
+                            # Complete event — step is done
+                            if not streaming:
+                                # Model didn't send partials — emit all at once
+                                self._broadcast_label(f"Think {step}")
+                                self._broadcast_chunk(part.text, call_id=f"Think {step}")
+                            # If streaming=True, partials already displayed the content
                             final_text = part.text
+                            step += 1
+                            streaming = False
 
             # --- Tool calls: broadcast label + args ---
             function_calls = event.get_function_calls()
