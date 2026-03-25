@@ -102,9 +102,6 @@ class AgnoClient(LLMClient):
 
             # --- Token usage (on completion) ---
             elif event.event == RunEvent.run_completed:
-                # Completed content as fallback
-                if event.content:
-                    yield StreamEvent("content", text=str(event.content))
                 if event.metrics:
                     yield StreamEvent("tokens", metadata={
                         "input": event.metrics.input_tokens or 0,
