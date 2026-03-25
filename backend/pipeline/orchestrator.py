@@ -128,7 +128,7 @@ class PipelineOrchestrator:
         """Return an error message if this stage cannot run, or None if OK."""
         idx = STAGE_ORDER.index(stage_name)
         if idx == 0:
-            return None
+            return "Use START to begin the pipeline"
         prev = self.stages[STAGE_ORDER[idx - 1]]
         if prev.state != StageState.COMPLETED:
             return f"Previous stage '{prev.name}' has not completed"

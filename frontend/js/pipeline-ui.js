@@ -63,7 +63,7 @@ function updateAllCards() {
     if (!rules) return;
 
     // Check if previous stage is completed
-    const prevCompleted = idx === 0 || stageStates[STAGE_ORDER[idx - 1]] === 'completed';
+    const prevCompleted = idx > 0 && stageStates[STAGE_ORDER[idx - 1]] === 'completed';
 
     for (const [action, enabled] of Object.entries(rules)) {
       const btn = card.querySelector(`[data-action="${action}"]`);
