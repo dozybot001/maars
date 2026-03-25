@@ -54,7 +54,6 @@ class AgnoClient(LLMClient):
             markdown=True,
         )
 
-        final_text = ""
         step = 0
         self._stop_requested = False
 
@@ -62,14 +61,10 @@ class AgnoClient(LLMClient):
             if self._stop_requested:
                 break
 
-            # --- Token usage ---
-            if event.event == RunEvent.run_completed:
-                if event.metrics:
-                    yield StreamEvent("tokens", metadata={
-                        "input": event.metrics.input_tokens or 0,
-                        "output": event.metrics.output_tokens or 0,
-                        "total": event.metrics.total_tokens or 0,
-                    })
+            # --- Content (streaming deltas) ---
+            if event.event == RunEvent.run_content:
+                if event.content:
+                    yield StreamEvent("content", text=str(event.content))
 
             # --- Reasoning ---
             elif event.event == RunEvent.reasoning_step:
@@ -100,13 +95,17 @@ class AgnoClient(LLMClient):
                     call_id=f"Result: {tool_name}",
                 )
 
-            # --- Content ---
-            elif event.event == RunEvent.run_content:
+            # --- Token usage (on completion) ---
+            elif event.event == RunEvent.run_completed:
+                # Completed content as fallback
                 if event.content:
-                    final_text = str(event.content)
-
-        if final_text:
-            yield StreamEvent("content", text=final_text)
+                    yield StreamEvent("content", text=str(event.content))
+                if event.metrics:
+                    yield StreamEvent("tokens", metadata={
+                        "input": event.metrics.input_tokens or 0,
+                        "output": event.metrics.output_tokens or 0,
+                        "total": event.metrics.total_tokens or 0,
+                    })
 
     # ------------------------------------------------------------------
     # Internal helpers
