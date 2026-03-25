@@ -6,19 +6,12 @@ from starlette.responses import StreamingResponse
 
 router = APIRouter(prefix="/api")
 
-_orchestrator = None
-
-
-def set_orchestrator(orchestrator):
-    global _orchestrator
-    _orchestrator = orchestrator
-
 
 @router.get("/events")
 async def event_stream(request: Request):
     """SSE endpoint. Each connection gets its own queue via subscribe()."""
-
-    queue = _orchestrator.subscribe()
+    orchestrator = request.app.state.orchestrator
+    queue = orchestrator.subscribe()
 
     async def generate():
         try:
@@ -33,7 +26,7 @@ async def event_stream(request: Request):
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"
         finally:
-            _orchestrator.unsubscribe(queue)
+            orchestrator.unsubscribe(queue)
 
     return StreamingResponse(
         generate(),

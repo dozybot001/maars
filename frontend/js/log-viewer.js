@@ -1,12 +1,6 @@
 import { on } from './events.js';
 import { createAutoScroller } from './autoscroll.js';
-
-const STAGE_LABELS = {
-  refine: 'REFINE',
-  plan: 'PLAN',
-  execute: 'EXECUTE',
-  write: 'WRITE',
-};
+import { STAGE_LABELS, appendSeparator } from './shared.js';
 
 let logOutput;
 let scroller;
@@ -67,7 +61,7 @@ export function initLogViewer() {
       activeStage = stage;
       callBlocks = {};
       callScrollers = {};
-      appendSeparator(STAGE_LABELS[stage] || stage.toUpperCase());
+      currentSection = appendSeparator(logOutput, STAGE_LABELS[stage] || stage.toUpperCase(), scroller);
     }
   });
 
@@ -122,25 +116,6 @@ export function initLogViewer() {
     (currentSection || logOutput).appendChild(el);
     scroller.scroll();
   });
-}
-
-function appendSeparator(label) {
-  const sep = document.createElement('div');
-  sep.className = 'log-separator';
-  sep.textContent = `── ${label} ──`;
-  sep.addEventListener('click', () => {
-    const section = sep.nextElementSibling;
-    if (section && section.classList.contains('log-section')) {
-      section.classList.toggle('collapsed');
-      sep.classList.toggle('is-collapsed');
-    }
-  });
-  logOutput.appendChild(sep);
-
-  currentSection = document.createElement('div');
-  currentSection.className = 'log-section';
-  logOutput.appendChild(currentSection);
-  scroller.scroll();
 }
 
 function saveLogToDisk() {

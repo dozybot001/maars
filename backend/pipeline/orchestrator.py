@@ -37,7 +37,7 @@ class PipelineOrchestrator:
 
     def subscribe(self) -> asyncio.Queue:
         """Create a per-connection queue. Call unsubscribe() on disconnect."""
-        q: asyncio.Queue = asyncio.Queue()
+        q: asyncio.Queue = asyncio.Queue(maxsize=512)
         self._subscribers.append(q)
         return q
 
@@ -49,9 +49,12 @@ class PipelineOrchestrator:
             pass
 
     def _broadcast(self, event: dict):
-        """Push an event to every active subscriber."""
+        """Push an event to every active subscriber. Drop if queue full."""
         for q in self._subscribers:
-            q.put_nowait(event)
+            try:
+                q.put_nowait(event)
+            except asyncio.QueueFull:
+                pass
 
     def _wire_broadcast(self):
         """Inject broadcast callback into all stages and their LLM clients."""

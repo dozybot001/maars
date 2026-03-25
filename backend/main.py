@@ -34,9 +34,8 @@ else:
 orchestrator.stages.update(stages)
 orchestrator._wire_broadcast()
 
-# Inject orchestrator into route modules
-pipeline_routes.set_orchestrator(orchestrator)
-event_routes.set_orchestrator(orchestrator)
+# Store orchestrator on app.state for route access
+app.state.orchestrator = orchestrator
 
 # --- Routes ---
 app.include_router(pipeline_routes.router)

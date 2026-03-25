@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 
 from backend.db import ResearchDB
 from backend.pipeline.stage import BaseStage, StageState
+from backend.utils import parse_json_fenced
 
 # ---------------------------------------------------------------------------
 # Prompts
@@ -132,7 +132,7 @@ class ExecuteStage(BaseStage):
         return self.db.get_plan_json()
 
     async def run(self) -> str:
-        """Override the base run loop entirely — Execute has its own parallel execution model."""
+        """Override the base run loop — Execute has its own parallel execution model."""
         self._run_id += 1
         my_run_id = self._run_id
 
@@ -158,18 +158,11 @@ class ExecuteStage(BaseStage):
             })
 
             for batch_idx, batch in enumerate(batches):
-                # Pause gate
                 await self._pause_event.wait()
                 if self._is_stale(my_run_id):
                     return self.output
 
-                # No chunk emission — execution progress tree is the UI
-
-                # Run all tasks in this batch in parallel
-                coros = [
-                    self._execute_task(task, my_run_id)
-                    for task in batch
-                ]
+                coros = [self._execute_task(task, my_run_id) for task in batch]
                 results = await asyncio.gather(*coros, return_exceptions=True)
 
                 for task, result in zip(batch, results):
@@ -182,7 +175,6 @@ class ExecuteStage(BaseStage):
                         self._emit("state", self.state.value)
                         return self.output
 
-            # Combine all task results as final output
             self.output = self._build_final_output()
             self.state = StageState.COMPLETED
             self._emit("state", self.state.value)
@@ -280,19 +272,7 @@ class ExecuteStage(BaseStage):
 
     def _parse_verification(self, response: str) -> tuple[bool, str]:
         """Parse verification JSON response."""
-        text = response.strip()
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
-            if match:
-                try:
-                    data = json.loads(match.group(1).strip())
-                except json.JSONDecodeError:
-                    return True, ""  # fallback: assume pass
-            else:
-                return True, ""
-
+        data = parse_json_fenced(response, fallback={"pass": True})
         return data.get("pass", True), data.get("review", "")
 
     def _build_final_output(self) -> str:
@@ -300,7 +280,7 @@ class ExecuteStage(BaseStage):
         # Generate Docker files if any code was executed
         if self.db:
             try:
-                from backend.agent.tools.shared.docker_exec import generate_reproduce_files
+                from backend.reproduce import generate_reproduce_files
                 generate_reproduce_files(self.db)
             except Exception:
                 pass  # Non-critical — don't fail the stage

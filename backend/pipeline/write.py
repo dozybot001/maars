@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-import re
 
 from backend.db import ResearchDB
 from backend.pipeline.stage import BaseStage
+from backend.utils import parse_json_fenced
 
 # ---------------------------------------------------------------------------
 # Prompts
@@ -201,19 +201,7 @@ class WriteStage(BaseStage):
 
     def _parse_outline(self, response: str) -> list[dict]:
         """Parse outline JSON from LLM response."""
-        text = response.strip()
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
-            if match:
-                try:
-                    data = json.loads(match.group(1).strip())
-                except json.JSONDecodeError:
-                    data = {}
-            else:
-                data = {}
-
+        data = parse_json_fenced(response)
         sections = data.get("sections", [])
         if not sections:
             # Fallback: default academic structure

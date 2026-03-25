@@ -1,4 +1,5 @@
 import { emit } from './events.js';
+import { safeParse } from './shared.js';
 
 const BASE = '/api';
 
@@ -34,36 +35,23 @@ export async function stageAction(stageName, action) {
 export function connectSSE() {
   const source = new EventSource(`${BASE}/events`);
 
-  source.addEventListener('state', (e) => {
-    const data = JSON.parse(e.data);
-    emit('stage:state', data);
-  });
-
-  source.addEventListener('chunk', (e) => {
-    const data = JSON.parse(e.data);
-    emit('log:chunk', data);
-  });
-
-  source.addEventListener('task_state', (e) => {
-    const data = JSON.parse(e.data);
-    emit('task:state', data);
-  });
-
-  source.addEventListener('exec_tree', (e) => {
-    const data = JSON.parse(e.data);
-    emit('exec:tree', data);
-  });
-
-  source.addEventListener('tree', (e) => {
-    const data = JSON.parse(e.data);
-    emit('plan:tree', data);
-  });
+  for (const [event, signal] of [
+    ['state', 'stage:state'],
+    ['chunk', 'log:chunk'],
+    ['task_state', 'task:state'],
+    ['exec_tree', 'exec:tree'],
+    ['tree', 'plan:tree'],
+  ]) {
+    source.addEventListener(event, (e) => {
+      const data = safeParse(e);
+      if (data) emit(signal, data);
+    });
+  }
 
   source.addEventListener('error', (e) => {
-    // SSE native error (connection lost)
     if (e.data) {
-      const data = JSON.parse(e.data);
-      emit('stage:error', data);
+      const data = safeParse(e);
+      if (data) emit('stage:error', data);
     }
   });
 

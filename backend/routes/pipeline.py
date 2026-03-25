@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from backend.models import StartRequest, ActionResponse, PipelineStatus, StageStatus
@@ -6,20 +6,12 @@ from backend.pipeline.orchestrator import STAGE_ORDER
 
 router = APIRouter(prefix="/api")
 
-# The orchestrator instance is injected by main.py via app.state
-# and accessed through a dependency. For simplicity, we use a module-level ref.
-_orchestrator = None
 
-
-def set_orchestrator(orchestrator):
-    global _orchestrator
-    _orchestrator = orchestrator
-
-
-def _get_orchestrator():
-    if _orchestrator is None:
+def _get_orchestrator(request: Request):
+    orch = getattr(request.app.state, "orchestrator", None)
+    if orch is None:
         raise HTTPException(status_code=500, detail="Pipeline not initialized")
-    return _orchestrator
+    return orch
 
 
 def _validate_stage(name: str):
@@ -28,22 +20,22 @@ def _validate_stage(name: str):
 
 
 @router.post("/pipeline/start")
-async def start_pipeline(req: StartRequest):
-    orch = _get_orchestrator()
+async def start_pipeline(req: StartRequest, request: Request):
+    orch = _get_orchestrator(request)
     await orch.start(req.input)
     return {"status": "started", "input": req.input}
 
 
 @router.get("/stage/{stage_name}/output")
-async def get_stage_output(stage_name: str):
+async def get_stage_output(stage_name: str, request: Request):
     _validate_stage(stage_name)
-    orch = _get_orchestrator()
+    orch = _get_orchestrator(request)
     return {"stage": stage_name, "output": orch.stages[stage_name].output}
 
 
 @router.get("/pipeline/status", response_model=PipelineStatus)
-async def get_status():
-    orch = _get_orchestrator()
+async def get_status(request: Request):
+    orch = _get_orchestrator(request)
     status = orch.get_status()
     return PipelineStatus(
         input=status["input"],
@@ -52,9 +44,9 @@ async def get_status():
 
 
 @router.post("/stage/{stage_name}/run", response_model=ActionResponse)
-async def run_stage(stage_name: str):
+async def run_stage(stage_name: str, request: Request):
     _validate_stage(stage_name)
-    orch = _get_orchestrator()
+    orch = _get_orchestrator(request)
     err = orch.check_runnable(stage_name)
     if err:
         raise HTTPException(status_code=409, detail=err)
@@ -67,9 +59,9 @@ async def run_stage(stage_name: str):
 
 
 @router.post("/stage/{stage_name}/stop", response_model=ActionResponse)
-async def stop_stage(stage_name: str):
+async def stop_stage(stage_name: str, request: Request):
     _validate_stage(stage_name)
-    orch = _get_orchestrator()
+    orch = _get_orchestrator(request)
     orch.stop_stage(stage_name)
     return ActionResponse(
         stage=stage_name,
@@ -79,9 +71,9 @@ async def stop_stage(stage_name: str):
 
 
 @router.post("/stage/{stage_name}/resume", response_model=ActionResponse)
-async def resume_stage(stage_name: str):
+async def resume_stage(stage_name: str, request: Request):
     _validate_stage(stage_name)
-    orch = _get_orchestrator()
+    orch = _get_orchestrator(request)
     orch.resume_stage(stage_name)
     return ActionResponse(
         stage=stage_name,
@@ -91,9 +83,9 @@ async def resume_stage(stage_name: str):
 
 
 @router.post("/stage/{stage_name}/retry", response_model=ActionResponse)
-async def retry_stage(stage_name: str):
+async def retry_stage(stage_name: str, request: Request):
     _validate_stage(stage_name)
-    orch = _get_orchestrator()
+    orch = _get_orchestrator(request)
     await orch.retry_stage(stage_name)
     return ActionResponse(
         stage=stage_name,
@@ -107,11 +99,10 @@ class SaveLogRequest(BaseModel):
 
 
 @router.post("/pipeline/save-log")
-async def save_log(req: SaveLogRequest):
-    orch = _get_orchestrator()
+async def save_log(req: SaveLogRequest, request: Request):
+    orch = _get_orchestrator(request)
     try:
-        orch.db._ensure_root()
-        path = orch.db._root / "reasoning.log"
+        path = orch.db.get_root() / "reasoning.log"
         path.write_text(req.content, encoding="utf-8")
         return {"status": "saved", "path": str(path)}
     except RuntimeError:

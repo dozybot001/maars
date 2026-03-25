@@ -25,6 +25,7 @@ class ResearchDB:
         self._base = Path(base_dir)
         self._root: Path | None = None
         self.research_id: str = ""
+        self.execution_log: list[dict] = []
 
     def create_session(self, idea: str = "") -> str:
         """Create a new research folder. Returns the research ID.
@@ -121,6 +122,11 @@ class ResearchDB:
             size = f.stat().st_size
             results.append({"id": task_id, "size_bytes": size})
         return results
+
+    def get_root(self) -> Path:
+        """Return the session root directory."""
+        self._ensure_root()
+        return self._root
 
     def get_artifacts_dir(self) -> Path:
         """Return the artifacts directory, creating it if needed."""

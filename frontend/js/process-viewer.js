@@ -4,13 +4,7 @@
  */
 import { on } from './events.js';
 import { createAutoScroller } from './autoscroll.js';
-
-const STAGE_LABELS = {
-  refine: 'REFINE',
-  plan: 'PLAN',
-  execute: 'EXECUTE',
-  write: 'WRITE',
-};
+import { STAGE_LABELS, appendSeparator } from './shared.js';
 
 let processBody;
 let scroller;
@@ -35,7 +29,7 @@ export function initProcessViewer() {
         if (prevSep) prevSep.classList.add('is-collapsed');
       }
       activeStage = stage;
-      appendSeparator(STAGE_LABELS[stage] || stage.toUpperCase());
+      currentSection = appendSeparator(processBody, STAGE_LABELS[stage] || stage.toUpperCase(), scroller);
     } else if (data === 'completed' && (stage === 'refine' || stage === 'write')) {
       appendFileItem(stage);
     }
@@ -118,25 +112,6 @@ export function initProcessViewer() {
 }
 
 // --- Helpers ---
-
-function appendSeparator(label) {
-  const sep = document.createElement('div');
-  sep.className = 'log-separator';
-  sep.textContent = `── ${label} ──`;
-  sep.addEventListener('click', () => {
-    const section = sep.nextElementSibling;
-    if (section && section.classList.contains('log-section')) {
-      section.classList.toggle('collapsed');
-      sep.classList.toggle('is-collapsed');
-    }
-  });
-  processBody.appendChild(sep);
-
-  currentSection = document.createElement('div');
-  currentSection.className = 'log-section';
-  processBody.appendChild(currentSection);
-  scroller.scroll();
-}
 
 function appendFileItem(stageName) {
   if (!currentSection) return;

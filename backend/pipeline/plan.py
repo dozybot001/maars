@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 from dataclasses import dataclass, field
 
 from backend.pipeline.stage import BaseStage, StageState
+from backend.utils import parse_json_fenced
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -115,18 +115,15 @@ class PlanStage(BaseStage):
                 if self._is_stale(my_run_id):
                     return self.output
 
-                # Take current batch
                 batch = list(self._pending)
                 self._pending.clear()
 
-                # Process all in parallel
                 coros = [self._process_task(tid, my_run_id) for tid in batch]
                 await asyncio.gather(*coros)
 
                 if self._is_stale(my_run_id):
                     return self.output
 
-                # Push updated tree to frontend
                 self._emit("tree", self._serialize_tree())
 
             self.output = self._finalize_output()
@@ -179,7 +176,7 @@ class PlanStage(BaseStage):
             response += chunk
             self._emit("chunk", {"text": chunk, "call_id": call_id})
 
-        data = _parse_json(response)
+        data = parse_json_fenced(response, fallback={"is_atomic": True})
 
         if data.get("is_atomic", True):
             subtasks = data.get("subtasks", [])
@@ -313,21 +310,3 @@ def _get_atomic_descendants(
     return result
 
 
-# ---------------------------------------------------------------------------
-# JSON parsing helper
-# ---------------------------------------------------------------------------
-
-def _parse_json(text: str) -> dict:
-    """Extract JSON from LLM response, handling markdown fencing."""
-    text = text.strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-    match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(1).strip())
-        except json.JSONDecodeError:
-            pass
-    return {"is_atomic": True}
