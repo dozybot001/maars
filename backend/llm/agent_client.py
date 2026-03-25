@@ -40,10 +40,19 @@ class AgentClient(LLMClient):
         self._code_executor = code_executor
         self._broadcast = lambda event: None
         self._step_counter = 0
+        self._stop_requested = False
 
     def set_broadcast(self, fn):
         """Inject the SSE broadcast callback (called by orchestrator)."""
         self._broadcast = fn
+
+    def request_stop(self):
+        """Signal the Agent to stop after the current event."""
+        self._stop_requested = True
+
+    def reset(self):
+        """Clear stop flag on pipeline restart."""
+        self._stop_requested = False
 
     async def stream(self, messages: list[dict]) -> AsyncIterator[str]:
         """Run an ADK Agent and yield the final answer text.
@@ -95,6 +104,7 @@ class AgentClient(LLMClient):
         final_text = ""
         step = 0
         streaming = False
+        self._stop_requested = False
 
         async for event in runner.run_async(
             user_id="maars_user",
@@ -102,6 +112,10 @@ class AgentClient(LLMClient):
             new_message=message,
             run_config=RunConfig(streaming_mode=StreamingMode.SSE),
         ):
+            # Check stop flag — finish current event, then break
+            if self._stop_requested:
+                break
+
             # --- Think ---
             if event.content and event.content.parts:
                 for part in event.content.parts:

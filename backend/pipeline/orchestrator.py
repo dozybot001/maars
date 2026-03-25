@@ -141,7 +141,10 @@ class PipelineOrchestrator:
         self._tasks[stage_name] = task
 
     def stop_stage(self, stage_name: str):
-        self.stages[stage_name].stop()
+        stage = self.stages[stage_name]
+        if stage.llm_client:
+            stage.llm_client.request_stop()
+        stage.stop()
 
     def resume_stage(self, stage_name: str):
         self.stages[stage_name].resume()

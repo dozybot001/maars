@@ -18,6 +18,11 @@ class LLMClient(ABC):
         """Yield text chunks from the LLM response."""
         ...
 
+    def request_stop(self):
+        """Signal the client to stop after the current in-flight event.
+        Default no-op. AgentClient overrides to break the ReAct loop."""
+        pass
+
     def reset(self):
         """Reset internal state. Called when the pipeline restarts.
         No-op for real LLM clients. MockClient clears response counters."""
