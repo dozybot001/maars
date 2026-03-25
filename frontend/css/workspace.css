@@ -36,6 +36,13 @@
   font-weight: 600;
 }
 
+.token-badge {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 8px;
+  font-weight: 400;
+}
+
 #copy-log {
   position: absolute;
   right: 10px;

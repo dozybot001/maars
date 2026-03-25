@@ -8,10 +8,13 @@ let activeStage = null;
 let callBlocks = {};      // call_id → DOM text element
 let callScrollers = {};   // call_id → autoscroller for chunk block
 let currentSection = null;
+let totalChars = 0;       // character count for token estimation
+let tokenBadge = null;
 
 export function initLogViewer() {
   logOutput = document.getElementById('log-output');
   scroller = createAutoScroller(logOutput);
+  tokenBadge = document.getElementById('token-estimate');
 
   document.getElementById('copy-log').addEventListener('click', () => {
     const text = logOutput.innerText;
@@ -50,6 +53,8 @@ export function initLogViewer() {
       callBlocks = {};
       callScrollers = {};
       currentSection = null;
+      totalChars = 0;
+      updateTokenBadge();
       scroller.reset();
     } else if (data === 'running' && stage !== activeStage) {
       // Collapse previous section
@@ -83,10 +88,14 @@ export function initLogViewer() {
       return;
     }
 
+    const chunkText = data.text || data;
+    totalChars += chunkText.length;
+    updateTokenBadge();
+
     let block;
     if (callId && callBlocks[callId]) {
       block = callBlocks[callId];
-      block.appendChild(document.createTextNode(data.text));
+      block.appendChild(document.createTextNode(chunkText));
     } else {
       block = currentSection
         ? currentSection.lastElementChild
@@ -96,8 +105,7 @@ export function initLogViewer() {
         block.className = 'log-text';
         (currentSection || logOutput).appendChild(block);
       }
-      const text = data.text || data;
-      block.appendChild(document.createTextNode(text));
+      block.appendChild(document.createTextNode(chunkText));
     }
     if (callId && callScrollers[callId]) {
       callScrollers[callId].scroll();
@@ -116,6 +124,18 @@ export function initLogViewer() {
     (currentSection || logOutput).appendChild(el);
     scroller.scroll();
   });
+}
+
+function updateTokenBadge() {
+  if (!tokenBadge) return;
+  if (totalChars === 0) {
+    tokenBadge.textContent = '';
+    return;
+  }
+  // Heuristic: mixed CJK/English averages ~2 chars per token
+  const tokens = Math.round(totalChars / 2);
+  const display = tokens >= 1000 ? `~${(tokens / 1000).toFixed(1)}k tokens` : `~${tokens} tokens`;
+  tokenBadge.textContent = display;
 }
 
 function saveLogToDisk() {
