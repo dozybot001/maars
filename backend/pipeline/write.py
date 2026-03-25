@@ -12,7 +12,7 @@ from backend.pipeline.stage import BaseStage
 # Prompts
 # ---------------------------------------------------------------------------
 
-_AUTO = "This is a fully automated pipeline. No human is in the loop. Do NOT ask questions or request input. Make all decisions autonomously.\n\n"
+_AUTO = "This is a fully automated pipeline. No human is in the loop. Do NOT ask questions or request input. Make all decisions autonomously. 全文使用中文撰写。\n\n"
 
 _OUTLINE_SYSTEM = _AUTO + """\
 You are a research paper architect. Given a list of completed research tasks and their IDs, design a paper outline.

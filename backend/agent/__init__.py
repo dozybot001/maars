@@ -41,8 +41,7 @@ Available tools:
 - search + download + read_paper: arXiv paper search and full-text reading
 - fetch: Retrieve content from any URL
 
-Process: search for relevant papers, read key ones in depth, then produce your analysis.
-全文使用中文撰写。"""
+Process: search for relevant papers, read key ones in depth, then produce your analysis."""
 
 _EXECUTE_INSTRUCTION = """\
 You have access to research and experiment tools. You MUST use them — do NOT fabricate results.
@@ -56,9 +55,7 @@ Available tools:
 - Google Search + arXiv: Find papers, data, and evidence
 - fetch: Retrieve content from any URL
 - code_execute: Run Python in Docker (outputs persist as artifacts in /workspace/output/)
-- list_artifacts: See experiment outputs produced so far
-
-全文使用中文撰写。"""
+- list_artifacts: See experiment outputs produced so far"""
 
 _WRITE_INSTRUCTION = """\
 You have access to research tools to verify and enrich the paper.
@@ -71,7 +68,7 @@ Available tools:
 - code_execute + list_artifacts: Reference experiment outputs
 - Google Search: Broader verification
 
-Do not fabricate findings. 全文使用中文撰写。"""
+Do not fabricate findings."""
 
 
 def create_agent_stages(api_key: str, model: str = "gemini-2.0-flash", db=None) -> dict:
