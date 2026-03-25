@@ -103,9 +103,16 @@ def create_agent_stages(api_key: str, model: str = "gemini-2.0-flash", db=None) 
     # run code, and do multi-step reasoning in a single task
     agent_atomic_def = """\
 ATOMIC DEFINITION (Agent mode):
-Each task is executed by an AI Agent with tools (web search, paper reading, code execution). A task is atomic if a single Agent session can complete it end-to-end, even if that involves multiple tool calls and intermediate reasoning. Examples of atomic tasks: "search and summarize literature on X", "implement algorithm Y, run experiments, and analyze results", "design and execute a comparative study of A vs B".
+Each task is executed by an AI Agent with tools (web search, paper reading, code execution).
 
-An Agent is powerful — do NOT split what one Agent session can handle. Only decompose when a task has genuinely independent sub-goals that benefit from separate execution (e.g., different experiments that can run in parallel)."""
+A task is atomic if it has a SINGLE coherent goal — e.g., "implement and test algorithm X", "conduct literature review on topic Y", "run experiment Z and analyze results".
+
+A task should be DECOMPOSED when it contains MULTIPLE independent goals that can run in parallel. The top-level research idea almost always needs decomposition. Examples:
+- A study comparing 3 algorithms → at minimum split into: literature review, implement+test each algorithm separately, comparative analysis
+- A study with experiments + theory → split into: theoretical analysis, experimental implementation, result synthesis
+- Any research with independent sub-experiments → split so they can execute in parallel
+
+PREFER DECOMPOSITION for the top-level idea. An atomic top-level task means the entire research runs as a single serial session with no parallelism — this is almost never optimal."""
     execute_client = AgentClient(
         instruction=_EXECUTE_INSTRUCTION,
         tools=db_tools + docker_tools + research_tools,
