@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     # Agno mode
     agno_model_provider: str = "google"  # "google", "anthropic", or "openai"
-    agno_model_id: str = "gemini-2.0-flash"
+    agno_model_id: str = "gemini-2.5-flash"
     openai_api_key: str = ""
     anthropic_api_key: str = ""
 

@@ -95,6 +95,11 @@ class AgnoClient(LLMClient):
                     call_id=f"Result: {tool_name}",
                 )
 
+            # --- Error ---
+            elif event.event == RunEvent.run_error:
+                error_msg = str(event.content) if event.content else "Unknown agent error"
+                raise RuntimeError(f"Agno agent error: {error_msg}")
+
             # --- Token usage (on completion) ---
             elif event.event == RunEvent.run_completed:
                 # Completed content as fallback
