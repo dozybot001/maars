@@ -165,6 +165,31 @@ research/{id}/
 └── reasoning.log                        ← Frontend saves
 ```
 
+## Stage Control: Stop / Resume / Retry
+
+| Action | Behavior |
+|--------|----------|
+| **Stop** | Cancels the stage's asyncio task. State → PAUSED. Agent's ReAct loop is broken cleanly — no partial results saved |
+| **Resume** | Restarts `run()`. Execute loads checkpoint from DB (`tasks/*.md` exists = completed), skips completed tasks, runs remaining. Other stages restart from scratch (single-session, no checkpoint) |
+| **Retry** | Clears in-memory state + DB task files, reruns everything. Also resets all downstream stages |
+
+```
+Stop flow:
+  orchestrator.stop_stage()
+    → llm_client.request_stop()    // Agent ReAct break
+    → stage._run_id += 1           // invalidate stale check
+    → cancel_task(stage + pipeline) // CancelledError propagates
+    → state = PAUSED
+
+Resume flow (Execute):
+  orchestrator.resume_stage()
+    → stage.run()
+      → _load_checkpoint()         // load completed tasks from DB
+      → topological_batches()      // recompute (deterministic, same result)
+      → skip tasks already in _task_results
+      → execute remaining tasks
+```
+
 ## Tool Strategy
 
 ```

@@ -103,17 +103,17 @@ research/{timestamp}-{slug}/
 ├── tasks/            # 各任务输出
 ├── artifacts/        # 代码脚本 + 实验产出（Agent 模式）
 ├── paper.md          # 最终论文
-└── reasoning.log     # 完整执行日志
+├── reasoning.log     # 完整执行日志
+├── Dockerfile.experiment  # 自动生成的 Docker 复现文件
+├── run.sh            # 实验运行脚本
+└── docker-compose.yml
 ```
 
 ## 展示
 
 | 运行 | 模式 | 主题 | 任务数 |
 |------|------|------|-------|
-| `20260323-210300-*` | Gemini | 认知缓冲假说 — 新闻框架效应的文化调节 | 31 |
-| `20260323-223406-*` | Agent | HMAO — 对抗式多 Agent 角色专业化 | 12 |
-
-构建历史：[Intent showcase/maars](https://github.com/dozybot001/Intent/tree/main/showcase/maars)
+| `20260325-212700-*` | Agent | ODE 数值求解器 — 精度、稳定性与计算效率对比 | 22 |
 
 ## 社区
 

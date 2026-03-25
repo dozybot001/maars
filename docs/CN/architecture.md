@@ -165,6 +165,31 @@ research/{id}/
 └── reasoning.log                       ← 前端保存
 ```
 
+## 阶段控制：Stop / Resume / Retry
+
+| 操作 | 行为 |
+|------|------|
+| **Stop** | 取消当前 stage 的 asyncio task，状态 → PAUSED。Agent 的 ReAct loop 被 break，不产生不完整结果 |
+| **Resume** | 重启 `run()`。Execute 从 DB 加载 checkpoint（`tasks/*.md` 存在 = 已完成），跳过已完成任务，只跑剩余。其他 stage 等同于 retry（单 session 无 checkpoint 概念） |
+| **Retry** | 清空 stage 内存状态 + DB task 文件，完全从头重跑。同时重置所有下游 stage |
+
+```
+Stop 流程：
+  orchestrator.stop_stage()
+    → llm_client.request_stop()    // Agent ReAct break
+    → stage._run_id += 1           // 让当前 run 的 stale check 失效
+    → cancel_task(stage + pipeline) // CancelledError 传播
+    → state = PAUSED
+
+Resume 流程（Execute）：
+  orchestrator.resume_stage()
+    → stage.run()
+      → _load_checkpoint()         // DB 读取已完成 task
+      → topological_batches()      // 重算（确定性，结果相同）
+      → 跳过 _task_results 中已有的 task
+      → 执行剩余 task
+```
+
 ## 工具策略
 
 ```

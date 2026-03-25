@@ -103,17 +103,17 @@ research/{timestamp}-{slug}/
 ├── tasks/            # Individual task outputs
 ├── artifacts/        # Code scripts + experiment outputs (Agent mode)
 ├── paper.md          # Final paper
-└── reasoning.log     # Full execution log
+├── reasoning.log     # Full execution log
+├── Dockerfile.experiment  # Auto-generated Docker reproduction
+├── run.sh            # Experiment runner script
+└── docker-compose.yml
 ```
 
 ## Showcase
 
 | Run | Mode | Topic | Tasks |
 |-----|------|-------|-------|
-| `20260323-210300-*` | Gemini | Cognitive Buffer Hypothesis — cultural modulation of news framing | 31 |
-| `20260323-223406-*` | Agent | HMAO — adversarial multi-agent role specialization | 12 |
-
-Build history: [Intent showcase/maars](https://github.com/dozybot001/Intent/tree/main/showcase/maars)
+| `20260325-212700-*` | Agent | ODE Numerical Solvers — accuracy, stability, and computational efficiency | 22 |
 
 ## Community
 
