@@ -49,6 +49,7 @@ class AgentWriteStage(BaseStage):
         return (
             "Use list_tasks and read_task_output tools to read all completed research outputs. "
             "Use read_refined_idea for context and read_plan_tree for structure. "
+            "Use list_artifacts to discover available images and include them using ![caption](filename). "
             "Write the complete research paper in markdown."
         )
 

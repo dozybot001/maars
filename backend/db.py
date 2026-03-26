@@ -66,6 +66,10 @@ class ResearchDB:
         self._ensure_root()
         (self._root / "paper.md").write_text(text, encoding="utf-8")
 
+    def save_paper_tex(self, text: str):
+        self._ensure_root()
+        (self._root / "paper.tex").write_text(text, encoding="utf-8")
+
     def save_task_output(self, task_id: str, text: str):
         self._ensure_root()
         safe_id = task_id.replace("/", "_")
