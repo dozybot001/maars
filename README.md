@@ -31,14 +31,15 @@ MAARS_GOOGLE_API_KEY=your-key
 
 Modes replace the engine at each stage, not the pipeline logic:
 
-| Stage | Mock | Gemini | Agent |
-|-------|------|--------|-------|
-| **Refine** | replay | GeminiClient | AgentClient + search tools |
-| **Plan** | replay | GeminiClient | AgentClient (no tools) |
-| **Execute** | replay | GeminiClient | AgentClient + search + code + DB tools |
-| **Write** | replay | GeminiClient | AgentClient + search + DB tools |
+| Stage | Mock | Gemini | ADK | Agno |
+|-------|------|--------|-----|------|
+| **Refine** | replay | GeminiClient | AgentClient + google_search | AgnoClient + DuckDuckGo + arXiv + Wikipedia |
+| **Plan** | replay | GeminiClient | AgentClient (no tools) | AgnoClient (no tools) |
+| **Execute** | replay | GeminiClient | AgentClient + search + code + DB | AgnoClient + DuckDuckGo + arXiv + code + DB |
+| **Write** | replay | GeminiClient | AgentClient + search + DB | AgnoClient + DuckDuckGo + arXiv + DB |
 
-> All three modes use the same pipeline stages. Only the `LLMClient` implementation differs.
+> All four modes use the same pipeline stages. Only the `LLMClient` implementation differs.
+> ADK uses Google ADK framework (Gemini-only). Agno uses Agno framework (40+ model providers).
 
 ## Architecture
 
@@ -58,13 +59,15 @@ flowchart TB
     subgraph Adapters["Adapter Layer · swappable"]
         MOCK["MockClient"]
         GEMINI["GeminiClient"]
-        AGENT["AgentClient\n(ADK + tools)"]
+        ADK["AgentClient\n(Google ADK)"]
+        AGNO["AgnoClient\n(Agno · 40+ models)"]
     end
 
     STAGES --> LLM
     LLM -.-> MOCK
     LLM -.-> GEMINI
-    LLM -.-> AGENT
+    LLM -.-> ADK
+    LLM -.-> AGNO
 
     subgraph FE["Frontend · Vanilla JS"]
         UI["Input + controls"]

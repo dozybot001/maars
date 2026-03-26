@@ -31,14 +31,15 @@ MAARS_GOOGLE_API_KEY=your-key
 
 模式替换的是各阶段的引擎，不是管线逻辑：
 
-| 阶段 | Mock | Gemini | Agent |
-|------|------|--------|-------|
-| **精炼** | 回放 | GeminiClient | AgentClient + 搜索工具 |
-| **规划** | 回放 | GeminiClient | AgentClient（无工具） |
-| **执行** | 回放 | GeminiClient | AgentClient + 搜索 + 代码 + DB 工具 |
-| **写作** | 回放 | GeminiClient | AgentClient + 搜索 + DB 工具 |
+| 阶段 | Mock | Gemini | ADK | Agno |
+|------|------|--------|-----|------|
+| **精炼** | 回放 | GeminiClient | AgentClient + google_search | AgnoClient + DuckDuckGo + arXiv + Wikipedia |
+| **规划** | 回放 | GeminiClient | AgentClient（无工具） | AgnoClient（无工具） |
+| **执行** | 回放 | GeminiClient | AgentClient + 搜索 + 代码 + DB | AgnoClient + DuckDuckGo + arXiv + 代码 + DB |
+| **写作** | 回放 | GeminiClient | AgentClient + 搜索 + DB | AgnoClient + DuckDuckGo + arXiv + DB |
 
-> 三种模式使用相同的 pipeline stages，只有 `LLMClient` 实现不同。
+> 四种模式使用相同的 pipeline stages，只有 `LLMClient` 实现不同。
+> ADK 使用 Google ADK 框架（仅 Gemini）。Agno 使用 Agno 框架（40+ 模型 provider）。
 
 ## 架构
 
@@ -58,13 +59,15 @@ flowchart TB
     subgraph Adapters["适配层 · 可替换"]
         MOCK["MockClient"]
         GEMINI["GeminiClient"]
-        AGENT["AgentClient\n(ADK + 工具)"]
+        ADK["AgentClient\n(Google ADK)"]
+        AGNO["AgnoClient\n(Agno · 40+ 模型)"]
     end
 
     STAGES --> LLM
     LLM -.-> MOCK
     LLM -.-> GEMINI
-    LLM -.-> AGENT
+    LLM -.-> ADK
+    LLM -.-> AGNO
 
     subgraph FE["前端 · Vanilla JS"]
         UI["输入 + 控制"]
