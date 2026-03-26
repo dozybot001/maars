@@ -53,7 +53,7 @@ flowchart TB
     end
 
     subgraph Interface["接口层"]
-        LLM["LLMClient.stream()"]
+        LLM["LLMClient.stream() → StreamEvent"]
     end
 
     subgraph Adapters["适配层 · 可替换"]
