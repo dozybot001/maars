@@ -49,10 +49,10 @@ flowchart TB
 
 | Principle | Detail |
 |-----------|--------|
-| **Three-layer decoupling** | `pipeline/` → `LLMClient` → `mock/gemini/agent` — pipeline never knows which adapter is active |
+| **Three-layer decoupling** | `pipeline/` → `LLMClient` → `mock/gemini/adk/agno` — pipeline never knows which adapter is active |
 | **DB-only inter-stage communication** | Stages read input from DB, write output to DB. No string passing between stages |
 | **Read/write split** | **Read**: Agent uses tools autonomously; Gemini/Mock pre-loaded by pipeline. **Write**: always deterministic via `finalize()` |
-| **Broadcast split** | `has_broadcast=False` (Gemini/Mock): pipeline emits chunks. `has_broadcast=True` (Agent): adapter broadcasts Think/Tool/Result |
+| **Unified broadcast** | All clients yield `StreamEvent`, pipeline dispatches via `_dispatch_stream()`. Clients never hold broadcast callbacks |
 | **Tool strategy** | ADK built-in > MCP ecosystem > custom (internal DB only) |
 
 ## Data Flow: Gemini Mode
@@ -193,9 +193,9 @@ Resume flow (Execute):
 
 ```
 Priority:
-1. ADK built-in (google_search, url_context, BuiltInCodeExecutor)
-2. MCP ecosystem (arXiv MCP, Fetch MCP)
-3. Custom (DB tools, Docker tools — internal data only)
+ADK mode: ADK built-in (google_search, url_context) + MCP (Fetch) + custom (DB, Docker)
+Agno mode: Agno built-in (DuckDuckGo, arXiv, Wikipedia) + custom (DB, Docker)
+Code execution unified through Docker code_execute
 ```
 
 No Skill layer — model-native ReAct reasoning replaces explicit skill orchestration.

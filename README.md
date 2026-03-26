@@ -25,7 +25,7 @@ flowchart LR
 `.env` one-line switch:
 
 ```env
-MAARS_LLM_MODE=mock      # or gemini, or agent
+MAARS_LLM_MODE=mock      # or gemini, adk, or agno
 MAARS_GOOGLE_API_KEY=your-key
 ```
 

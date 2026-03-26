@@ -25,7 +25,7 @@ flowchart LR
 `.env` 一行切换：
 
 ```env
-MAARS_LLM_MODE=mock      # 或 gemini，或 agent
+MAARS_LLM_MODE=mock      # 或 gemini、adk、agno
 MAARS_GOOGLE_API_KEY=your-key
 ```
 

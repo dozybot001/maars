@@ -49,10 +49,10 @@ flowchart TB
 
 | 原则 | 说明 |
 |------|------|
-| **三层解耦** | `pipeline/` → `LLMClient` → `mock/gemini/agent` — pipeline 不知道当前是哪个适配器 |
+| **三层解耦** | `pipeline/` → `LLMClient` → `mock/gemini/adk/agno` — pipeline 不知道当前是哪个适配器 |
 | **阶段间仅通过 DB 通信** | 每个阶段从 DB 读输入，写产出到 DB，不通过内存传递字符串 |
 | **读写分离** | **读**：Agent 用工具自主读取；Gemini/Mock 由 pipeline 预加载。**写**：始终由 `finalize()` 确定性写入 |
-| **广播分离** | `has_broadcast=False`（Gemini/Mock）：pipeline 发送 chunk。`has_broadcast=True`（Agent）：适配器广播 Think/Tool/Result |
+| **统一广播** | 所有 Client yield `StreamEvent`，pipeline 通过 `_dispatch_stream()` 统一广播。Client 不持有 broadcast 回调 |
 | **工具策略** | ADK 内置 > MCP 生态 > 自建（仅限内部 DB 工具） |
 
 ## 数据流：Gemini 模式
@@ -193,9 +193,9 @@ Resume 流程（Execute）：
 
 ```
 优先级：
-1. ADK 内置（google_search, url_context, BuiltInCodeExecutor）
-2. MCP 生态（arXiv MCP, Fetch MCP）
-3. 自建（DB 工具、Docker 工具 — 仅限内部数据访问）
+ADK 模式：ADK 内置（google_search, url_context）+ MCP（Fetch）+ 自建（DB、Docker）
+Agno 模式：Agno 内置（DuckDuckGo、arXiv、Wikipedia）+ 自建（DB、Docker）
+代码执行统一走 Docker code_execute
 ```
 
 不设 Skill 层 — 模型原生 ReAct 推理替代显式 Skill 编排。
