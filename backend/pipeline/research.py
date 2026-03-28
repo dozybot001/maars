@@ -102,6 +102,16 @@ def _build_execute_prompt(task: dict, dep_outputs: dict[str, str],
         )
 
     parts.append(f"## Your task [{task['id']}]:\n{task['description']}")
+
+    # Tool-use reminder at the end of user message (closest to generation,
+    # most likely to be followed). Only for tool-capable clients.
+    parts.append(
+        "\n---\n"
+        "REMINDER: If this task involves code/experiments, you MUST call "
+        "code_execute to run real code. Do NOT just describe code — execute it. "
+        "Use list_artifacts to verify generated files."
+    )
+
     messages.append({"role": "user", "content": "\n".join(parts)})
     return messages
 
