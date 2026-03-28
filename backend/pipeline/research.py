@@ -306,10 +306,11 @@ class ResearchStage(BaseStage):
                 if evaluation.get("satisfied", True):
                     break
 
-                # Decompose again with feedback
-                # Build supplementary tasks from evaluation feedback.
-                # These tasks reference existing results — NOT a fresh decompose.
-                new_tasks = self._build_supplement_tasks(evaluation, iteration)
+                # Replan: one LLM call that sees all completed work + feedback
+                # and decides what tasks to add. NOT a full re-decompose.
+                new_tasks = await self._replan(idea, evaluation, my_run_id)
+                if self._is_stale(my_run_id):
+                    return self.output
 
                 if not new_tasks:
                     break
@@ -318,6 +319,9 @@ class ResearchStage(BaseStage):
                 new_tasks = self._renumber_tasks(new_tasks, iteration + 1)
                 self._all_tasks.extend(new_tasks)
                 self.db.save_plan_amendment(new_tasks, iteration + 1)
+
+                # Emit updated tree so frontend shows new branches
+                self._emit_replan_tree(new_tasks, iteration + 1)
 
             # ── Phase 3: FINALIZE ──
             if self.state == StageState.FAILED:
@@ -551,15 +555,39 @@ class ResearchStage(BaseStage):
         )
 
     # ------------------------------------------------------------------
-    # Supplement tasks (iterate on existing work, don't re-decompose)
+    # Replan (informed single LLM call, not recursive decompose)
     # ------------------------------------------------------------------
 
-    def _build_supplement_tasks(self, evaluation: dict, iteration: int) -> list[dict]:
-        """Build supplementary tasks from evaluation feedback.
+    _REPLAN_SYSTEM = """\
+You are a research project planner. Given completed work and evaluation feedback, \
+decide what NEW tasks to add to address gaps. Do NOT redo completed tasks.
 
-        Instead of decomposing from scratch, creates tasks that reference
-        existing results and focus on what's missing or needs improvement.
-        This avoids duplicate work and preserves context.
+You will receive:
+1. The research goal
+2. Completed tasks with summaries
+3. Available artifacts (code outputs, files)
+4. Evaluation feedback with improvement suggestions
+
+Respond with ONLY a JSON object:
+{"add": [
+  {"id": "1", "description": "Specific actionable task", "dependencies": []},
+  {"id": "2", "description": "Another task that depends on 1", "dependencies": ["1"]}
+]}
+
+Rules:
+- IDs are simple integers: "1", "2", "3"
+- Dependencies are ONLY between NEW tasks (siblings), not existing completed tasks
+- Each task description must be specific and actionable
+- Tasks should BUILD ON existing work (reference previous task outputs and artifacts)
+- Do NOT create tasks that duplicate already-completed work
+- MAXIMIZE PARALLELISM: only add dependency when truly needed
+全文使用中文。"""
+
+    async def _replan(self, idea: str, evaluation: dict, my_run_id: int) -> list[dict]:
+        """One LLM call to decide what tasks to add based on evaluation feedback.
+
+        Unlike decompose (recursive, context-free), replan sees the full picture
+        of completed work and makes informed decisions about what's missing.
         """
         feedback = evaluation.get("feedback", "")
         suggestions = evaluation.get("suggestions", [])
@@ -567,56 +595,75 @@ class ResearchStage(BaseStage):
         if not feedback and not suggestions:
             return []
 
-        # Completed task summaries for context
+        # Build context
         completed_ids = sorted(self._task_results.keys())
         completed_summary = "\n".join(
             f"- Task [{tid}]: {self._task_summaries.get(tid, 'completed')}"
             for tid in completed_ids
         )
 
-        # Artifacts list (if any code was executed)
         artifacts_dir = self.db.get_artifacts_dir()
         artifacts = []
         if artifacts_dir.exists():
             artifacts = [f.name for f in artifacts_dir.iterdir()
                          if f.is_file() and not f.name.startswith("run_")]
 
-        context_parts = [
-            f"## Completed work so far\n{completed_summary}",
-        ]
+        user_parts = [f"## Research Goal\n{idea}"]
+        user_parts.append(f"\n## Completed Tasks\n{completed_summary}")
         if artifacts:
-            context_parts.append(
-                f"\n## Available artifacts at /workspace/output/\n{', '.join(artifacts)}"
-            )
-        context_parts.append(f"\n## Evaluation feedback\n{feedback}")
-        context = "\n".join(context_parts)
-
-        # Build one task per suggestion, or one combined task if no suggestions
+            user_parts.append(f"\n## Available Artifacts\n{', '.join(artifacts)}")
+        user_parts.append(f"\n## Evaluation Feedback\n{feedback}")
         if suggestions:
-            tasks = []
-            for i, suggestion in enumerate(suggestions, 1):
-                tasks.append({
-                    "id": str(i),
-                    "description": (
-                        f"{suggestion}\n\n"
-                        f"Context:\n{context}\n\n"
-                        f"IMPORTANT: Build on existing work. Use read_task_output to "
-                        f"read previous results. Do NOT redo completed tasks."
-                    ),
-                    "dependencies": [],
+            user_parts.append(
+                "\n## Suggestions\n" + "\n".join(f"- {s}" for s in suggestions)
+            )
+
+        messages = [
+            {"role": "system", "content": self._REPLAN_SYSTEM},
+            {"role": "user", "content": "\n".join(user_parts)},
+        ]
+
+        call_id = "Replan"
+        self._emit("chunk", {"text": call_id, "call_id": call_id, "label": True})
+
+        response = await self._stream_llm(
+            self.llm_client, messages, call_id, my_run_id,
+        )
+
+        data = parse_json_fenced(response, fallback={"add": []})
+        new_tasks = data.get("add", [])
+
+        # Validate structure
+        valid = []
+        for t in new_tasks:
+            if isinstance(t, dict) and "id" in t and "description" in t:
+                valid.append({
+                    "id": t["id"],
+                    "description": t["description"],
+                    "dependencies": t.get("dependencies", []),
                 })
-            return tasks
-        else:
-            return [{
-                "id": "1",
-                "description": (
-                    f"Address the following feedback:\n{feedback}\n\n"
-                    f"Context:\n{context}\n\n"
-                    f"IMPORTANT: Build on existing work. Use read_task_output to "
-                    f"read previous results. Do NOT redo completed tasks."
-                ),
-                "dependencies": [],
-            }]
+        return valid
+
+    def _emit_replan_tree(self, new_tasks: list[dict], round_num: int):
+        """Emit a tree event so the frontend can show new branches on the plan tree."""
+        # Build a sub-tree rooted at a "Round N" node
+        replan_tree = {
+            "id": f"r{round_num}",
+            "description": f"Replan round {round_num}",
+            "is_atomic": False,
+            "dependencies": [],
+            "children": [
+                {
+                    "id": t["id"],
+                    "description": t["description"],
+                    "is_atomic": True,
+                    "dependencies": t.get("dependencies", []),
+                    "children": [],
+                }
+                for t in new_tasks
+            ],
+        }
+        self._emit("replan_tree", replan_tree)
 
     # ------------------------------------------------------------------
     # Kaggle evaluation

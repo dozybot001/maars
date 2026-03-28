@@ -41,6 +41,7 @@ export function connectSSE() {
     ['task_state', 'task:state'],
     ['exec_tree', 'exec:tree'],
     ['tree', 'plan:tree'],
+    ['replan_tree', 'plan:replan'],
     ['tokens', 'log:tokens'],
   ]) {
     source.addEventListener(event, (e) => {

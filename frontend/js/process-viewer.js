@@ -50,6 +50,28 @@ export function initProcessViewer() {
     scroller.scroll();
   });
 
+  // --- Replan: append new branch to existing tree ---
+  on('plan:replan', ({ data }) => {
+    if (!data || !data.id || !currentSection) return;
+    let container = currentSection.querySelector('#tree-output');
+    if (!container) {
+      container = document.createElement('ul');
+      container.id = 'tree-output';
+      container.className = 'po-tree';
+      currentSection.appendChild(container);
+    }
+    // Append as a new branch (sibling of root's children)
+    const rootLi = container.querySelector(':scope > li');
+    let rootUl = rootLi ? rootLi.querySelector(':scope > ul') : null;
+    if (!rootUl && rootLi) {
+      rootUl = document.createElement('ul');
+      rootLi.appendChild(rootUl);
+    }
+    const target = rootUl || container;
+    target.appendChild(renderDecompNode(data, false));
+    scroller.scroll();
+  });
+
   // --- Execute: task list (incremental — preserves existing nodes on redecompose) ---
   on('exec:tree', ({ data }) => {
     if (!data || !data.batches || !currentSection) return;
