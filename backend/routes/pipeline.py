@@ -21,6 +21,14 @@ def _validate_stage(name: str):
 @router.post("/pipeline/start")
 async def start_pipeline(req: StartRequest, request: Request):
     orch = _get_orchestrator(request)
+
+    # Auto-detect Kaggle competition URL → skip Refine, fetch data
+    from backend.kaggle import extract_competition_id
+    kaggle_id = extract_competition_id(req.input)
+    if kaggle_id:
+        await orch.start_kaggle(kaggle_id)
+        return {"status": "started", "input": req.input, "kaggle": kaggle_id}
+
     await orch.start(req.input)
     return {"status": "started", "input": req.input}
 

@@ -101,6 +101,42 @@ class PipelineOrchestrator:
         task = asyncio.create_task(self._run_from("refine"))
         self._tasks["pipeline"] = task
 
+    async def start_kaggle(self, competition_id: str, data_dir: str = "data"):
+        """Start pipeline in Kaggle mode: fetch competition → skip Refine → Research.
+
+        Downloads dataset, constructs a structured idea from competition metadata,
+        saves it as both idea and refined_idea, then starts from the Research stage.
+        """
+        from backend.kaggle import fetch_competition, build_kaggle_idea
+        from backend.config import settings
+
+        await self._cancel_all_tasks()
+
+        info = fetch_competition(competition_id, data_dir=data_dir)
+
+        # Point Docker sandbox to the downloaded data
+        settings.dataset_dir = info["data_dir"]
+
+        idea = build_kaggle_idea(info)
+        self.research_input = idea
+        self.db.create_session(info["title"])
+        self.db.save_idea(idea)
+        self.db.save_refined_idea(idea)  # Skip Refine — idea IS the refined idea
+
+        for stage in self.stages.values():
+            stage.retry()
+            if stage.llm_client:
+                stage.llm_client.reset()
+
+        # Mark Refine as completed (skipped)
+        refine = self.stages["refine"]
+        refine.output = idea
+        refine.state = StageState.COMPLETED
+        self._broadcast({"stage": "refine", "type": "state", "data": "completed"})
+
+        task = asyncio.create_task(self._run_from("research"))
+        self._tasks["pipeline"] = task
+
     async def _run_from(self, stage_name: str):
         """Run stages sequentially from the given stage to the end."""
         idx = STAGE_ORDER.index(stage_name)
