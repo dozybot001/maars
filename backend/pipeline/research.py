@@ -199,6 +199,7 @@ class ResearchStage(BaseStage):
         self._max_iterations = max_iterations
         self._atomic_definition = atomic_definition
         self._all_tasks: list[dict] = []
+        self._kaggle_best_score: float = 0.0
         # Redecompose state: partial outputs and parent tracking
         self._partial_outputs: dict[str, str] = {}      # parent_id -> partial output
         self._redecompose_parent: dict[str, str] = {}    # subtask_id -> parent_id
@@ -280,17 +281,23 @@ class ResearchStage(BaseStage):
                     break
 
                 # Evaluate results
-                summaries = [
-                    {"id": tid, "summary": self._task_summaries.get(tid, "(no summary)")}
-                    for tid in sorted(self._task_results.keys())
-                ]
-                evaluation = await evaluate_results(
-                    idea=idea,
-                    task_summaries=summaries,
-                    llm_client=self.llm_client,
-                    stream_callback=lambda t, d: self._emit(t, d),
-                    is_stale=lambda: self._is_stale(my_run_id),
-                )
+                from backend.config import settings as _settings
+                if _settings.kaggle_competition_id:
+                    evaluation = await self._evaluate_kaggle(
+                        _settings.kaggle_competition_id, iteration,
+                    )
+                else:
+                    summaries = [
+                        {"id": tid, "summary": self._task_summaries.get(tid, "(no summary)")}
+                        for tid in sorted(self._task_results.keys())
+                    ]
+                    evaluation = await evaluate_results(
+                        idea=idea,
+                        task_summaries=summaries,
+                        llm_client=self.llm_client,
+                        stream_callback=lambda t, d: self._emit(t, d),
+                        is_stale=lambda: self._is_stale(my_run_id),
+                    )
                 if self._is_stale(my_run_id):
                     return self.output
 
@@ -537,6 +544,85 @@ class ResearchStage(BaseStage):
         )
 
     # ------------------------------------------------------------------
+    # Kaggle evaluation
+    # ------------------------------------------------------------------
+
+    async def _evaluate_kaggle(self, competition_id: str, iteration: int) -> dict:
+        """Submit to Kaggle and evaluate based on real score."""
+        from backend.kaggle import submit_and_score
+
+        submission_path = self.db.get_artifacts_dir() / "submission.csv"
+        if not submission_path.exists():
+            self._emit("chunk", {
+                "text": "Evaluate",
+                "call_id": "Evaluate",
+                "label": True,
+            })
+            self._emit("chunk", {
+                "text": "No submission.csv found — cannot score.\n",
+                "call_id": "Evaluate",
+            })
+            return {
+                "satisfied": False,
+                "feedback": "No submission.csv was generated. Tasks must output predictions to /workspace/output/submission.csv.",
+                "suggestions": ["Generate predictions and save to /workspace/output/submission.csv"],
+            }
+
+        self._emit("chunk", {
+            "text": "Kaggle Submit",
+            "call_id": "Kaggle Submit",
+            "label": True,
+        })
+        self._emit("chunk", {
+            "text": f"Submitting {submission_path.name} to Kaggle...\n",
+            "call_id": "Kaggle Submit",
+        })
+
+        score = submit_and_score(competition_id, str(submission_path))
+
+        if score is None:
+            self._emit("chunk", {
+                "text": "Kaggle scoring failed or timed out.\n",
+                "call_id": "Kaggle Submit",
+            })
+            return {"satisfied": True}  # Don't loop on scoring failure
+
+        # Track best score
+        best = getattr(self, "_kaggle_best_score", 0.0)
+        improved = score > best
+        if improved:
+            self._kaggle_best_score = score
+
+        self._emit("chunk", {
+            "text": f"Kaggle public score: {score:.5f} (previous best: {best:.5f})\n",
+            "call_id": "Kaggle Submit",
+        })
+
+        if not improved and iteration > 0:
+            self._emit("chunk", {
+                "text": "Score did not improve. Stopping.\n",
+                "call_id": "Kaggle Submit",
+            })
+            return {"satisfied": True}
+
+        # Always try to improve (until max_iterations)
+        return {
+            "satisfied": False,
+            "score": score,
+            "feedback": (
+                f"Current Kaggle score: {score:.5f}. "
+                f"Previous best: {best:.5f}. "
+                f"Improve the model — try hyperparameter tuning, "
+                f"better feature engineering, or ensemble methods."
+            ),
+            "suggestions": [
+                "Hyperparameter tuning (grid search / optuna) on the best model",
+                "Advanced feature engineering (interaction features, target encoding)",
+                "Ensemble / stacking multiple models",
+            ],
+        }
+
+    # ------------------------------------------------------------------
     # Calibration
     # ------------------------------------------------------------------
 
@@ -689,6 +775,7 @@ class ResearchStage(BaseStage):
         self._task_results.clear()
         self._task_summaries.clear()
         self._all_tasks.clear()
+        self._kaggle_best_score = 0.0
         self._partial_outputs.clear()
         self._redecompose_parent.clear()
         if self.db:

@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     # Kaggle
     kaggle_api_token: str = ""  # KAGGLE_API_TOKEN for API authentication
+    kaggle_competition_id: str = ""  # Set at runtime by start_kaggle()
     # External dataset directory (e.g., Kaggle data)
     dataset_dir: str = ""  # mounted read-only at /workspace/data in sandbox
 

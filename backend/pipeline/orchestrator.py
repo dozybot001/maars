@@ -114,8 +114,9 @@ class PipelineOrchestrator:
 
         info = fetch_competition(competition_id, data_dir=data_dir)
 
-        # Point Docker sandbox to the downloaded data
+        # Point Docker sandbox to the downloaded data + enable Kaggle scoring
         settings.dataset_dir = info["data_dir"]
+        settings.kaggle_competition_id = competition_id
 
         idea = build_kaggle_idea(info)
         self.research_input = idea

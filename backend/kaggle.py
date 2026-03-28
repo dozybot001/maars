@@ -92,6 +92,59 @@ def fetch_competition(competition_id: str, data_dir: str = "data") -> dict:
     }
 
 
+def submit_and_score(competition_id: str, submission_path: str) -> float | None:
+    """Submit predictions to Kaggle and return the public score.
+
+    Polls until Kaggle finishes scoring (up to 60s).
+
+    Args:
+        competition_id: Kaggle competition slug.
+        submission_path: Path to the submission CSV file.
+
+    Returns:
+        Public score as float, or None if scoring failed/timed out.
+    """
+    import time
+    from kaggle.api.kaggle_api_extended import KaggleApi
+
+    api = KaggleApi()
+    api.authenticate()
+
+    # Submit
+    api.competition_submit(
+        file_name=submission_path,
+        competition=competition_id,
+        message="MAARS auto-submission",
+    )
+
+    # Poll for score (Kaggle takes a few seconds to process)
+    for _ in range(12):  # 12 * 5s = 60s max
+        time.sleep(5)
+        subs = api.competition_submissions(competition_id)
+        if not hasattr(subs, 'submissions') and hasattr(subs, '__iter__'):
+            latest = list(subs)[0] if subs else None
+        elif hasattr(subs, 'submissions'):
+            latest = subs.submissions[0] if subs.submissions else None
+        else:
+            latest = None
+
+        if latest is None:
+            continue
+
+        # Check if scoring is complete
+        status = getattr(latest, 'status', None)
+        if status and 'COMPLETE' in str(status).upper():
+            score_str = getattr(latest, 'publicScore', None) or getattr(latest, 'public_score', None)
+            if score_str:
+                try:
+                    return float(score_str)
+                except (ValueError, TypeError):
+                    return None
+            return None
+
+    return None  # Timed out
+
+
 def build_kaggle_idea(info: dict) -> str:
     """Build a structured research input from Kaggle competition info.
 
