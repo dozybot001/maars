@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     anthropic_api_key: str = ""
 
+    # Research stage iteration
+    research_max_iterations: int = 3  # 1 = no evaluate loop, 3 = up to 2 feedback rounds
+
     # Docker sandbox
     docker_sandbox_image: str = "maars-sandbox:latest"
     docker_sandbox_timeout: int = 120  # seconds

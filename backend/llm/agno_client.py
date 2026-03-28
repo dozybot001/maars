@@ -31,6 +31,14 @@ class AgnoClient(LLMClient):
         self._tools = tools or []
         self._stop_requested = False
 
+    def describe_capabilities(self) -> str:
+        tool_descs = []
+        for t in self._tools:
+            name = getattr(t, 'name', type(t).__name__)
+            tool_descs.append(f"- {name}")
+        tools_str = "\n".join(tool_descs) if tool_descs else "(none)"
+        return f"AI Agent (Agno) with multi-step reasoning. Model: {self._model.__class__.__name__}\nAvailable tools:\n{tools_str}"
+
     def request_stop(self):
         """Signal the Agent to stop after the current event."""
         self._stop_requested = True

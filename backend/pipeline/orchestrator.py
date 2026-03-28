@@ -3,7 +3,7 @@ import asyncio
 from backend.db import ResearchDB
 from backend.pipeline.stage import BaseStage, StageState
 
-STAGE_ORDER = ["refine", "plan", "execute", "write"]
+STAGE_ORDER = ["refine", "research", "write"]
 
 
 class PipelineOrchestrator:

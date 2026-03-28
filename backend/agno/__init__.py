@@ -15,8 +15,7 @@ from backend.agent.tools import create_db_tools, create_docker_tools
 from backend.agent.stages import AgentRefineStage, AgentWriteStage
 from backend.agno.models import create_model
 from backend.llm.agno_client import AgnoClient
-from backend.pipeline.plan import PlanStage
-from backend.pipeline.execute import ExecuteStage
+from backend.pipeline.research import ResearchStage
 
 
 def create_agno_stages(
@@ -24,6 +23,7 @@ def create_agno_stages(
     model_id: str = "gemini-2.0-flash",
     api_key: str = "",
     db=None,
+    max_iterations: int = 1,
 ) -> dict:
     """Assemble pipeline stages with AgnoClient.
 
@@ -45,25 +45,6 @@ def create_agno_stages(
         model=model,
         tools=research_tools,
     )
-    plan_client = AgnoClient(
-        instruction="",
-        model=model,
-        tools=[],
-    )
-
-    # Same atomic definition as ADK — Agent can handle coarser tasks
-    agent_atomic_def = """\
-ATOMIC DEFINITION (Agent mode):
-Each task is executed by an AI Agent with tools (web search, paper reading, code execution).
-
-A task is atomic if it has a SINGLE coherent goal — e.g., "implement and test algorithm X", "conduct literature review on topic Y", "run experiment Z and analyze results".
-
-A task should be DECOMPOSED when it contains MULTIPLE independent goals that can run in parallel. The top-level research idea almost always needs decomposition. Examples:
-- A study comparing 3 algorithms → at minimum split into: literature review, implement+test each algorithm separately, comparative analysis
-- A study with experiments + theory → split into: theoretical analysis, experimental implementation, result synthesis
-- Any research with independent sub-experiments → split so they can execute in parallel
-
-PREFER DECOMPOSITION for the top-level idea. An atomic top-level task means the entire research runs as a single serial session with no parallelism — this is almost never optimal."""
 
     execute_client = AgnoClient(
         instruction=_EXECUTE_INSTRUCTION,
@@ -78,7 +59,10 @@ PREFER DECOMPOSITION for the top-level idea. An atomic top-level task means the 
 
     return {
         "refine": AgentRefineStage(llm_client=refine_client, db=db),
-        "plan": PlanStage(llm_client=plan_client, db=db, atomic_definition=agent_atomic_def),
-        "execute": ExecuteStage(llm_client=execute_client, db=db),
+        "research": ResearchStage(
+            llm_client=execute_client, db=db,
+            max_iterations=max_iterations,
+            # atomic_definition calibrated dynamically before decompose
+        ),
         "write": AgentWriteStage(llm_client=write_client, db=db),
     }

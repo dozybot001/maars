@@ -10,8 +10,7 @@ from backend.agent.tools import (
 )
 from backend.agent.stages import AgentRefineStage, AgentWriteStage
 from backend.llm.agent_client import AgentClient
-from backend.pipeline.plan import PlanStage
-from backend.pipeline.execute import ExecuteStage
+from backend.pipeline.research import ResearchStage
 
 # ADK built-in tools
 try:
@@ -64,7 +63,8 @@ IMPORTANT: Only reference files that actually exist in artifacts. Call list_arti
 全文使用中文撰写。Output the complete paper in markdown."""
 
 
-def create_agent_stages(api_key: str, model: str = "gemini-2.0-flash", db=None) -> dict:
+def create_agent_stages(api_key: str, model: str = "gemini-2.0-flash", db=None,
+                        max_iterations: int = 1) -> dict:
     """Assemble pipeline stages with AgentClient.
 
     Identical structure to gemini/mock modes — only the client differs.
@@ -85,26 +85,7 @@ def create_agent_stages(api_key: str, model: str = "gemini-2.0-flash", db=None) 
         tools=research_tools,
         model=model,
     )
-    plan_client = AgentClient(
-        instruction="",
-        tools=[],
-        model=model,
-    )
 
-    # Agent mode: coarser atomic tasks — an Agent can search, read papers,
-    # run code, and do multi-step reasoning in a single task
-    agent_atomic_def = """\
-ATOMIC DEFINITION (Agent mode):
-Each task is executed by an AI Agent with tools (web search, paper reading, code execution).
-
-A task is atomic if it has a SINGLE coherent goal — e.g., "implement and test algorithm X", "conduct literature review on topic Y", "run experiment Z and analyze results".
-
-A task should be DECOMPOSED when it contains MULTIPLE independent goals that can run in parallel. The top-level research idea almost always needs decomposition. Examples:
-- A study comparing 3 algorithms → at minimum split into: literature review, implement+test each algorithm separately, comparative analysis
-- A study with experiments + theory → split into: theoretical analysis, experimental implementation, result synthesis
-- Any research with independent sub-experiments → split so they can execute in parallel
-
-PREFER DECOMPOSITION for the top-level idea. An atomic top-level task means the entire research runs as a single serial session with no parallelism — this is almost never optimal."""
     execute_client = AgentClient(
         instruction=_EXECUTE_INSTRUCTION,
         tools=db_tools + docker_tools + research_tools,
@@ -118,7 +99,10 @@ PREFER DECOMPOSITION for the top-level idea. An atomic top-level task means the 
 
     return {
         "refine": AgentRefineStage(llm_client=refine_client, db=db),
-        "plan": PlanStage(llm_client=plan_client, db=db, atomic_definition=agent_atomic_def),
-        "execute": ExecuteStage(llm_client=execute_client, db=db),
+        "research": ResearchStage(
+            llm_client=execute_client, db=db,
+            max_iterations=max_iterations,
+            # atomic_definition calibrated dynamically before decompose
+        ),
         "write": AgentWriteStage(llm_client=write_client, db=db),
     }

@@ -30,7 +30,7 @@ export function initProcessViewer() {
       }
       activeStage = stage;
       currentSection = appendSeparator(processBody, STAGE_LABELS[stage] || stage.toUpperCase(), scroller);
-    } else if (data === 'completed' && (stage === 'refine' || stage === 'write')) {
+    } else if (data === 'completed' && (stage === 'refine' || stage === 'write' || stage === 'research')) {
       appendFileItem(stage);
     }
   });
@@ -99,7 +99,7 @@ export function initProcessViewer() {
     if (!node) return;
     node.classList.remove(
       'exec-pending', 'exec-running', 'exec-verifying',
-      'exec-retrying', 'exec-completed', 'exec-failed',
+      'exec-retrying', 'exec-decomposing', 'exec-completed', 'exec-failed',
     );
     node.classList.add(`exec-${status}`);
 
@@ -121,7 +121,8 @@ function appendFileItem(stageName) {
 
   const icon = document.createTextNode('\uD83D\uDCC4 ');
   const label = document.createElement('span');
-  label.textContent = stageName === 'refine' ? 'Refined Idea' : 'Paper';
+  const labels = { refine: 'Refined Idea', research: 'Research Results', write: 'Paper' };
+  label.textContent = labels[stageName] || stageName;
 
   item.appendChild(icon);
   item.appendChild(label);

@@ -4,8 +4,7 @@
 
 export const STAGE_LABELS = {
   refine: 'REFINE',
-  plan: 'PLAN',
-  execute: 'EXECUTE',
+  research: 'RESEARCH',
   write: 'WRITE',
 };
 

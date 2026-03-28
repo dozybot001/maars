@@ -31,6 +31,15 @@ class LLMClient(ABC):
         """Yield StreamEvents from the LLM response."""
         ...
 
+    def describe_capabilities(self) -> str:
+        """Describe what this client can do. Used for atomic task calibration.
+
+        Override in subclasses to provide tool-specific descriptions.
+        """
+        if self.has_tools:
+            return "AI Agent with tool access and multi-step reasoning."
+        return "Text-only LLM. Single conversation turn. No tools or code execution."
+
     def request_stop(self):
         """Signal the client to stop after the current in-flight event.
         Default no-op. AgentClient/AgnoClient override to break the loop."""

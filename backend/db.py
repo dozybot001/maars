@@ -21,7 +21,7 @@ import re
 class ResearchDB:
     """Manages a research session's file storage."""
 
-    def __init__(self, base_dir: str = "research"):
+    def __init__(self, base_dir: str = "results"):
         self._base = Path(base_dir)
         self._root: Path | None = None
         self.research_id: str = ""
@@ -131,6 +131,18 @@ class ResearchDB:
             for f in tasks_dir.glob("*.md"):
                 f.unlink()
 
+    def clear_plan(self):
+        """Delete plan files for clean retry."""
+        self._ensure_root()
+        for name in ("plan.json", "plan_tree.json"):
+            path = self._root / name
+            if path.exists():
+                path.unlink()
+        eval_dir = self._root / "evaluations"
+        if eval_dir.exists():
+            for f in eval_dir.glob("*.json"):
+                f.unlink()
+
     def get_root(self) -> Path:
         """Return the session root directory."""
         self._ensure_root()
@@ -149,3 +161,34 @@ class ResearchDB:
         if path.exists():
             return path.read_text(encoding="utf-8")
         return ""
+
+    # --- Iteration state ---
+
+    def get_iteration(self) -> int:
+        """Infer current iteration from the number of saved evaluations."""
+        self._ensure_root()
+        eval_dir = self._root / "evaluations"
+        if not eval_dir.exists():
+            return 0
+        return len(list(eval_dir.glob("eval_v*.json")))
+
+    # --- Evaluation & Plan Amendments ---
+
+    def save_evaluation(self, data: dict, iteration: int):
+        """Save evaluation result to evaluations/eval_v{iteration}.json."""
+        self._ensure_root()
+        eval_dir = self._root / "evaluations"
+        eval_dir.mkdir(exist_ok=True)
+        (eval_dir / f"eval_v{iteration}.json").write_text(
+            json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+
+    def save_plan_amendment(self, tasks: list[dict], iteration: int):
+        """Save additional tasks and update plan.json."""
+        self._ensure_root()
+        plan_path = self._root / "plan.json"
+        existing = json.loads(plan_path.read_text(encoding="utf-8")) if plan_path.exists() else []
+        existing.extend(tasks)
+        plan_path.write_text(
+            json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8"
+        )

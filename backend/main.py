@@ -19,6 +19,7 @@ if settings.llm_mode in ("agent", "adk"):
         api_key=settings.google_api_key,
         model=settings.gemini_model,
         db=orchestrator.db,
+        max_iterations=settings.research_max_iterations,
     )
 elif settings.llm_mode == "agno":
     from backend.agno import create_agno_stages
@@ -27,6 +28,7 @@ elif settings.llm_mode == "agno":
         model_id=settings.agno_model_id or settings.gemini_model,
         api_key=settings.google_api_key,
         db=orchestrator.db,
+        max_iterations=settings.research_max_iterations,
     )
 elif settings.llm_mode == "gemini":
     from backend.gemini import create_gemini_stages
@@ -34,10 +36,15 @@ elif settings.llm_mode == "gemini":
         api_key=settings.google_api_key,
         model=settings.gemini_model,
         db=orchestrator.db,
+        max_iterations=settings.research_max_iterations,
     )
 else:
     from backend.mock import create_mock_stages
-    stages = create_mock_stages(chunk_delay=settings.mock_chunk_delay, db=orchestrator.db)
+    stages = create_mock_stages(
+        chunk_delay=settings.mock_chunk_delay,
+        db=orchestrator.db,
+        max_iterations=settings.research_max_iterations,
+    )
 
 orchestrator.stages.update(stages)
 orchestrator._wire_broadcast()

@@ -1,7 +1,7 @@
 import { on } from './events.js';
 import { stageAction } from './api.js';
 
-const STAGE_ORDER = ['refine', 'plan', 'execute', 'write'];
+const STAGE_ORDER = ['refine', 'research', 'write'];
 
 /**
  * Declarative button enable/disable rules per state.

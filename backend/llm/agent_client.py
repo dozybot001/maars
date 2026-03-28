@@ -38,6 +38,16 @@ class AgentClient(LLMClient):
         self._tools = tools or []
         self._stop_requested = False
 
+    def describe_capabilities(self) -> str:
+        tool_descs = []
+        for t in self._tools:
+            name = getattr(t, 'name', None) or getattr(t, '__name__', type(t).__name__)
+            doc = getattr(t, '__doc__', None)
+            desc = doc.split('\n')[0].strip() if doc else ""
+            tool_descs.append(f"- {name}" + (f": {desc}" if desc else ""))
+        tools_str = "\n".join(tool_descs) if tool_descs else "(none)"
+        return f"AI Agent (ADK) with multi-step reasoning. Model: {self._model}\nAvailable tools:\n{tools_str}"
+
     def request_stop(self):
         """Signal the Agent to stop after the current event."""
         self._stop_requested = True
