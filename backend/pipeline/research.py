@@ -113,11 +113,19 @@ def _build_execute_prompt(task: dict, dep_outputs: dict[str, str],
 
     # Tool-use reminder at the end of user message (closest to generation,
     # most likely to be followed). Only for tool-capable clients.
+    from backend.config import settings
+    data_hint = ""
+    if settings.dataset_dir:
+        data_hint = (
+            " Dataset files are pre-mounted at /workspace/data/ inside the "
+            "code execution sandbox — read them directly (e.g., "
+            "pd.read_csv('/workspace/data/train.csv'))."
+        )
     parts.append(
         "\n---\n"
-        "REMINDER: If this task involves code/experiments, you MUST call "
-        "code_execute to run real code. Do NOT just describe code — execute it. "
-        "Use list_artifacts to verify generated files."
+        "REMINDER: You MUST call code_execute to run real code. "
+        "Do NOT describe or simulate code — actually execute it." + data_hint +
+        " Use list_artifacts to verify generated files."
     )
 
     messages.append({"role": "user", "content": "\n".join(parts)})
