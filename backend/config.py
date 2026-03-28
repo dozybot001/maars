@@ -14,9 +14,6 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     anthropic_api_key: str = ""
 
-    # Architecture: "pipeline" (legacy) or "agents" (multi-agent)
-    architecture: str = "pipeline"
-
     # Research stage iteration
     research_max_iterations: int = 3  # 1 = no evaluate loop, 3 = up to 2 feedback rounds
 
