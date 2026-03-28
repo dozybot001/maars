@@ -196,6 +196,13 @@ function getOrCreateTaskGroup(taskId) {
   if (taskGroups[taskId]) return taskGroups[taskId];
   if (!currentSection) return null;
 
+  // Fold any open top-level blocks in the section (e.g., Replan, Calibrate)
+  currentSection.querySelectorAll(':scope > .log-text:not(.folded):not(.user-expanded)').forEach(el => {
+    el.classList.add('folded');
+    const prev = el.previousElementSibling;
+    if (prev && prev.classList.contains('log-label')) prev.classList.add('is-collapsed');
+  });
+
   const group = document.createElement('div');
   group.className = 'task-group';
   group.dataset.taskId = taskId;
