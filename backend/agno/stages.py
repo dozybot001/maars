@@ -34,6 +34,7 @@ IMPORTANT: You MUST use your search and paper-reading tools — do NOT rely on m
         result = self.rounds[-1]["content"] if self.rounds else self.output
         if self.db:
             self.db.save_refined_idea(result)
+        self._emit("document", {"name": "refined_idea", "label": "Refined Idea", "content": result})
         return result
 
 
@@ -71,4 +72,5 @@ IMPORTANT: Only reference files that actually exist in artifacts. Call list_arti
         result = self.rounds[-1]["content"] if self.rounds else self.output
         if self.db:
             self.db.save_paper(result)
+        self._emit("document", {"name": "paper", "label": "Paper", "content": result})
         return result

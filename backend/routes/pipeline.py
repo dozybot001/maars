@@ -21,29 +21,11 @@ def _validate_stage(name: str):
 @router.post("/pipeline/start")
 async def start_pipeline(req: StartRequest, request: Request):
     orch = _get_orchestrator(request)
-
-    # Auto-detect Kaggle competition URL → skip Refine, fetch data
-    from backend.kaggle import extract_competition_id
-    kaggle_id = extract_competition_id(req.input)
-    if kaggle_id:
-        # Extract user hints (everything except the URL)
-        import re
-        user_hint = re.sub(r'https?://\S+', '', req.input).strip()
-        try:
-            await orch.start_kaggle(kaggle_id, user_hint=user_hint)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Kaggle start failed: {e}")
-        return {"status": "started", "input": req.input, "kaggle": kaggle_id}
-
-    await orch.start(req.input)
+    try:
+        await orch.start(req.input)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     return {"status": "started", "input": req.input}
-
-
-@router.get("/stage/{stage_name}/output")
-async def get_stage_output(stage_name: str, request: Request):
-    _validate_stage(stage_name)
-    orch = _get_orchestrator(request)
-    return {"stage": stage_name, "output": orch.stages[stage_name].output}
 
 
 @router.get("/pipeline/status", response_model=PipelineStatus)
@@ -54,6 +36,18 @@ async def get_status(request: Request):
         input=status["input"],
         stages=[StageStatus(**s) for s in status["stages"]],
     )
+
+
+@router.get("/docker/status")
+async def docker_status():
+    """Check if Docker daemon is reachable."""
+    try:
+        import docker
+        client = docker.from_env()
+        client.ping()
+        return {"connected": True}
+    except Exception as e:
+        return {"connected": False, "error": str(e)}
 
 
 @router.post("/stage/{stage_name}/stop", response_model=ActionResponse)

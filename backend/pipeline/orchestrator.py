@@ -85,55 +85,66 @@ class PipelineOrchestrator:
     # ------------------------------------------------------------------
 
     async def start(self, research_input: str):
-        """Start the full pipeline: Refine → Research → Write."""
+        """Start the pipeline. Auto-detects Kaggle URLs to fetch competition data."""
+        from backend.kaggle import extract_competition_id
+
         await self._cancel_all_tasks()
 
-        self.research_input = research_input
-        self.db.create_session(research_input)
-        self.db.save_idea(research_input)
+        # Detect Kaggle competition URL
+        kaggle_id = extract_competition_id(research_input)
+        if kaggle_id:
+            # Kaggle: fetch data + create session BEFORE retry (retry emits events that need DB)
+            self._start_kaggle(research_input, kaggle_id)
+            self._reset_stages()
+            self._mark_refine_done()
+            task = asyncio.create_task(self._run_from("research"))
+        else:
+            self.research_input = research_input
+            self.db.create_session(research_input)
+            self.db.save_idea(research_input)
+            self._reset_stages()
+            task = asyncio.create_task(self._run_from("refine"))
 
+        self._tasks["pipeline"] = task
+
+    def _reset_stages(self):
+        """Reset all stages for a fresh run."""
         for stage in self.stages.values():
             stage.retry()
             if stage.llm_client:
                 stage.llm_client.reset()
 
-        task = asyncio.create_task(self._run_from("refine"))
-        self._tasks["pipeline"] = task
-
-    async def start_kaggle(self, competition_id: str, data_dir: str = "data",
-                           user_hint: str = ""):
-        """Start pipeline in Kaggle mode: fetch competition → skip Refine → Research → Write."""
+    def _start_kaggle(self, raw_input: str, competition_id: str):
+        """Set up Kaggle mode: fetch data, build refined idea, skip Refine."""
+        import re
         from backend.kaggle import fetch_competition, build_kaggle_idea
         from backend.config import settings
 
-        await self._cancel_all_tasks()
-
-        info = fetch_competition(competition_id, data_dir=data_dir)
+        info = fetch_competition(competition_id)
 
         settings.dataset_dir = info["data_dir"]
         settings.kaggle_competition_id = competition_id
 
-        idea = build_kaggle_idea(info)
+        # Build rich refined idea from competition metadata + data files
+        refined = build_kaggle_idea(info)
+        user_hint = re.sub(r'https?://\S+', '', raw_input).strip()
         if user_hint:
-            idea += f"\n**User Notes**: {user_hint}\n"
-        self.research_input = idea
+            refined += f"\n## User Notes\n\n{user_hint}\n"
+
+        self.research_input = refined
         self.db.create_session(info["title"])
-        self.db.save_idea(idea)
-        self.db.save_refined_idea(idea)  # Skip Refine — idea IS the refined idea
+        self.db.save_idea(raw_input)
+        self.db.save_refined_idea(refined)
 
-        for stage in self.stages.values():
-            stage.retry()
-            if stage.llm_client:
-                stage.llm_client.reset()
-
-        # Mark Refine as completed (skipped)
+    def _mark_refine_done(self):
+        """Mark Refine as completed (Kaggle mode skips it). Call AFTER _reset_stages."""
         refine = self.stages["refine"]
-        refine.output = idea
+        refine.output = self.research_input
         refine.state = StageState.COMPLETED
         self._broadcast({"stage": "refine", "type": "state", "data": "completed"})
-
-        task = asyncio.create_task(self._run_from("research"))
-        self._tasks["pipeline"] = task
+        self._broadcast({"stage": "refine", "type": "document", "data": {
+            "name": "refined_idea", "label": "Refined Idea", "content": self.research_input,
+        }})
 
     async def _run_from(self, stage_name: str):
         """Run stages sequentially from the given stage to the end."""

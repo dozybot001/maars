@@ -1,95 +1,134 @@
 /**
  * Process & Output panel (right side).
- * Mirrors the left panel's structure: separator → collapsible section.
+ * Renders structured data: document cards, decomposition tree,
+ * execution graph with clickable tasks, and score indicators.
+ *
+ * Uses the same fold system as the left panel:
+ *   Stage section (── RESEARCH ──)       ← level 1
+ *     ▾ Phase (Calibrate / Execute ...)  ← level 2 (fold-label + fold-body)
+ *       [structured content]
  */
 import { on } from './events.js';
 import { createAutoScroller } from './autoscroll.js';
-import { STAGE_LABELS, appendSeparator } from './shared.js';
+import { STAGE_LABELS, createFold, appendSeparator } from './shared.js';
+import { showModal } from './modal.js';
+
+const PHASE_LABELS = {
+  calibrate: 'Calibrate',
+  strategy: 'Strategy',
+  decompose: 'Decompose',
+  execute: 'Execute',
+  evaluate: 'Evaluate',
+};
 
 let processBody;
 let scroller;
 let activeStage = null;
 let currentSection = null;
 
+// Phase groups — { label, body }
+let phaseGroups = {};
+let currentPhaseName = null;
+
+// Caches for modal content
+const documentCache = {};
+const taskSummaryCache = {};
+
+/** Current write target: phase body or section. */
+function target() {
+  if (currentPhaseName && phaseGroups[currentPhaseName]) return phaseGroups[currentPhaseName].body;
+  return currentSection;
+}
+
 export function initProcessViewer() {
   processBody = document.getElementById('process-body');
   scroller = createAutoScroller(processBody);
 
+  // --- Stage lifecycle (level 1) ---
   on('stage:state', ({ stage, data }) => {
     if (data === 'idle') {
       processBody.innerHTML = '';
       activeStage = null;
       currentSection = null;
+      phaseGroups = {};
+      currentPhaseName = null;
       scroller.reset();
     } else if (data === 'running' && stage !== activeStage) {
-      // Collapse previous section
       if (currentSection) {
         currentSection.classList.add('collapsed');
         const prevSep = currentSection.previousElementSibling;
         if (prevSep) prevSep.classList.add('is-collapsed');
       }
       activeStage = stage;
+      phaseGroups = {};
+      currentPhaseName = null;
       currentSection = appendSeparator(processBody, STAGE_LABELS[stage] || stage.toUpperCase(), scroller);
-    } else if (data === 'completed' && (stage === 'refine' || stage === 'write' || stage === 'research')) {
-      appendFileItem(stage);
     }
+  });
+
+  // --- Phase transitions (level 2) ---
+  on('stage:phase', ({ data }) => {
+    if (!currentSection) return;
+    // Collapse previous phase
+    if (currentPhaseName && phaseGroups[currentPhaseName]) {
+      const g = phaseGroups[currentPhaseName];
+      if (g.body && !g.body.classList.contains('user-expanded')) {
+        g.body.classList.add('collapsed');
+        g.label.classList.add('is-collapsed');
+      }
+    }
+    const label = PHASE_LABELS[data] || data;
+    currentPhaseName = label;
+    phaseGroups[label] = createFold(currentSection, label);
+    scroller.scroll();
+  });
+
+  // --- Document cards ---
+  on('doc:ready', ({ data }) => {
+    if (!data || !data.name || !target()) return;
+    documentCache[data.name] = data.content || '';
+    appendDocCard(data.name, data.label || data.name);
+  });
+
+  // --- Score indicator ---
+  on('score:update', ({ data }) => {
+    if (!data || !target()) return;
+    appendScoreElement(data);
   });
 
   // --- Plan: decomposition tree ---
   on('plan:tree', ({ data }) => {
-    if (!data || !data.id || !currentSection) return;
-    let container = currentSection.querySelector('#tree-output');
+    if (!data || !data.id || !target()) return;
+    const t = target();
+    let container = t.querySelector('#tree-output');
     if (!container) {
       container = document.createElement('ul');
       container.id = 'tree-output';
       container.className = 'po-tree';
-      currentSection.appendChild(container);
+      t.appendChild(container);
     }
     container.innerHTML = '';
     container.appendChild(renderDecompNode(data, true));
     scroller.scroll();
   });
 
-  // --- Replan: append new branch to existing tree ---
-  on('plan:replan', ({ data }) => {
-    if (!data || !data.id || !currentSection) return;
-    let container = currentSection.querySelector('#tree-output');
-    if (!container) {
-      container = document.createElement('ul');
-      container.id = 'tree-output';
-      container.className = 'po-tree';
-      currentSection.appendChild(container);
-    }
-    // Append as a new branch (sibling of root's children)
-    const rootLi = container.querySelector(':scope > li');
-    let rootUl = rootLi ? rootLi.querySelector(':scope > ul') : null;
-    if (!rootUl && rootLi) {
-      rootUl = document.createElement('ul');
-      rootLi.appendChild(rootUl);
-    }
-    const target = rootUl || container;
-    target.appendChild(renderDecompNode(data, false));
-    scroller.scroll();
-  });
-
-  // --- Execute: task list (incremental — preserves existing nodes on redecompose) ---
+  // --- Execute: task batch list ---
   on('exec:tree', ({ data }) => {
-    if (!data || !data.batches || !currentSection) return;
-    let container = currentSection.querySelector('#exec-output');
+    if (!data || !data.batches || !target()) return;
+    const t = target();
+    let container = t.querySelector('#exec-output');
     if (!container) {
       container = document.createElement('div');
       container.id = 'exec-output';
       container.className = 'po-exec';
-      currentSection.appendChild(container);
+      t.appendChild(container);
     }
 
-    // Collect existing task nodes to preserve their state
     const existingNodes = {};
     container.querySelectorAll('.exec-node').forEach(node => {
       existingNodes[node.dataset.taskId] = node;
     });
 
-    // Rebuild batch structure, reusing existing nodes
     const fragment = document.createDocumentFragment();
     for (const batch of data.batches) {
       const batchDiv = document.createElement('div');
@@ -103,11 +142,9 @@ export function initProcessViewer() {
       for (const task of batch.tasks) {
         const existing = existingNodes[task.id];
         if (existing) {
-          // Reuse existing node (preserves completed/failed/running state)
           batchDiv.appendChild(existing);
           delete existingNodes[task.id];
         } else {
-          // New task (from redecompose) — create fresh
           const node = document.createElement('div');
           node.className = 'exec-node exec-pending';
           node.dataset.taskId = task.id;
@@ -132,9 +169,9 @@ export function initProcessViewer() {
     scroller.scroll();
   });
 
-  // --- Execute: task status updates ---
+  // --- Task status updates ---
   on('task:state', ({ data }) => {
-    const { task_id, status } = data;
+    const { task_id, status, summary } = data;
     const node = processBody.querySelector(`.exec-node[data-task-id="${task_id}"]`);
     if (!node) return;
     node.classList.remove(
@@ -143,7 +180,14 @@ export function initProcessViewer() {
     );
     node.classList.add(`exec-${status}`);
 
-    // Scroll to the batch containing this task (not bottom)
+    if (status === 'completed' && summary) {
+      taskSummaryCache[task_id] = summary;
+      node.style.cursor = 'pointer';
+      node.addEventListener('click', () => {
+        showModal(`Task ${task_id}`, taskSummaryCache[task_id]);
+      }, { once: false });
+    }
+
     const batch = node.closest('.exec-batch');
     if (batch && scroller.isLocked()) {
       batch.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -153,40 +197,43 @@ export function initProcessViewer() {
 
 // --- Helpers ---
 
-function appendFileItem(stageName) {
-  if (!currentSection) return;
+function appendDocCard(name, label) {
+  const t = target();
+  if (!t) return;
   const item = document.createElement('div');
   item.className = 'po-file-item';
-  item.dataset.stage = stageName;
 
   const icon = document.createTextNode('\uD83D\uDCC4 ');
-  const label = document.createElement('span');
-  const labels = { refine: 'Refined Idea', research: 'Research Results', write: 'Paper' };
-  label.textContent = labels[stageName] || stageName;
+  const span = document.createElement('span');
+  span.textContent = label;
 
   item.appendChild(icon);
-  item.appendChild(label);
+  item.appendChild(span);
+  item.addEventListener('click', () => showModal(label, documentCache[name] || ''));
 
-  item.addEventListener('click', () => viewOutput(stageName));
-  currentSection.appendChild(item);
+  t.appendChild(item);
   scroller.scroll();
 }
 
-async function viewOutput(stageName) {
-  try {
-    const res = await fetch(`/api/stage/${stageName}/output`);
-    if (!res.ok) return;
-    const data = await res.json();
-    const win = window.open('', '_blank', 'width=800,height=600');
-    win.document.write(`<pre style="white-space:pre-wrap;font-family:monospace;padding:20px;">${escapeHtml(data.output)}</pre>`);
-    win.document.title = stageName === 'refine' ? 'Refined Idea' : 'Paper';
-  } catch (err) {
-    console.error(`Failed to fetch ${stageName} output:`, err);
-  }
-}
+function appendScoreElement(data) {
+  const t = target();
+  if (!t) return;
+  const el = document.createElement('div');
+  el.className = 'po-score';
 
-function escapeHtml(text) {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const current = data.current != null ? data.current.toFixed(5) : '\u2014';
+  const prev = data.previous != null ? data.previous.toFixed(5) : 'N/A';
+  const improved = data.improved;
+
+  el.classList.add(improved ? 'po-score-improved' : 'po-score-declined');
+  el.innerHTML =
+    `<span class="po-score-label">Score</span>` +
+    `<span class="po-score-current">${current}</span>` +
+    `<span class="po-score-arrow">${improved ? '\u2191' : '\u2192'}</span>` +
+    `<span class="po-score-prev">${prev}</span>`;
+
+  t.appendChild(el);
+  scroller.scroll();
 }
 
 // --- Decomposition tree renderer ---

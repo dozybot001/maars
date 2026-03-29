@@ -24,3 +24,5 @@ Thumbs.db
 
 # Research outputs (generated per session)
 research/
+results/
+data/

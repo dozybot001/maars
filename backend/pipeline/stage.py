@@ -73,16 +73,12 @@ class BaseStage:
                 messages.append({"role": "system", "content": self.system_instruction})
             messages.append({"role": "user", "content": input_text})
             call_id = self.get_round_label(0) or self.name
-            self._emit("chunk", {"text": call_id, "call_id": call_id, "label": True})
+            self._emit("chunk", {"text": call_id, "call_id": call_id, "label": True, "level": 1})
 
-            response = ""
-
-            async for event in self.llm_client.stream(messages):
-                if self._is_stale(my_run_id):
-                    break
-                text = self._dispatch_stream(event, call_id)
-                response += text
-                self.output += text
+            response = await self._stream_llm(
+                self.llm_client, messages, call_id, my_run_id, content_level=2,
+            )
+            self.output += response
 
             if self._is_stale(my_run_id):
                 return self.output
@@ -126,18 +122,44 @@ class BaseStage:
     # Internal
     # ------------------------------------------------------------------
 
-    def _dispatch_stream(self, event: StreamEvent, call_id: str) -> str:
-        """Dispatch a StreamEvent: broadcast to UI, return content text."""
-        if event.type == "content":
-            self._emit("chunk", {"text": event.text, "call_id": call_id})
-            return event.text
-        if event.type in ("think", "tool_call", "tool_result"):
-            self._emit("chunk", {"text": event.call_id, "call_id": event.call_id, "label": True})
-            if event.text:
-                self._emit("chunk", {"text": event.text, "call_id": event.call_id})
-        elif event.type == "tokens":
-            self._emit("tokens", event.metadata)
-        return ""
+    async def _stream_llm(self, client, messages: list[dict], call_id: str,
+                          my_run_id: int, content_level: int = 2,
+                          timeout: float = 300, max_retries: int = 2) -> str:
+        """Stream LLM response, dispatching events to frontend via SSE.
+        Handles timeout with retry.
+        """
+        for attempt in range(max_retries):
+            result = ""
+            try:
+                async with asyncio.timeout(timeout):
+                    async for event in client.stream(messages):
+                        if self._is_stale(my_run_id):
+                            return result
+                        if event.type == "content":
+                            self._emit("chunk", {"text": event.text, "call_id": call_id, "level": content_level})
+                            result += event.text
+                        elif event.type in ("think", "tool_call"):
+                            self._emit("chunk", {"text": event.call_id, "call_id": event.call_id, "label": True, "level": content_level})
+                            if event.text:
+                                self._emit("chunk", {"text": event.text, "call_id": event.call_id, "level": content_level})
+                        elif event.type == "tool_result":
+                            if event.text:
+                                self._emit("chunk", {"text": event.text, "call_id": event.call_id, "level": content_level})
+                        elif event.type == "tokens":
+                            self._emit("tokens", event.metadata)
+                return result
+            except TimeoutError:
+                if attempt < max_retries - 1:
+                    self._emit("chunk", {
+                        "text": f"\n[TIMEOUT] Retrying ({attempt + 1}/{max_retries - 1})...\n",
+                        "call_id": call_id,
+                    })
+                else:
+                    self._emit("chunk", {
+                        "text": f"\n[TIMEOUT] LLM stream failed after {max_retries} attempts\n",
+                        "call_id": call_id,
+                    })
+        return result
 
     def _is_stale(self, my_run_id: int) -> bool:
         return my_run_id != self._run_id

@@ -1,42 +1,39 @@
-import { startPipeline, fetchStatus, connectSSE } from './api.js';
+import { fetchStatus, connectSSE } from './api.js';
 import { initPipelineUI } from './pipeline-ui.js';
 import { initLogViewer } from './log-viewer.js';
 import { initProcessViewer } from './process-viewer.js';
+import { initModal } from './modal.js';
 
 // Initialize modules
 initPipelineUI();
 initLogViewer();
 initProcessViewer();
+initModal();
 
 // Sync with backend state first, then connect SSE for incremental updates
 fetchStatus().catch(() => {});
 connectSSE();
 
-// --- Command palette: Start ---
-const input = document.getElementById('research-input');
-const startBtn = document.getElementById('start-btn');
-const overlay = document.getElementById('cmd-overlay');
-
-async function handleStart() {
-  const text = input.value.trim();
-  if (!text) return;
-
-  startBtn.disabled = true;
-  input.disabled = true;
-
-  overlay.classList.add('hidden'); // Close palette immediately
+// Docker status indicator
+async function checkDocker() {
+  const el = document.getElementById('docker-status');
+  if (!el) return;
   try {
-    await startPipeline(text);
-  } catch (err) {
-    console.error('Failed to start pipeline:', err);
-  } finally {
-    startBtn.disabled = false;
-    input.disabled = false;
+    const res = await fetch('/api/docker/status');
+    const data = await res.json();
+    el.classList.remove('docker-unknown', 'docker-connected', 'docker-disconnected');
+    if (data.connected) {
+      el.classList.add('docker-connected');
+      el.title = 'Docker connected';
+    } else {
+      el.classList.add('docker-disconnected');
+      el.title = `Docker: ${data.error || 'not available'}`;
+    }
+  } catch {
+    el.classList.remove('docker-unknown', 'docker-connected', 'docker-disconnected');
+    el.classList.add('docker-disconnected');
+    el.title = 'Cannot check Docker status';
   }
 }
-
-input.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') handleStart();
-});
-
-startBtn.addEventListener('click', handleStart);
+checkDocker();
+setInterval(checkDocker, 30000);

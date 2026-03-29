@@ -42,8 +42,9 @@ export function connectSSE() {
     ['task_state', 'task:state'],
     ['exec_tree', 'exec:tree'],
     ['tree', 'plan:tree'],
-    ['replan_tree', 'plan:replan'],
     ['tokens', 'log:tokens'],
+    ['document', 'doc:ready'],
+    ['score', 'score:update'],
   ]) {
     source.addEventListener(event, (e) => {
       const data = safeParse(e);

@@ -7,7 +7,6 @@ import json
 from dataclasses import dataclass, field
 from typing import Callable
 
-from backend.llm.client import LLMClient, StreamEvent
 from backend.utils import parse_json_fenced
 
 # ---------------------------------------------------------------------------
@@ -76,27 +75,28 @@ def _build_user_prompt(task: Task, context: str) -> str:
 
 async def decompose(
     idea: str,
-    llm_client: LLMClient,
+    stream_fn: Callable,
     max_depth: int = 10,
     atomic_definition: str = "",
     strategy: str = "",
-    stream_callback: Callable | None = None,
+    emit: Callable | None = None,
     is_stale: Callable[[], bool] | None = None,
 ) -> tuple[list[dict], dict]:
     """Recursively decompose an idea into atomic tasks with a dependency DAG.
 
     Args:
         idea: The research idea or feedback text to decompose.
-        llm_client: LLM client for streaming calls.
+        stream_fn: async callable(messages, call_id, content_level) -> str.
+            Handles LLM streaming + event dispatch uniformly.
         max_depth: Maximum recursion depth.
         atomic_definition: Custom atomic definition (e.g. for Agent mode).
         strategy: Strategy document from pre-decompose research.
-        stream_callback: Optional callback(event_type, data) for SSE events.
+        emit: Optional callback(event_type, data) for non-chunk events (tree).
         is_stale: Optional callable returning True if this run has been superseded.
 
     Returns:
         (flat_tasks, tree) where:
-        - flat_tasks: plan.json format [{"id", "description", "dependencies"}, ...]
+        - flat_tasks: plan_list.json format [{"id", "description", "dependencies"}, ...]
         - tree: nested tree structure for frontend visualization
     """
     strategy_block = f"STRATEGY (from prior research):\n{strategy}" if strategy else ""
@@ -105,13 +105,12 @@ async def decompose(
         strategy=strategy_block,
     )
 
-    emit = stream_callback or (lambda t, d: None)
+    emit_fn = emit or (lambda t, d: None)
     stale = is_stale or (lambda: False)
 
     tasks: dict[str, Task] = {}
     pending: list[str] = []
 
-    # Initialize root
     root = Task(id="0", description=idea)
     tasks["0"] = root
     pending.append("0")
@@ -131,8 +130,8 @@ async def decompose(
                 context=idea,
                 system_prompt=system_prompt,
                 max_depth=max_depth,
-                llm_client=llm_client,
-                emit=emit,
+                stream_fn=stream_fn,
+                emit=emit_fn,
                 stale=stale,
             )
             for tid in batch
@@ -143,9 +142,8 @@ async def decompose(
             break
 
         tree = _serialize_tree(tasks)
-        emit("tree", tree)
+        emit_fn("tree", tree)
 
-    # Resolve dependencies and build flat task list
     tree = _serialize_tree(tasks)
     flat_tasks = _finalize(tasks)
     return flat_tasks, tree
@@ -158,14 +156,13 @@ async def _process_task(
     context: str,
     system_prompt: str,
     max_depth: int,
-    llm_client: LLMClient,
+    stream_fn: Callable,
     emit: Callable,
     stale: Callable[[], bool],
 ):
     """Process a single task: call LLM, parse result, update tree."""
     task = tasks[task_id]
 
-    # Depth limit: auto-mark as atomic
     depth = 0 if task_id == "0" else len(task_id.split("_"))
     if depth >= max_depth:
         task.is_atomic = True
@@ -177,21 +174,12 @@ async def _process_task(
     ]
 
     call_id = "Decompose" if task_id == "0" else f"Judge {task_id}"
-    emit("chunk", {"text": call_id, "call_id": call_id, "label": True})
+    label_level = 2 if task_id == "0" else 3
+    content_level = label_level + 1
 
-    response = ""
-    async for event in llm_client.stream(messages):
-        if stale():
-            return
-        if event.type == "content":
-            emit("chunk", {"text": event.text, "call_id": call_id})
-            response += event.text
-        elif event.type in ("think", "tool_call", "tool_result"):
-            emit("chunk", {"text": event.call_id, "call_id": event.call_id, "label": True})
-            if event.text:
-                emit("chunk", {"text": event.text, "call_id": event.call_id})
-        elif event.type == "tokens":
-            emit("tokens", event.metadata)
+    # Emit session label, then stream via the unified stream_fn
+    emit("chunk", {"text": call_id, "call_id": call_id, "label": True, "level": label_level})
+    response = await stream_fn(messages, call_id, content_level)
 
     data = parse_json_fenced(response, fallback={"is_atomic": True})
 
@@ -287,9 +275,7 @@ def _resolve_dependencies(
 
 
 def _ancestor_chain(task_id: str) -> list[str]:
-    """Return ancestor IDs from immediate parent up to root.
-    '2_1_3' -> ['2_1', '2', '0']
-    """
+    """Return ancestor IDs from immediate parent up to root."""
     parts = task_id.split("_")
     ancestors = []
     for i in range(len(parts) - 1, 0, -1):

@@ -21,6 +21,31 @@ export function safeParse(e) {
 }
 
 /**
+ * Create a fold group (label + body) inside a parent container.
+ * Used for all collapsible levels: phase, task, tool calls.
+ * Returns { label, body }.
+ */
+export function createFold(parent, labelText) {
+  const label = document.createElement('div');
+  label.className = 'fold-label';
+  label.textContent = labelText;
+
+  const body = document.createElement('div');
+  body.className = 'fold-body';
+
+  label.addEventListener('click', () => {
+    const collapsed = body.classList.toggle('collapsed');
+    label.classList.toggle('is-collapsed');
+    if (collapsed) body.classList.remove('user-expanded');
+    else body.classList.add('user-expanded');
+  });
+
+  parent.appendChild(label);
+  parent.appendChild(body);
+  return { label, body };
+}
+
+/**
  * Append a collapsible separator + section to a container.
  * Returns the new section element.
  */

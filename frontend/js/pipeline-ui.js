@@ -1,32 +1,47 @@
 import { on } from './events.js';
-import { stageAction } from './api.js';
+import { startPipeline, stageAction } from './api.js';
 
 /**
- * Progress node order — maps to pipeline phases.
- * refine/write are stages; calibrate/decompose/execute/evaluate are research sub-phases.
+ * Progress bar + command palette button state machine.
+ *
+ * Pipeline states: idle → running → (paused | completed | failed)
+ * Button rules: at most ONE button enabled at any time.
+ *   idle:      Start enabled (only if input non-empty)
+ *   running:   Pause enabled
+ *   paused:    Resume enabled
+ *   completed: Start enabled (for new run)
+ *   failed:    Start enabled (for retry)
  */
-const NODE_ORDER = ['refine', 'calibrate', 'strategy', 'decompose', 'execute', 'evaluate', 'write'];
 
-// Track node states: idle | active | done | paused | failed
+const NODE_ORDER = ['refine', 'calibrate', 'strategy', 'decompose', 'execute', 'evaluate', 'write'];
+const RESEARCH_PHASES = new Set(['calibrate', 'strategy', 'decompose', 'execute', 'evaluate']);
+
 const nodeStates = {};
 NODE_ORDER.forEach((n) => { nodeStates[n] = 'idle'; });
 
-// Map research sub-phases to node names
-const RESEARCH_PHASES = new Set(['calibrate', 'strategy', 'decompose', 'execute', 'evaluate']);
+const stageStates = { refine: 'idle', research: 'idle', write: 'idle' };
+
+let inputEl, startBtn, pauseBtn, resumeBtn, overlay;
 
 export function initPipelineUI() {
-  // --- Stage state events (refine/research/write) ---
+  inputEl = document.getElementById('research-input');
+  startBtn = document.getElementById('start-btn');
+  pauseBtn = document.getElementById('pause-btn');
+  resumeBtn = document.getElementById('resume-btn');
+  overlay = document.getElementById('cmd-overlay');
+
+  // --- Stage state events ---
   on('stage:state', ({ stage, data }) => {
+    stageStates[stage] = data;
+
     if (stage === 'refine') {
       updateNode('refine', stageToNodeState(data));
     } else if (stage === 'write') {
       updateNode('write', stageToNodeState(data));
     } else if (stage === 'research') {
-      // Research stage state applies to all sub-phase nodes
       if (data === 'completed') {
         RESEARCH_PHASES.forEach((n) => updateNode(n, 'done'));
       } else if (data === 'failed') {
-        // Mark current active sub-phase as failed, rest stay
         const active = [...RESEARCH_PHASES].find((n) => nodeStates[n] === 'active');
         if (active) updateNode(active, 'failed');
       } else if (data === 'paused') {
@@ -36,15 +51,13 @@ export function initPipelineUI() {
         RESEARCH_PHASES.forEach((n) => updateNode(n, 'idle'));
       }
     }
-    updateControls();
+    syncButtons();
   });
 
   // --- Research sub-phase events ---
   on('stage:phase', ({ data }) => {
-    const phase = data; // "calibrate" | "decompose" | "execute" | "evaluate"
+    const phase = data;
     if (!RESEARCH_PHASES.has(phase)) return;
-
-    // Mark previous sub-phases as done, current as active
     for (const n of RESEARCH_PHASES) {
       if (n === phase) {
         updateNode(n, 'active');
@@ -56,61 +69,89 @@ export function initPipelineUI() {
     }
   });
 
-  // --- Pause/Resume buttons ---
-  document.getElementById('pause-btn').addEventListener('click', async () => {
-    const running = getRunningStage();
-    if (running) {
-      try { await stageAction(running, 'stop'); }
-      catch (err) { console.error('Pause error:', err); }
-    }
-  });
-
-  document.getElementById('resume-btn').addEventListener('click', async () => {
-    const paused = getPausedStage();
-    if (paused) {
-      try { await stageAction(paused, 'resume'); }
-      catch (err) { console.error('Resume error:', err); }
-    }
+  // --- Button handlers ---
+  startBtn.addEventListener('click', handleStart);
+  pauseBtn.addEventListener('click', handlePause);
+  resumeBtn.addEventListener('click', handleResume);
+  inputEl.addEventListener('input', syncButtons);
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleStart();
   });
 
   // --- Command palette (Cmd+K / Ctrl+K) ---
-  const overlay = document.getElementById('cmd-overlay');
-  const input = document.getElementById('research-input');
-
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
       e.preventDefault();
       overlay.classList.toggle('hidden');
-      if (!overlay.classList.contains('hidden')) {
-        input.focus();
-      }
+      if (!overlay.classList.contains('hidden')) inputEl.focus();
     }
     if (e.key === 'Escape' && !overlay.classList.contains('hidden')) {
       overlay.classList.add('hidden');
     }
   });
 
-  // Click outside panel to close
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) overlay.classList.add('hidden');
   });
+
+  syncButtons();
 }
 
-// --- Helpers ---
+// --- Button state machine ---
 
-/** Map stage state to node visual state */
+function getPipelineState() {
+  if (Object.values(stageStates).some((s) => s === 'running')) return 'running';
+  if (Object.values(stageStates).some((s) => s === 'paused')) return 'paused';
+  return 'idle'; // idle, completed, or failed — all allow Start
+}
+
+function syncButtons() {
+  const state = getPipelineState();
+  const hasInput = inputEl && inputEl.value.trim().length > 0;
+
+  startBtn.disabled = !(state !== 'running' && state !== 'paused' && hasInput);
+  pauseBtn.disabled = state !== 'running';
+  resumeBtn.disabled = state !== 'paused';
+}
+
+async function handleStart() {
+  const text = inputEl.value.trim();
+  if (!text) return;
+
+  overlay.classList.add('hidden');
+  try {
+    await startPipeline(text);
+  } catch (err) {
+    console.error('Failed to start pipeline:', err);
+  }
+}
+
+async function handlePause() {
+  const running = Object.keys(stageStates).find((s) => stageStates[s] === 'running');
+  if (!running) return;
+  try { await stageAction(running, 'stop'); }
+  catch (err) { console.error('Pause error:', err); }
+}
+
+async function handleResume() {
+  const paused = Object.keys(stageStates).find((s) => stageStates[s] === 'paused');
+  if (!paused) return;
+  try { await stageAction(paused, 'resume'); }
+  catch (err) { console.error('Resume error:', err); }
+}
+
+// --- Progress bar helpers ---
+
 function stageToNodeState(state) {
   if (state === 'running') return 'active';
   if (state === 'completed') return 'done';
-  return state; // idle, paused, failed
+  return state;
 }
 
 function updateNode(name, state) {
   nodeStates[name] = state;
   const el = document.querySelector(`.progress-node[data-node="${name}"]`);
   if (el) el.dataset.state = state;
-
-  // Update the line BEFORE this node (filled if this node is done or beyond)
   updateLines();
 }
 
@@ -122,23 +163,4 @@ function updateLines() {
       line.dataset.filled = (nodeStates[name] === 'done') ? 'true' : 'false';
     }
   }
-}
-
-// Track which STAGE (not node) is running/paused for pause/resume
-const stageStates = { refine: 'idle', research: 'idle', write: 'idle' };
-
-// Also track stage states for controls
-on('stage:state', ({ stage, data }) => { stageStates[stage] = data; });
-
-function getRunningStage() {
-  return Object.keys(stageStates).find((s) => stageStates[s] === 'running') || null;
-}
-
-function getPausedStage() {
-  return Object.keys(stageStates).find((s) => stageStates[s] === 'paused') || null;
-}
-
-function updateControls() {
-  document.getElementById('pause-btn').disabled = !getRunningStage();
-  document.getElementById('resume-btn').disabled = !getPausedStage();
 }

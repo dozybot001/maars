@@ -1,23 +1,16 @@
 """Docker-based code execution tools for agents.
 
 Runs code in isolated containers with file artifacts persisted
-to research/{id}/artifacts/. Scripts are kept alongside outputs
-for full reproducibility.
-
-After all experiments, generate_reproduce_files() creates
-Dockerfile + run.sh + docker-compose.yml for one-command reproduction.
+to research/{id}/artifacts/{task_id}/. All file operations go
+through ResearchDB.
 """
 
 import json
-import hashlib
-import time
 from pathlib import Path
 
 from backend.config import settings
 from backend.db import ResearchDB
 
-# NOTE: generate_reproduce_files() lives in backend/reproduce.py (not here)
-# to avoid circular dependency between pipeline/ and agno/.
 
 def create_docker_tools(db: ResearchDB) -> list:
     """Create Docker execution tools bound to a research session."""
@@ -27,15 +20,11 @@ def create_docker_tools(db: ResearchDB) -> list:
 
         Args:
             code: Source code to execute.
-            language: 'python' (default). More languages in the future.
+            language: 'python' (default).
             requirements: Space-separated pip packages to install before execution.
 
         Returns:
-            JSON with: stdout, stderr, exit_code, timed_out, files (list of artifact filenames).
-
-        Files written to /workspace/output/ inside the container are persisted
-        to the research session's artifacts directory. The script itself is
-        also preserved for reproducibility.
+            JSON with: stdout, stderr, exit_code, timed_out, files.
         """
         try:
             import docker
@@ -47,20 +36,15 @@ def create_docker_tools(db: ResearchDB) -> list:
         except Exception as e:
             return json.dumps({"error": f"Docker not available: {e}"})
 
-        # Prepare directories
-        artifacts_dir = db.get_artifacts_dir()
-        tasks_dir = db.get_root() / "tasks" if db.research_id else None
+        # Save script via DB
+        script_path, script_name = db.save_script(code, language)
+        task_artifacts = script_path.parent
+        artifacts_root = db.get_artifacts_dir()
+        tasks_dir = db.get_tasks_dir() if db.research_id else None
 
-        # Write script with a unique name
-        timestamp = int(time.time())
-        code_hash = hashlib.md5(code.encode()).hexdigest()[:6]
-        ext = ".py" if language == "python" else ".r"
-        script_name = f"run_{timestamp}_{code_hash}{ext}"
-        script_path = artifacts_dir / script_name
-        script_path.write_text(code, encoding="utf-8")
-
-        # Track this execution for reproduce file generation
+        # Track for reproduce file generation
         db.execution_log.append({
+            "task_id": db.current_task_id or "",
             "script": script_name,
             "language": language,
             "requirements": requirements.strip(),
@@ -75,12 +59,11 @@ def create_docker_tools(db: ResearchDB) -> list:
 
         # Volume mounts
         volumes = {
-            str(artifacts_dir.resolve()): {"bind": "/workspace/output", "mode": "rw"},
+            str(task_artifacts.resolve()): {"bind": "/workspace/output", "mode": "rw"},
+            str(artifacts_root.resolve()): {"bind": "/workspace/artifacts", "mode": "ro"},
         }
         if tasks_dir and tasks_dir.exists():
             volumes[str(tasks_dir.resolve())] = {"bind": "/workspace/input", "mode": "ro"}
-
-        # External dataset (e.g., Kaggle data) — read-only
         if settings.dataset_dir:
             dataset_path = Path(settings.dataset_dir).resolve()
             if dataset_path.exists():
@@ -98,7 +81,6 @@ def create_docker_tools(db: ResearchDB) -> list:
                 detach=True,
             )
 
-            # Wait with timeout
             try:
                 result = container.wait(timeout=settings.docker_sandbox_timeout)
                 exit_code = result["StatusCode"]
@@ -115,8 +97,11 @@ def create_docker_tools(db: ResearchDB) -> list:
         except Exception as e:
             return json.dumps({"error": f"Container execution failed: {e}"})
 
-        # List all files in artifacts (including the script)
-        files = sorted(f.name for f in artifacts_dir.iterdir() if f.is_file())
+        # Auto-promote best_score.json via DB
+        db.promote_best_score()
+
+        # List files in this task's artifacts
+        files = sorted(f.name for f in task_artifacts.iterdir() if f.is_file())
 
         return json.dumps({
             "stdout": stdout[-5000:],
@@ -128,10 +113,9 @@ def create_docker_tools(db: ResearchDB) -> list:
         }, indent=2)
 
     def list_artifacts() -> str:
-        """List all files in the artifacts directory for this research session.
-        Includes experiment scripts and their outputs."""
+        """List all files in the current task's artifacts directory."""
         try:
-            artifacts_dir = db.get_artifacts_dir()
+            artifacts_dir = db.get_artifacts_dir(db.current_task_id)
         except RuntimeError:
             return "No active research session."
 
@@ -140,8 +124,6 @@ def create_docker_tools(db: ResearchDB) -> list:
             if f.is_file():
                 files.append({"filename": f.name, "size_bytes": f.stat().st_size})
 
-        if not files:
-            return "No artifacts produced yet."
-        return json.dumps(files, indent=2)
+        return json.dumps(files, indent=2) if files else "No artifacts produced yet."
 
     return [code_execute, list_artifacts]

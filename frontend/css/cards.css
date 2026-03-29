@@ -5,14 +5,46 @@
   z-index: 100;
   background: var(--bg-primary);
   padding: 10px 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .progress-track {
   display: flex;
   align-items: center;
+  flex: 1;
   max-width: 900px;
   margin: 0 auto;
 }
+
+/* Docker status indicator */
+.docker-indicator {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.docker-indicator::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+.docker-unknown { color: var(--text-muted); }
+.docker-unknown::before { background: var(--text-muted); }
+
+.docker-connected { color: var(--green); }
+.docker-connected::before { background: var(--green); }
+
+.docker-disconnected { color: var(--red); }
+.docker-disconnected::before { background: var(--red); }
 
 .progress-node {
   display: flex;
@@ -129,7 +161,6 @@
   border: none;
   color: var(--text-primary);
   font-size: 15px;
-  font-family: var(--font-sans);
   outline: none;
   min-width: 0;
 }
@@ -146,29 +177,17 @@
   flex-shrink: 0;
 }
 
-#start-btn {
-  background: var(--accent);
-  color: var(--bg-primary);
-  border-color: var(--accent);
-}
-#start-btn:hover { background: var(--accent-hover); }
-
-#pause-btn, #resume-btn {
+#cmd-panel button {
   background: transparent;
   color: var(--text-secondary);
 }
 
-#pause-btn:hover:not(:disabled) {
-  color: var(--yellow);
-  border-color: var(--yellow);
-}
-
-#resume-btn:hover:not(:disabled) {
-  color: var(--blue);
-  border-color: var(--blue);
+#cmd-panel button:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 #cmd-panel button:disabled {
-  opacity: 0.25;
+  opacity: 0.2;
   cursor: not-allowed;
 }

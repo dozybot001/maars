@@ -13,7 +13,10 @@ import json
 from backend.db import ResearchDB
 from backend.pipeline.stage import BaseStage, StageState
 from backend.pipeline.decompose import decompose
-from backend.pipeline.evaluate import evaluate_results, check_score_improved
+from backend.pipeline.prompts import (
+    CALIBRATE_SYSTEM, EVALUATE_SYSTEM, REPLAN_SYSTEM, STRATEGY_SYSTEM,
+    build_execute_prompt, build_verify_prompt, build_retry_prompt,
+)
 from backend.utils import parse_json_fenced
 
 # Per-coroutine task ID tracking for parallel execution.
@@ -35,122 +38,6 @@ class _RedecomposeNeeded(Exception):
 # Prompts
 # ---------------------------------------------------------------------------
 
-_AUTO = "This is a fully automated pipeline. No human is in the loop. Do NOT ask questions or request input. Make all decisions autonomously. 全文使用中文撰写。\n\n"
-
-_EXECUTE_SYSTEM = _AUTO + """\
-You are a research assistant executing a specific task as part of a larger research project.
-
-CRITICAL RULES:
-- When a task involves code, data analysis, or experiments: you MUST call code_execute to run real Python code. Do NOT describe code or simulate results — actually execute it.
-- When a task involves literature: you MUST call search/fetch tools. Do NOT make up citations.
-- NEVER pretend to have executed something. If you didn't call a tool, you didn't do it.
-
-OUTPUT REQUIREMENTS:
-- Produce a thorough, well-structured result in markdown
-- If you ran code: include key numerical results, describe generated files (e.g., "生成了 convergence_plot.png"), and interpret the findings
-- If you reviewed literature: cite specific papers with authors and years
-- Use list_artifacts to verify what files were produced
-
-SCORE TRACKING:
-- Whenever you obtain a model evaluation score (CV accuracy, F1, AUC, RMSE, etc.), \
-save the best result to /workspace/output/best_score.json using code_execute:
-  {"metric": "accuracy", "score": 0.85, "model": "XGBoost", "details": "5-fold CV"}
-- Always UPDATE this file if you achieve a better score than the existing one (read it first)."""
-
-_VERIFY_SYSTEM = """\
-You are a research quality reviewer. Evaluate whether the task result SUBSTANTIALLY meets the goal.
-
-Criteria:
-1. Does it address the core intent of the task? (not literal word-matching — reasonable engineering decisions like sampling representative points instead of exhaustive iteration are acceptable)
-2. Does it provide real substance, not just descriptions or plans?
-3. Is it well-structured and clearly written?
-
-Be pragmatic, not pedantic. A result that achieves the task's purpose through a slightly different approach should PASS. Only fail results that fundamentally miss the point or fabricate data.
-
-Respond with ONLY a JSON object:
-If acceptable: {"pass": true, "summary": "One-sentence summary of what was accomplished and key findings"}
-If minor issues (format, missing details, insufficient depth — but approach is correct):
-  {"pass": false, "redecompose": false, "review": "What needs fixing.", "summary": "One-sentence summary"}
-If fundamentally too complex or wrong approach:
-  {"pass": false, "redecompose": true, "review": "Why this needs to be broken down.", "summary": "One-sentence summary"}
-
-Set "redecompose" to true ONLY when:
-- The task covers multiple distinct sub-goals and the result is shallow on each
-- The result shows the task scope exceeds what a single execution can handle
-- The methodology is fundamentally wrong, not just incomplete"""
-
-
-_CALIBRATE_SYSTEM = _AUTO + """\
-You are calibrating task decomposition for a research pipeline.
-Assess your own capabilities and define what constitutes an "atomic task" — one you can reliably complete in a SINGLE execution session.
-
-If you have tools available, you may briefly test them to verify they work (e.g., one quick search). But keep testing minimal — focus on defining boundaries.
-
-Output ONLY a concise ATOMIC DEFINITION block (3-5 sentences) that will be injected verbatim into a task planner's system prompt. Include:
-1. What you can accomplish in a single session given your capabilities
-2. Concrete examples of atomic tasks for this research domain
-3. Concrete examples of tasks that are TOO LARGE and must be decomposed
-Be specific to this research topic — not generic advice."""
-
-
-def _build_execute_prompt(task: dict, prior_attempt: str = "") -> list[dict]:
-    """Build prompt for task execution."""
-    messages = [{"role": "system", "content": _EXECUTE_SYSTEM}]
-
-    parts = []
-    deps = task.get("dependencies", [])
-
-    if deps:
-        parts.append(f"## Prerequisite tasks (use read_task_output to read): {', '.join(deps)}\n---\n")
-
-    if prior_attempt:
-        parts.append(
-            "## Prior attempt on parent task (reference only — focus on YOUR specific subtask):\n"
-            f"{prior_attempt}\n---\n"
-        )
-
-    parts.append(f"## Your task [{task['id']}]:\n{task['description']}")
-
-    # Tool-use reminder at the end of user message (closest to generation,
-    # most likely to be followed). Only for tool-capable clients.
-    from backend.config import settings
-    data_hint = ""
-    if settings.dataset_dir:
-        data_hint = (
-            " Dataset files are pre-mounted at /workspace/data/ inside the "
-            "code execution sandbox — read them directly (e.g., "
-            "pd.read_csv('/workspace/data/train.csv'))."
-        )
-    parts.append(
-        "\n---\n"
-        "REMINDER: You MUST call code_execute to run real code. "
-        "Do NOT describe or simulate code — actually execute it." + data_hint +
-        " Use list_artifacts to verify generated files."
-    )
-
-    messages.append({"role": "user", "content": "\n".join(parts)})
-    return messages
-
-
-def _build_verify_prompt(task: dict, result: str) -> list[dict]:
-    return [
-        {"role": "system", "content": _VERIFY_SYSTEM},
-        {"role": "user", "content": (
-            f"Task [{task['id']}]: {task['description']}\n\n"
-            f"--- Execution result ---\n{result}"
-        )},
-    ]
-
-
-def _build_retry_prompt(task: dict, result: str, review: str) -> list[dict]:
-    """Build prompt for re-execution after failed verification."""
-    messages = _build_execute_prompt(task)
-    messages.append({"role": "assistant", "content": result})
-    messages.append({"role": "user", "content": (
-        f"Your previous output was reviewed and needs improvement:\n\n"
-        f"{review}\n\nPlease redo the task addressing the above feedback."
-    )})
-    return messages
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +72,64 @@ def topological_batches(tasks: list[dict]) -> list[list[dict]]:
 
 
 # ---------------------------------------------------------------------------
+# Pre-flight checks
+# ---------------------------------------------------------------------------
+
+def _preflight_docker():
+    """Check Docker availability before entering the agent execution loop.
+    Raises RuntimeError immediately instead of letting agents retry in circles.
+    """
+    try:
+        import docker
+    except ImportError:
+        raise RuntimeError("Docker SDK not installed. Run: pip install docker")
+    try:
+        client = docker.from_env()
+        client.ping()
+    except Exception as e:
+        raise RuntimeError(f"Docker is not running: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Tree helpers (for plan_tree.json sync)
+# ---------------------------------------------------------------------------
+
+def _find_node(tree: dict, node_id: str) -> dict | None:
+    """DFS search for a node by ID in the plan tree."""
+    if tree.get("id") == node_id:
+        return tree
+    for child in tree.get("children", []):
+        found = _find_node(child, node_id)
+        if found:
+            return found
+    return None
+
+
+def _renumber_subtree(children: list[dict], parent_id: str) -> list[dict]:
+    """Rename subtree node IDs: "1" → "{parent_id}_d1", recursively."""
+    # Collect all IDs for mapping
+    id_map: dict[str, str] = {}
+
+    def collect(nodes: list[dict]):
+        for n in nodes:
+            id_map[n["id"]] = f"{parent_id}_d{n['id']}"
+            collect(n.get("children", []))
+
+    collect(children)
+
+    def rename(node: dict) -> dict:
+        return {
+            "id": id_map.get(node["id"], node["id"]),
+            "description": node["description"],
+            "is_atomic": node.get("is_atomic"),
+            "dependencies": [id_map.get(d, d) for d in node.get("dependencies", [])],
+            "children": [rename(c) for c in node.get("children", [])],
+        }
+
+    return [rename(c) for c in children]
+
+
+# ---------------------------------------------------------------------------
 # ResearchStage
 # ---------------------------------------------------------------------------
 
@@ -199,6 +144,7 @@ class ResearchStage(BaseStage):
         self._max_iterations = max_iterations
         self._atomic_definition = atomic_definition
         self._all_tasks: list[dict] = []
+        self._tree: dict | None = None  # Decomposition tree (source of truth for plan_tree.json)
         self._strategy: str = ""  # Strategy from pre-decompose research
         self._prev_score: float | None = None  # Track score across iterations
         # Redecompose state: partial outputs and parent tracking
@@ -213,7 +159,7 @@ class ResearchStage(BaseStage):
         super()._emit(event_type, data)
 
     def load_input(self) -> str:
-        return self.db.get_plan_json()
+        return self.db.get_plan_list()
 
     async def run(self) -> str:
         """Decompose → execute → evaluate → loop."""
@@ -243,6 +189,7 @@ class ResearchStage(BaseStage):
                 if calibrated:
                     self._atomic_definition = calibrated
                     self.db.save_calibration(calibrated)
+                    self._emit("document", {"name": "calibration", "label": "Calibration", "content": calibrated})
 
             # ── Phase 1a: STRATEGY — research best approaches ──
             self._emit("phase", "strategy")
@@ -254,35 +201,45 @@ class ResearchStage(BaseStage):
                 if strategy:
                     self._strategy = strategy
                     self.db.save_strategy(strategy)
+                    self._emit("document", {"name": "strategy", "label": "Strategy", "content": strategy})
 
             # ── Phase 1b: DECOMPOSE (skip if plan already exists — resume case) ──
             self._emit("phase", "decompose")
-            existing_plan = self.db.get_plan_json()
+            existing_plan = self.db.get_plan_list()
             if existing_plan and self._task_results:
                 # Resume: plan exists and we have completed tasks — skip decompose
                 self._all_tasks = json.loads(existing_plan)
+                tree_str = self.db.get_plan_tree()
+                if tree_str:
+                    self._tree = json.loads(tree_str)
             else:
                 # Fresh run or retry: decompose from scratch
                 flat_tasks, tree = await decompose(
                     idea=idea,
-                    llm_client=self.llm_client,
+                    stream_fn=lambda msgs, cid, cl: self._stream_llm(
+                        self.llm_client, msgs, cid, my_run_id, content_level=cl,
+                    ),
                     max_depth=10,
                     atomic_definition=self._atomic_definition,
                     strategy=self._strategy,
-                    stream_callback=lambda t, d: self._emit(t, d),
+                    emit=lambda t, d: self._emit(t, d),
                     is_stale=lambda: self._is_stale(my_run_id),
                 )
                 if self._is_stale(my_run_id):
                     return self.output
 
                 self._all_tasks = flat_tasks
-                self.db.save_plan(
-                    json.dumps(flat_tasks, indent=2, ensure_ascii=False), tree
-                )
+                self._tree = tree
+                self.db.save_plan(flat_tasks, tree)
                 self._emit("tree", tree)
 
             # ── Phase 2: EXECUTE + EVALUATE loop ──
             self._emit("phase", "execute")
+            self._emit("chunk", {"text": "Execute", "call_id": "Execute", "label": True, "level": 2})
+
+            # Pre-flight: check Docker before entering agent loop
+            _preflight_docker()
+
             start_iteration = self.db.get_iteration()
             for iteration in range(start_iteration, self._max_iterations):
                 if self._is_stale(my_run_id):
@@ -303,19 +260,15 @@ class ResearchStage(BaseStage):
                 self._emit("phase", "evaluate")
 
                 # Step 1: System check — did the score improve?
-                improved, current_score = check_score_improved(
-                    self.db.get_artifacts_dir(), self._prev_score,
+                minimize = self.db.get_score_minimize()
+                improved, current_score = self._check_score_improved(
+                    self._prev_score, minimize,
                 )
                 if current_score is not None:
-                    self._emit("chunk", {
-                        "text": "Score Check",
-                        "call_id": "Score Check",
-                        "label": True,
-                    })
-                    prev_str = f"{self._prev_score:.5f}" if self._prev_score is not None else "N/A"
-                    self._emit("chunk", {
-                        "text": f"Current: {current_score:.5f} | Previous: {prev_str} | {'Improved' if improved else 'No improvement'}\n",
-                        "call_id": "Score Check",
+                    self._emit("score", {
+                        "current": current_score,
+                        "previous": self._prev_score,
+                        "improved": improved,
                     })
                     self._prev_score = current_score
 
@@ -329,18 +282,18 @@ class ResearchStage(BaseStage):
                     {"id": tid, "summary": self._task_summaries.get(tid, "(no summary)")}
                     for tid in sorted(self._task_results.keys())
                 ]
-                evaluation = await evaluate_results(
-                    idea=idea,
-                    task_summaries=summaries,
-                    llm_client=self.llm_client,
-                    stream_callback=lambda t, d: self._emit(t, d),
-                    is_stale=lambda: self._is_stale(my_run_id),
-                )
+                evaluation = await self._evaluate_results(idea, summaries, my_run_id)
                 if self._is_stale(my_run_id):
                     return self.output
 
                 evaluation["score"] = current_score
                 self.db.save_evaluation(evaluation, iteration)
+                self._emit("document", {
+                    "name": f"eval_v{iteration}",
+                    "label": f"Evaluation (round {iteration})",
+                    "content": evaluation.get("feedback", ""),
+                    "meta": {"score": current_score, "suggestions": evaluation.get("suggestions", [])},
+                })
 
                 # Replan: one LLM call that sees all completed work + feedback
                 # and decides what tasks to add. NOT a full re-decompose.
@@ -352,12 +305,31 @@ class ResearchStage(BaseStage):
                     break
 
                 # Renumber new tasks to avoid ID conflicts
-                new_tasks = self._renumber_tasks(new_tasks, iteration + 1)
+                round_num = iteration + 1
+                new_tasks = self._renumber_tasks(new_tasks, round_num)
                 self._all_tasks.extend(new_tasks)
-                self.db.save_plan_amendment(new_tasks, iteration + 1)
 
-                # Emit updated tree so frontend shows new branches
-                self._emit_replan_tree(new_tasks, iteration + 1)
+                # Build replan subtree and sync to tree + disk
+                replan_subtree = {
+                    "id": f"r{round_num}",
+                    "description": f"Replan round {round_num}",
+                    "is_atomic": False,
+                    "dependencies": [],
+                    "children": [
+                        {
+                            "id": t["id"],
+                            "description": t["description"],
+                            "is_atomic": True,
+                            "dependencies": t.get("dependencies", []),
+                            "children": [],
+                        }
+                        for t in new_tasks
+                    ],
+                }
+                if self._tree:
+                    self._tree.setdefault("children", []).append(replan_subtree)
+                self.db.save_plan_amendment(new_tasks, round_num, replan_subtree)
+                self._emit("tree", self._tree)
 
             # ── Phase 3: FINALIZE ──
             if self.state == StageState.FAILED:
@@ -481,10 +453,12 @@ class ResearchStage(BaseStage):
         """Execute a single task: run → verify → retry or redecompose."""
         task_id = task["id"]
         token = _current_task_id.set(task_id)
+        self.db.current_task_id = task_id
         try:
             return await self._execute_task_inner(task, my_run_id)
         finally:
             _current_task_id.reset(token)
+            self.db.current_task_id = None
 
     async def _execute_task_inner(self, task: dict, my_run_id: int) -> str:
         """Inner implementation of _execute_task (with task_id context set)."""
@@ -498,18 +472,18 @@ class ResearchStage(BaseStage):
         # --- Execute ---
         call_id = f"Exec {task_id}"
         self._emit("task_state", {"task_id": task_id, "status": "running"})
-        self._emit("chunk", {"text": call_id, "call_id": call_id, "label": True})
+        self._emit("chunk", {"text": call_id, "call_id": call_id, "label": True, "level": 3})
 
-        messages = _build_execute_prompt(task, prior_attempt)
-        result = await self._stream_llm(client, messages, call_id, my_run_id)
+        messages = build_execute_prompt(task, prior_attempt)
+        result = await self._stream_llm(client, messages, call_id, my_run_id, content_level=4)
         if self._is_stale(my_run_id):
             return result
 
         # --- Verify ---
         self._emit("task_state", {"task_id": task_id, "status": "verifying"})
 
-        verify_messages = _build_verify_prompt(task, result)
-        verify_response = await self._stream_llm(client, verify_messages, call_id, my_run_id)
+        verify_messages = build_verify_prompt(task, result)
+        verify_response = await self._stream_llm(client, verify_messages, call_id, my_run_id, content_level=4)
         if self._is_stale(my_run_id):
             return result
 
@@ -527,15 +501,15 @@ class ResearchStage(BaseStage):
         # Minor issue → retry once with feedback
         self._emit("task_state", {"task_id": task_id, "status": "retrying"})
 
-        retry_messages = _build_retry_prompt(task, result, review)
-        result = await self._stream_llm(client, retry_messages, call_id, my_run_id)
+        retry_messages = build_retry_prompt(task, result, review)
+        result = await self._stream_llm(client, retry_messages, call_id, my_run_id, content_level=4)
         if self._is_stale(my_run_id):
             return result
 
         # --- Verify again ---
         self._emit("task_state", {"task_id": task_id, "status": "verifying"})
-        verify_messages = _build_verify_prompt(task, result)
-        verify_response = await self._stream_llm(client, verify_messages, call_id, my_run_id)
+        verify_messages = build_verify_prompt(task, result)
+        verify_response = await self._stream_llm(client, verify_messages, call_id, my_run_id, content_level=4)
         passed, review, summary, redecompose = self._parse_verification(verify_response)
         self._task_summaries[task_id] = summary
 
@@ -551,40 +525,13 @@ class ResearchStage(BaseStage):
         raise RuntimeError(f"Task {task_id} failed verification after retry: {review}")
 
     def _save_task(self, task_id: str, result: str):
-        """Save completed task output and emit status."""
-        self._emit("task_state", {"task_id": task_id, "status": "completed"})
+        """Save completed task output and emit status with summary."""
+        summary = self._task_summaries.get(task_id, "")
+        self._emit("task_state", {"task_id": task_id, "status": "completed", "summary": summary})
         if self.db:
             self.db.save_task_output(task_id, result)
         self._task_results[task_id] = result
 
-    async def _stream_llm(self, client, messages: list[dict], call_id: str,
-                          my_run_id: int, timeout: float = 300,
-                          max_retries: int = 2) -> str:
-        """Stream LLM response, dispatching all events uniformly.
-
-        Retries on timeout — API may hang without returning an error.
-        """
-        for attempt in range(max_retries):
-            result = ""
-            try:
-                async with asyncio.timeout(timeout):
-                    async for event in client.stream(messages):
-                        if self._is_stale(my_run_id):
-                            return result
-                        result += self._dispatch_stream(event, call_id)
-                return result  # Success
-            except TimeoutError:
-                if attempt < max_retries - 1:
-                    self._emit("chunk", {
-                        "text": f"\n[TIMEOUT] Retrying ({attempt + 1}/{max_retries - 1})...\n",
-                        "call_id": call_id,
-                    })
-                else:
-                    self._emit("chunk", {
-                        "text": f"\n[TIMEOUT] LLM stream failed after {max_retries} attempts\n",
-                        "call_id": call_id,
-                    })
-        return result
 
     def _parse_verification(self, response: str) -> tuple[bool, str, str, bool]:
         """Parse verification JSON response. Returns (passed, review, summary, redecompose)."""
@@ -599,33 +546,6 @@ class ResearchStage(BaseStage):
     # ------------------------------------------------------------------
     # Replan (informed single LLM call, not recursive decompose)
     # ------------------------------------------------------------------
-
-    _REPLAN_SYSTEM = """\
-You are a research planner with tools. Given completed work and evaluation feedback, \
-investigate what went wrong or what's missing, then decide what NEW tasks to add.
-
-WORKFLOW:
-1. First, USE YOUR TOOLS to investigate:
-   - Search for better approaches or techniques relevant to the feedback
-   - Read previous task outputs (read_task_output) to understand what was actually done
-   - Check artifacts (list_artifacts) to see what files exist
-2. Based on your investigation, decide what new tasks to add
-3. Output a JSON block at the end of your response:
-
-```json
-{"add": [
-  {"id": "1", "description": "Specific actionable task", "dependencies": []},
-  {"id": "2", "description": "Another task that depends on 1", "dependencies": ["1"]}
-]}
-```
-
-Rules:
-- IDs are simple integers: "1", "2", "3"
-- Dependencies are ONLY between NEW tasks (siblings), not existing completed tasks
-- Each task description must be specific and actionable
-- Tasks should BUILD ON existing work, not redo it
-- MAXIMIZE PARALLELISM: only add dependency when truly needed
-全文使用中文。"""
 
     async def _replan(self, idea: str, evaluation: dict, my_run_id: int) -> list[dict]:
         """One LLM call to decide what tasks to add based on evaluation feedback.
@@ -663,15 +583,15 @@ Rules:
             )
 
         messages = [
-            {"role": "system", "content": self._REPLAN_SYSTEM},
+            {"role": "system", "content": REPLAN_SYSTEM},
             {"role": "user", "content": "\n".join(user_parts)},
         ]
 
         call_id = "Replan"
-        self._emit("chunk", {"text": call_id, "call_id": call_id, "label": True})
+        self._emit("chunk", {"text": call_id, "call_id": call_id, "label": True, "level": 3})
 
         response = await self._stream_llm(
-            self.llm_client, messages, call_id, my_run_id,
+            self.llm_client, messages, call_id, my_run_id, content_level=3,
         )
 
         data = parse_json_fenced(response, fallback={"add": []})
@@ -688,79 +608,85 @@ Rules:
                 })
         return valid
 
-    def _emit_replan_tree(self, new_tasks: list[dict], round_num: int):
-        """Emit a tree event so the frontend can show new branches on the plan tree."""
-        # Build a sub-tree rooted at a "Round N" node
-        replan_tree = {
-            "id": f"r{round_num}",
-            "description": f"Replan round {round_num}",
-            "is_atomic": False,
-            "dependencies": [],
-            "children": [
-                {
-                    "id": t["id"],
-                    "description": t["description"],
-                    "is_atomic": True,
-                    "dependencies": t.get("dependencies", []),
-                    "children": [],
-                }
-                for t in new_tasks
-            ],
-        }
-        self._emit("replan_tree", replan_tree)
-
     def _load_prev_score(self) -> float | None:
         """Load the best score from the latest evaluation file."""
         try:
-            eval_dir = self.db.get_root() / "evaluations"
-            if not eval_dir.exists():
-                return None
-            files = sorted(eval_dir.glob("eval_v*.json"))
-            if not files:
-                return None
-            data = json.loads(files[-1].read_text())
-            score = data.get("score")
-            return float(score) if score is not None else None
-        except (json.JSONDecodeError, ValueError, RuntimeError):
+            return self.db.get_latest_score()
+        except RuntimeError:
             return None
 
     # ------------------------------------------------------------------
     # Strategy research
     # ------------------------------------------------------------------
 
-    _STRATEGY_SYSTEM = _AUTO + """\
-You are a research strategist with search tools. Before the team decomposes a research \
-project into tasks, you research best practices and winning approaches.
-
-WORKFLOW:
-1. USE YOUR SEARCH TOOLS to find:
-   - Top-scoring approaches, notebooks, and solutions for this problem/competition
-   - Key techniques that winners use (feature engineering, model selection, ensembles)
-   - Common pitfalls to avoid
-2. Synthesize your findings into a concise STRATEGY document
-
-OUTPUT FORMAT — a concise strategy document (NOT a task list):
-- **Key Insights**: What distinguishes high-performing solutions from average ones
-- **Recommended Approach**: Specific techniques to prioritize (with rationale)
-- **Pitfalls to Avoid**: Common mistakes that hurt performance
-- **Target Metric**: What score range to aim for based on your research
-
-Keep it concise (under 500 words). This will be injected into the task planner's context."""
-
     async def _research_strategy(self, idea: str, my_run_id: int) -> str:
         """Research best approaches before decomposing."""
         call_id = "Strategy"
-        self._emit("chunk", {"text": call_id, "call_id": call_id, "label": True})
+        self._emit("chunk", {"text": call_id, "call_id": call_id, "label": True, "level": 2})
 
         messages = [
-            {"role": "system", "content": self._STRATEGY_SYSTEM},
+            {"role": "system", "content": STRATEGY_SYSTEM},
             {"role": "user", "content": f"## Research Topic\n{idea}"},
         ]
 
         response = await self._stream_llm(
-            self.llm_client, messages, call_id, my_run_id,
+            self.llm_client, messages, call_id, my_run_id, content_level=3,
         )
+
+        # Extract score direction from strategy response
+        direction_data = parse_json_fenced(response, fallback={})
+        if "score_direction" in direction_data:
+            minimize = direction_data["score_direction"] != "maximize"
+            self.db.save_score_direction(minimize)
+
         return response.strip()
+
+    # ------------------------------------------------------------------
+    # Evaluation
+    # ------------------------------------------------------------------
+
+    def _check_score_improved(self, prev_score: float | None,
+                              minimize: bool = True) -> tuple[bool, float | None]:
+        """Check best_score.json and compare with previous iteration."""
+        score_file = self.db.get_artifacts_dir() / "best_score.json"
+        if not score_file.exists():
+            return False, None
+        try:
+            data = json.loads(score_file.read_text())
+            current = float(data.get("score", 0))
+        except (json.JSONDecodeError, ValueError, TypeError):
+            return False, None
+        if prev_score is None:
+            return True, current
+        if minimize:
+            improved = current < prev_score * 0.995
+        else:
+            improved = current > prev_score * 1.005
+        return improved, current
+
+    async def _evaluate_results(self, idea: str, task_summaries: list[dict],
+                                my_run_id: int) -> dict:
+        """Analyze completed results and suggest improvements."""
+        call_id = "Evaluate"
+        self._emit("chunk", {"text": call_id, "call_id": call_id, "label": True, "level": 2})
+
+        summaries_text = "\n".join(
+            f"- **Task [{s['id']}]**: {s['summary']}" for s in task_summaries
+        )
+        messages = [
+            {"role": "system", "content": EVALUATE_SYSTEM},
+            {"role": "user", "content": (
+                f"## Research Goal\n{idea}\n\n"
+                f"## Completed Task Summaries\n{summaries_text}\n\n"
+                f"Use read_task_output and list_artifacts to investigate actual results. "
+                f"Analyze what can be improved and provide specific suggestions."
+            )},
+        ]
+
+        response = await self._stream_llm(
+            self.llm_client, messages, call_id, my_run_id, content_level=3,
+        )
+        return parse_json_fenced(response, fallback={"feedback": "", "suggestions": []})
 
     # ------------------------------------------------------------------
     # Calibration
@@ -776,10 +702,10 @@ Keep it concise (under 500 words). This will be injected into the task planner's
         capabilities = self.llm_client.describe_capabilities()
 
         call_id = "Calibrate"
-        self._emit("chunk", {"text": call_id, "call_id": call_id, "label": True})
+        self._emit("chunk", {"text": call_id, "call_id": call_id, "label": True, "level": 2})
 
         messages = [
-            {"role": "system", "content": _CALIBRATE_SYSTEM},
+            {"role": "system", "content": CALIBRATE_SYSTEM},
             {"role": "user", "content": (
                 f"## Your Capabilities\n{capabilities}\n\n"
                 f"## Research Topic\n{idea}"
@@ -787,7 +713,7 @@ Keep it concise (under 500 words). This will be injected into the task planner's
         ]
 
         response = await self._stream_llm(
-            self.llm_client, messages, call_id, my_run_id,
+            self.llm_client, messages, call_id, my_run_id, content_level=3,
         )
         return response.strip()
 
@@ -819,16 +745,18 @@ Keep it concise (under 500 words). This will be injected into the task planner's
         )
 
         # Suppress "tree" events from redecompose — they would overwrite the main plan tree
-        def _redecomp_callback(t, d):
+        def _redecomp_emit(t, d):
             if t != "tree":
                 self._emit(t, d)
 
-        flat_tasks, _ = await decompose(
+        flat_tasks, subtree = await decompose(
             idea=context,
-            llm_client=self.llm_client,
+            stream_fn=lambda msgs, cid, cl: self._stream_llm(
+                self.llm_client, msgs, cid, my_run_id, content_level=cl,
+            ),
             max_depth=3,
             atomic_definition=self._atomic_definition,
-            stream_callback=_redecomp_callback,
+            emit=_redecomp_emit,
             is_stale=lambda: self._is_stale(my_run_id),
         )
 
@@ -854,12 +782,19 @@ Keep it concise (under 500 words). This will be injected into the task planner's
             # Track parent so subtasks can access partial output
             self._redecompose_parent[new_id] = task_id
 
-        # Persist updated plan
+        # Persist updated plan (flat list + tree)
         if self.db:
             updated = [t for t in self._all_tasks if t["id"] != task_id] + renumbered
-            self.db.save_plan(
-                json.dumps(updated, indent=2, ensure_ascii=False), None
-            )
+            # Sync tree: find parent node, mark non-atomic, graft subtask children
+            if self._tree:
+                parent_node = _find_node(self._tree, task_id)
+                if parent_node:
+                    parent_node["is_atomic"] = False
+                    parent_node["children"] = _renumber_subtree(
+                        subtree.get("children", []), task_id,
+                    )
+                self._emit("tree", self._tree)
+            self.db.save_plan(updated, self._tree or {})
 
         return renumbered
 
@@ -920,6 +855,7 @@ Keep it concise (under 500 words). This will be injected into the task planner's
         self._task_results.clear()
         self._task_summaries.clear()
         self._all_tasks.clear()
+        self._tree = None
         self._strategy = ""
         self._prev_score = None
         self._partial_outputs.clear()

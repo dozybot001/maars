@@ -25,6 +25,7 @@
       <div class="progress-line" data-after="evaluate"></div>
       <div class="progress-node" data-node="write"><span>Write</span></div>
     </div>
+    <div id="docker-status" class="docker-indicator docker-unknown" title="Checking Docker...">Docker</div>
   </div>
 
   <!-- Main workspace -->
@@ -51,6 +52,17 @@
       </div>
     </section>
   </main>
+
+  <!-- Modal overlay -->
+  <div id="modal-overlay" class="hidden">
+    <div id="modal-panel">
+      <div id="modal-header">
+        <h3 id="modal-title"></h3>
+        <button id="modal-close">&times;</button>
+      </div>
+      <pre id="modal-content"></pre>
+    </div>
+  </div>
 
   <!-- Command palette (Cmd+K) -->
   <div id="cmd-overlay" class="hidden">

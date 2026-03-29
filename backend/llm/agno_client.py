@@ -95,7 +95,7 @@ class AgnoClient(LLMClient):
                 yield StreamEvent(
                     "tool_result",
                     text=result_text[:500],
-                    call_id=f"Result: {tool_name}",
+                    call_id=f"Tool: {tool_name}",
                 )
 
             # --- Error ---
