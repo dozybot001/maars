@@ -16,22 +16,23 @@ Current status:
 
 ```mermaid
 flowchart TB
-    INPUT["Idea / Kaggle URL"] --> ORCH["Pipeline Orchestrator"]
+    UI["Frontend UI"] --> API["FastAPI API"]
+    API --> ORCH["Pipeline Orchestrator"]
 
-    ORCH --> REF["Refine<br/>single-agent now<br/>multi-agent target"]
-    ORCH --> RES["Research<br/>workflow core<br/>calibrate → strategy → decompose<br/>→ execute → verify → evaluate → replan"]
-    ORCH --> WRI["Write<br/>single-agent now<br/>multi-agent target"]
+    ORCH --> REF["Refine Stage"]
+    ORCH --> RES["Research Stage"]
+    ORCH --> WRI["Write Stage"]
 
     REF --> DB["Session DB<br/>results/{id}/"]
     RES --> DB
     WRI --> DB
 
-    REF --> LLM["LLM Interface / Agent Adapter"]
-    RES --> LLM
-    WRI --> LLM
+    REF --> AGENT["Agent Adapter Layer"]
+    RES --> AGENT
+    WRI --> AGENT
 
-    LLM --> TOOLS["Search / DB Tools / Docker Sandbox"]
-    ORCH -. SSE .-> UI["Frontend"]
+    AGENT --> TOOLS["Search / arXiv / Wikipedia<br/>DB tools / Docker sandbox"]
+    ORCH -. SSE .-> UI
 ```
 
 Three stages, powered by the Agno agent framework with multi-provider support (Google, Anthropic, OpenAI).
