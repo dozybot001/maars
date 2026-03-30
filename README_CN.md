@@ -6,16 +6,16 @@
 
 MAARS 是一个混合式多智能体研究系统。给它一个研究想法或一个 Kaggle 比赛链接，它会自动精炼问题、分解为可执行任务、在 Docker 沙箱中运行实验、基于结果迭代改进，最终产出一篇完整论文。
 
-## 效果展示
+## 快速开始
 
-输入一个想法，看它自主完成研究：
+![MAARS 启动界面](docs/assets/start.png)
 
+```bash
+# Linux / macOS / Windows（Git Bash）：
+bash start.sh
 ```
-"对比不同刚性特征下的 ODE 数值求解器 ——
- 对显式方法与隐式方法的效率-精度权衡做系统性基准测试"
-```
 
-MAARS 会自动：搜索文献 → 确定方法论 → 编写并执行基准测试代码 → 生成图表 → 评估结果 → 迭代改进 → 撰写带嵌入图表的完整论文。
+自动安装依赖、检查 `.env`（没有则创建）、构建 Docker 镜像（未安装则会提示按下 Enter 自动安装）、启动服务、打开浏览器。
 
 ## 架构
 
@@ -101,31 +101,6 @@ https://www.kaggle.com/competitions/titanic
 ```
 
 MAARS 会自动：拉取比赛元数据 → 下载数据集 → 构建上下文丰富的研究方案 → 跳过精炼阶段 → 直接进入研究阶段，数据挂载在 `/workspace/data/`。
-
-## 快速开始
-
-### 一键启动（推荐）
-
-```bash
-# Windows — 双击 start.bat，或命令行：
-start.bat
-
-# Linux / macOS / Git Bash：
-bash start.sh
-```
-
-脚本自动完成：安装依赖、检查 `.env`、构建 Docker 镜像、启动服务、打开浏览器。
-
-### 手动启动
-
-```bash
-git clone https://github.com/anthropics/MAARS.git && cd MAARS
-pip install -r requirements.txt
-cp .env.example .env          # 填入 API key
-docker build -f Dockerfile.sandbox -t maars-sandbox:latest .   # 可选，用于代码执行
-uvicorn backend.main:app --host 0.0.0.0 --port 8000
-# 打开 http://localhost:8000
-```
 
 ## 配置
 

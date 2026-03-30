@@ -6,16 +6,16 @@
 
 MAARS is a hybrid multi-agent research system. Give it a research idea or a Kaggle competition URL, and it will refine the problem, decompose it into executable tasks, run experiments in a Docker sandbox, iterate based on results, and produce a complete paper — all autonomously.
 
-## Demo
+## Quick Start
 
-Input an idea, watch it think:
+![MAARS startup UI](docs/assets/start.png)
 
+```bash
+# Linux / macOS / Windows (Git Bash):
+bash start.sh
 ```
-"Benchmark numerical ODE solvers across stiffness regimes —
- compare explicit vs implicit methods on efficiency-accuracy tradeoffs"
-```
 
-MAARS will autonomously: search literature → define methodology → write & execute benchmark code → generate plots → evaluate results → iterate → write a full paper with embedded figures.
+Automatically installs dependencies, checks `.env` (and creates it if missing), builds the Docker image (and prompts you to press Enter to install Docker Desktop if needed), starts the server, and opens the browser.
 
 ## Architecture
 
@@ -101,31 +101,6 @@ https://www.kaggle.com/competitions/titanic
 ```
 
 MAARS will automatically: fetch competition metadata → download dataset → build a context-rich research proposal → skip Refine → jump straight to Research with data mounted at `/workspace/data/`.
-
-## Quick Start
-
-### One-click (recommended)
-
-```bash
-# Windows — double-click start.bat, or:
-start.bat
-
-# Linux / macOS / Git Bash:
-bash start.sh
-```
-
-The script handles everything: dependency install, `.env` check, Docker image build, server start, and opens your browser.
-
-### Manual
-
-```bash
-git clone https://github.com/anthropics/MAARS.git && cd MAARS
-pip install -r requirements.txt
-cp .env.example .env          # add your API key
-docker build -f Dockerfile.sandbox -t maars-sandbox:latest .   # optional, for code execution
-uvicorn backend.main:app --host 0.0.0.0 --port 8000
-# Open http://localhost:8000
-```
 
 ## Configuration
 

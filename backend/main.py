@@ -10,16 +10,12 @@ from backend.routes import events as event_routes
 
 from contextlib import asynccontextmanager
 
-
 @asynccontextmanager
 async def lifespan(app):
     yield
-    # Shutdown: kill containers and cancel tasks
-    from backend.agno.tools.docker_exec import kill_all_containers
-    kill_all_containers()
     orch = getattr(app.state, "orchestrator", None)
     if orch:
-        await orch._cancel_all_tasks()
+        await orch.shutdown()
 
 
 app = FastAPI(title="MAARS", version="0.1.0", lifespan=lifespan)

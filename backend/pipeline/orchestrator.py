@@ -80,6 +80,18 @@ class PipelineOrchestrator:
         for key in keys:
             await self._cancel_task(key)
 
+    async def shutdown(self):
+        """Best-effort application shutdown for server exit."""
+        from backend.agno.tools.docker_exec import kill_all_containers
+
+        for stage in self.stages.values():
+            llm_client = getattr(stage, "llm_client", None)
+            if llm_client:
+                llm_client.request_stop()
+
+        kill_all_containers()
+        await self._cancel_all_tasks()
+
     # ------------------------------------------------------------------
     # Pipeline-level operations
     # ------------------------------------------------------------------
