@@ -152,6 +152,7 @@ MAARS_GOOGLE_MODEL=gemini-2.5-flash
 | `MAARS_RESEARCH_MAX_ITERATIONS` | `3` | 最大评估迭代轮数（1 = 不迭代） |
 | `MAARS_DOCKER_SANDBOX_TIMEOUT` | `600` | 单容器超时时间（秒） |
 | `MAARS_DOCKER_SANDBOX_MEMORY` | `4g` | 单容器内存限制 |
+| `MAARS_DOCKER_SANDBOX_CONCURRENCY` | `2` | 最大并行容器数（即并行任务数） |
 | `MAARS_KAGGLE_API_TOKEN` | — | Kaggle API token（或使用 `~/.kaggle/kaggle.json`） |
 
 ## 产出结构

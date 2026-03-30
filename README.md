@@ -152,6 +152,7 @@ MAARS_GOOGLE_MODEL=gemini-2.5-flash
 | `MAARS_RESEARCH_MAX_ITERATIONS` | `3` | Max evaluation loops (1 = no iteration) |
 | `MAARS_DOCKER_SANDBOX_TIMEOUT` | `600` | Per-container timeout in seconds |
 | `MAARS_DOCKER_SANDBOX_MEMORY` | `4g` | Memory limit per container |
+| `MAARS_DOCKER_SANDBOX_CONCURRENCY` | `2` | Max parallel containers (and parallel tasks) |
 | `MAARS_KAGGLE_API_TOKEN` | — | Kaggle API token (or use `~/.kaggle/kaggle.json`) |
 
 ## Output Structure
