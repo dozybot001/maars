@@ -69,15 +69,13 @@ export function initProcessViewer() {
   // --- Phase transitions (level 2) ---
   on('stage:phase', ({ data }) => {
     if (!currentSection) return;
-    // Collapse previous phase
-    if (currentPhaseName && phaseGroups[currentPhaseName]) {
-      const g = phaseGroups[currentPhaseName];
-      if (g.body && !g.body.classList.contains('user-expanded')) {
-        g.body.classList.add('collapsed');
-        g.label.classList.add('is-collapsed');
-      }
-    }
+    // No auto-collapse on right panel — all phases stay open
     const label = PHASE_LABELS[data] || data;
+    // Reuse existing phase fold if it already exists (e.g. second iteration)
+    if (phaseGroups[label]) {
+      currentPhaseName = label;
+      return;
+    }
     currentPhaseName = label;
     phaseGroups[label] = createFold(currentSection, label);
     scroller.scroll();
@@ -87,25 +85,36 @@ export function initProcessViewer() {
   on('doc:ready', ({ data }) => {
     if (!data || !data.name || !target()) return;
     documentCache[data.name] = data.content || '';
-    appendDocCard(data.name, data.label || data.name);
+    // Evaluation docs go into the current eval row if one exists
+    const t = target();
+    const lastRow = t.querySelector('.po-eval-row:last-child');
+    if (data.name.startsWith('eval_') && lastRow) {
+      appendDocCard(data.name, data.label || data.name, lastRow);
+    } else {
+      appendDocCard(data.name, data.label || data.name, t);
+    }
   });
 
-  // --- Score indicator ---
+  // --- Score indicator (starts a new eval row) ---
   on('score:update', ({ data }) => {
     if (!data || !target()) return;
-    appendScoreElement(data);
+    // Create a new row for this evaluation round
+    const row = document.createElement('div');
+    row.className = 'po-eval-row';
+    target().appendChild(row);
+    appendScoreElement(data, row);
   });
 
   // --- Plan: decomposition tree ---
   on('plan:tree', ({ data }) => {
     if (!data || !data.id || !target()) return;
-    const t = target();
-    let container = t.querySelector('#tree-output');
+    // Search globally — the tree may have been created in a different phase fold
+    let container = processBody.querySelector('#tree-output');
     if (!container) {
       container = document.createElement('ul');
       container.id = 'tree-output';
       container.className = 'po-tree';
-      t.appendChild(container);
+      target().appendChild(container);
     }
     container.innerHTML = '';
     container.appendChild(renderDecompNode(data, true));
@@ -115,13 +124,13 @@ export function initProcessViewer() {
   // --- Execute: task batch list ---
   on('exec:tree', ({ data }) => {
     if (!data || !data.batches || !target()) return;
-    const t = target();
-    let container = t.querySelector('#exec-output');
+    // Search globally — the list may have been created in a different phase fold
+    let container = processBody.querySelector('#exec-output');
     if (!container) {
       container = document.createElement('div');
       container.id = 'exec-output';
       container.className = 'po-exec';
-      t.appendChild(container);
+      target().appendChild(container);
     }
 
     const existingNodes = {};
@@ -197,8 +206,8 @@ export function initProcessViewer() {
 
 // --- Helpers ---
 
-function appendDocCard(name, label) {
-  const t = target();
+function appendDocCard(name, label, container) {
+  const t = container || target();
   if (!t) return;
   const item = document.createElement('div');
   item.className = 'po-file-item';
@@ -215,8 +224,8 @@ function appendDocCard(name, label) {
   scroller.scroll();
 }
 
-function appendScoreElement(data) {
-  const t = target();
+function appendScoreElement(data, container) {
+  const t = container || target();
   if (!t) return;
   const el = document.createElement('div');
   el.className = 'po-score';

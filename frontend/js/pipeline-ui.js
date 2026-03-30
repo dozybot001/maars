@@ -44,8 +44,11 @@ export function initPipelineUI() {
       } else if (data === 'failed') {
         const active = [...RESEARCH_PHASES].find((n) => nodeStates[n] === 'active');
         if (active) updateNode(active, 'failed');
-      } else if (data === 'paused') {
+      } else if (data === 'pausing') {
         const active = [...RESEARCH_PHASES].find((n) => nodeStates[n] === 'active');
+        if (active) updateNode(active, 'pausing');
+      } else if (data === 'paused') {
+        const active = [...RESEARCH_PHASES].find((n) => nodeStates[n] === 'active' || nodeStates[n] === 'pausing');
         if (active) updateNode(active, 'paused');
       } else if (data === 'idle') {
         RESEARCH_PHASES.forEach((n) => updateNode(n, 'idle'));
@@ -100,6 +103,7 @@ export function initPipelineUI() {
 // --- Button state machine ---
 
 function getPipelineState() {
+  if (Object.values(stageStates).some((s) => s === 'pausing')) return 'pausing';
   if (Object.values(stageStates).some((s) => s === 'running')) return 'running';
   if (Object.values(stageStates).some((s) => s === 'paused')) return 'paused';
   return 'idle'; // idle, completed, or failed — all allow Start
@@ -109,9 +113,16 @@ function syncButtons() {
   const state = getPipelineState();
   const hasInput = inputEl && inputEl.value.trim().length > 0;
 
-  startBtn.disabled = !(state !== 'running' && state !== 'paused' && hasInput);
+  startBtn.disabled = !(state !== 'running' && state !== 'paused' && state !== 'pausing' && hasInput);
   pauseBtn.disabled = state !== 'running';
   resumeBtn.disabled = state !== 'paused';
+
+  if (state === 'pausing') {
+    pauseBtn.disabled = true;
+    pauseBtn.textContent = 'Pausing...';
+  } else {
+    pauseBtn.textContent = 'Pause';
+  }
 }
 
 async function handleStart() {
@@ -129,6 +140,9 @@ async function handleStart() {
 async function handlePause() {
   const running = Object.keys(stageStates).find((s) => stageStates[s] === 'running');
   if (!running) return;
+  // Immediate UI feedback before server responds
+  stageStates[running] = 'pausing';
+  syncButtons();
   try { await stageAction(running, 'stop'); }
   catch (err) { console.error('Pause error:', err); }
 }

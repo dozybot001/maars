@@ -3,6 +3,19 @@ set -e
 
 cd "$(dirname "$0")"
 
+BROWSER_PID_FILE="/tmp/maars_browser_$$.pid"
+
+# Clean up background jobs and browser on Ctrl+C
+cleanup() {
+    if [ -f "$BROWSER_PID_FILE" ]; then
+        kill "$(cat "$BROWSER_PID_FILE")" 2>/dev/null
+        rm -f "$BROWSER_PID_FILE"
+    fi
+    kill $(jobs -p) 2>/dev/null
+    wait 2>/dev/null
+}
+trap cleanup INT TERM EXIT
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -81,10 +94,32 @@ echo -e "${GREEN}  Press Ctrl+C to stop.${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo
 
-# Open browser after a short delay
-(sleep 2 && if command -v xdg-open &>/dev/null; then xdg-open http://localhost:8000
-elif command -v open &>/dev/null; then open http://localhost:8000
-elif command -v start &>/dev/null; then start http://localhost:8000
-fi) &
+# Open browser in app mode (separate window, auto-closable) or fall back to default
+(
+    sleep 2
+    # Try Chrome/Edge app mode — launches a standalone window we can track and kill
+    for cmd in google-chrome google-chrome-stable chromium microsoft-edge-stable; do
+        if command -v "$cmd" &>/dev/null; then
+            "$cmd" --app=http://localhost:8000 --new-window &
+            echo $! > "$BROWSER_PID_FILE"
+            exit 0
+        fi
+    done
+    # macOS: try Chrome or Edge by app path
+    if [ "$(uname)" = "Darwin" ]; then
+        for app in "Google Chrome" "Microsoft Edge" "Chromium"; do
+            APP_PATH="/Applications/$app.app/Contents/MacOS/$app"
+            if [ -x "$APP_PATH" ]; then
+                "$APP_PATH" --app=http://localhost:8000 --new-window &
+                echo $! > "$BROWSER_PID_FILE"
+                exit 0
+            fi
+        done
+    fi
+    # Fallback: default browser (can't auto-close)
+    if command -v xdg-open &>/dev/null; then xdg-open http://localhost:8000
+    elif command -v open &>/dev/null; then open http://localhost:8000
+    fi
+) &
 
-$PYTHON -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+$PYTHON -m uvicorn backend.main:app --reload --reload-include "*.py" --reload-dir backend --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 1

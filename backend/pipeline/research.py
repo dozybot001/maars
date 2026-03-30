@@ -10,6 +10,7 @@ import asyncio
 import contextvars
 import json
 
+from backend.config import settings
 from backend.db import ResearchDB
 from backend.pipeline.stage import BaseStage, StageState
 from backend.pipeline.decompose import decompose
@@ -254,8 +255,6 @@ class ResearchStage(BaseStage):
 
                 # Evaluate results: system checks score, LLM analyzes improvements
                 is_last = iteration >= self._max_iterations - 1
-                if is_last:
-                    break
 
                 self._emit("phase", "evaluate")
 
@@ -271,6 +270,11 @@ class ResearchStage(BaseStage):
                         "improved": improved,
                     })
                     self._prev_score = current_score
+
+                # Last iteration — show final score but skip replan
+                if is_last:
+                    self.db.save_evaluation({"satisfied": True, "score": current_score}, iteration)
+                    break
 
                 if not improved and self._prev_score is not None:
                     # Score plateaued — stop iterating
@@ -394,7 +398,12 @@ class ResearchStage(BaseStage):
                 if not pending:
                     continue
 
-                coros = [self._execute_task(task, my_run_id) for task in pending]
+                # Limit concurrent tasks to match Docker concurrency
+                sem = asyncio.Semaphore(settings.docker_sandbox_concurrency)
+                async def _run_with_limit(task):
+                    async with sem:
+                        return await self._execute_task(task, my_run_id)
+                coros = [_run_with_limit(task) for task in pending]
                 results = await asyncio.gather(*coros, return_exceptions=True)
 
                 for task, result in zip(pending, results):
@@ -435,6 +444,9 @@ class ResearchStage(BaseStage):
                             self._emit("state", self.state.value)
                             return True
                     elif isinstance(result, Exception):
+                        # Transient errors (API errors, network) are already retried
+                        # inside _stream_llm. If we still get here, it's exhausted
+                        # all retries — treat as hard failure.
                         self._emit("task_state", {"task_id": task["id"], "status": "failed"})
                         self.state = StageState.FAILED
                         self._emit("error", {"message": f"Task {task['id']} failed: {result}"})
@@ -647,8 +659,12 @@ class ResearchStage(BaseStage):
 
     def _check_score_improved(self, prev_score: float | None,
                               minimize: bool = True) -> tuple[bool, float | None]:
-        """Check best_score.json and compare with previous iteration."""
-        score_file = self.db.get_artifacts_dir() / "best_score.json"
+        """Check latest_score.json and compare with previous iteration."""
+        # Use latest_score for iteration comparison (not best_score)
+        score_file = self.db.get_artifacts_dir() / "latest_score.json"
+        if not score_file.exists():
+            # Fallback to best_score.json for backward compatibility
+            score_file = self.db.get_artifacts_dir() / "best_score.json"
         if not score_file.exists():
             return False, None
         try:

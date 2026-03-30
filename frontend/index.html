@@ -10,6 +10,7 @@
 
   <!-- Slim progress bar at top -->
   <div id="pipeline-progress">
+    <div id="docker-status" class="docker-indicator docker-unknown" title="Checking Docker...">Docker</div>
     <div class="progress-track">
       <div class="progress-node" data-node="refine"><span>Refine</span></div>
       <div class="progress-line" data-after="refine"></div>
@@ -25,7 +26,6 @@
       <div class="progress-line" data-after="evaluate"></div>
       <div class="progress-node" data-node="write"><span>Write</span></div>
     </div>
-    <div id="docker-status" class="docker-indicator docker-unknown" title="Checking Docker...">Docker</div>
   </div>
 
   <!-- Main workspace -->
@@ -34,6 +34,7 @@
       <div class="panel">
         <div class="panel-header">
           <h3>Reasoning Log</h3>
+          <span id="activity-indicator" class="activity-badge hidden"></span>
           <span id="token-estimate" class="token-badge"></span>
           <button id="copy-log" title="Copy log">Copy</button>
         </div>

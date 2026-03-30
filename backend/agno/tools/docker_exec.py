@@ -6,10 +6,50 @@ through ResearchDB.
 """
 
 import json
+import threading
+import time
 from pathlib import Path
 
 from backend.config import settings
 from backend.db import ResearchDB
+
+# ---------------------------------------------------------------------------
+# Shared Docker client + concurrency limiter
+# ---------------------------------------------------------------------------
+
+_docker_client = None
+_docker_lock = threading.Lock()
+_container_semaphore = threading.Semaphore(settings.docker_sandbox_concurrency)
+_active_containers: list = []  # track running containers for graceful stop
+_containers_lock = threading.Lock()
+
+
+def kill_all_containers():
+    """Kill all active containers. Called on pipeline pause/stop."""
+    with _containers_lock:
+        for container in list(_active_containers):
+            try:
+                container.kill()
+            except Exception:
+                pass
+
+
+def _get_docker_client():
+    """Return a shared Docker client, reconnecting if the connection dropped."""
+    global _docker_client
+    with _docker_lock:
+        for attempt in range(3):
+            try:
+                if _docker_client is None:
+                    import docker
+                    _docker_client = docker.from_env()
+                _docker_client.ping()
+                return _docker_client
+            except Exception as e:
+                _docker_client = None
+                if attempt == 2:
+                    raise RuntimeError(f"Docker not available after 3 attempts: {e}")
+                time.sleep(2)
 
 
 def create_docker_tools(db: ResearchDB) -> list:
@@ -27,14 +67,9 @@ def create_docker_tools(db: ResearchDB) -> list:
             JSON with: stdout, stderr, exit_code, timed_out, files.
         """
         try:
-            import docker
-        except ImportError:
-            return json.dumps({"error": "Docker SDK not installed. pip install docker"})
-
-        try:
-            client = docker.from_env()
+            client = _get_docker_client()
         except Exception as e:
-            return json.dumps({"error": f"Docker not available: {e}"})
+            return json.dumps({"error": str(e)})
 
         # Save script via DB
         script_path, script_name = db.save_script(code, language)
@@ -69,7 +104,9 @@ def create_docker_tools(db: ResearchDB) -> list:
             if dataset_path.exists():
                 volumes[str(dataset_path)] = {"bind": "/workspace/data", "mode": "ro"}
 
-        # Run container
+        # Run container (limited concurrency)
+        _container_semaphore.acquire()
+        container = None
         try:
             container = client.containers.run(
                 image=settings.docker_sandbox_image,
@@ -80,13 +117,18 @@ def create_docker_tools(db: ResearchDB) -> list:
                 network_disabled=not settings.docker_sandbox_network,
                 detach=True,
             )
+            with _containers_lock:
+                _active_containers.append(container)
 
             try:
                 result = container.wait(timeout=settings.docker_sandbox_timeout)
                 exit_code = result["StatusCode"]
                 timed_out = False
             except Exception:
-                container.kill()
+                try:
+                    container.kill()
+                except Exception:
+                    pass
                 exit_code = -1
                 timed_out = True
 
@@ -96,6 +138,14 @@ def create_docker_tools(db: ResearchDB) -> list:
 
         except Exception as e:
             return json.dumps({"error": f"Container execution failed: {e}"})
+        finally:
+            if container is not None:
+                with _containers_lock:
+                    try:
+                        _active_containers.remove(container)
+                    except ValueError:
+                        pass
+            _container_semaphore.release()
 
         # Auto-promote best_score.json via DB
         db.promote_best_score()

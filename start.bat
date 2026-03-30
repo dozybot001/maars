@@ -2,6 +2,16 @@
 chcp 65001 >nul 2>&1
 cd /d "%~dp0"
 
+:: Re-invoke under cmd /c so Ctrl+C exits cleanly (no "Terminate batch job?" prompt)
+if not "%MAARS_STARTED%"=="1" (
+    set "MAARS_STARTED=1"
+    cmd /c "%~f0" %* <nul
+    :: After server stops, close the MAARS app window (try both browsers)
+    taskkill /fi "WINDOWTITLE eq MAARS*" /im chrome.exe >nul 2>&1
+    taskkill /fi "WINDOWTITLE eq MAARS*" /im msedge.exe >nul 2>&1
+    exit /b
+)
+
 echo ========================================
 echo          MAARS - One-Click Start
 echo ========================================
@@ -84,7 +94,25 @@ echo   Starting MAARS on http://localhost:8000
 echo   Press Ctrl+C to stop.
 echo ========================================
 echo.
-:: Open browser after a short delay
-start "" cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:8000"
-python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
-pause
+:: Open browser in app mode (Chrome > Edge > default)
+:: App mode = standalone window, auto-closed on exit
+set "MAARS_BROWSER="
+where chrome >nul 2>&1 && set "MAARS_BROWSER=chrome"
+if not defined MAARS_BROWSER (
+    if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" set "MAARS_BROWSER=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
+)
+if not defined MAARS_BROWSER (
+    if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" set "MAARS_BROWSER=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"
+)
+if not defined MAARS_BROWSER (
+    if exist "%LocalAppData%\Google\Chrome\Application\chrome.exe" set "MAARS_BROWSER=%LocalAppData%\Google\Chrome\Application\chrome.exe"
+)
+if not defined MAARS_BROWSER (
+    where msedge >nul 2>&1 && set "MAARS_BROWSER=msedge"
+)
+if defined MAARS_BROWSER (
+    start /b cmd /c "timeout /t 2 /nobreak >nul && start "" "%MAARS_BROWSER%" --app=http://localhost:8000"
+) else (
+    start /b cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:8000"
+)
+python -m uvicorn backend.main:app --reload --reload-include "*.py" --reload-dir backend --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 1

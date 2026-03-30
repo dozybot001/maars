@@ -26,6 +26,11 @@ let timerStart = null;
 let totalTokens = 0;
 let tokenBadge = null;
 
+// Activity indicator
+let activityBadge = null;
+let lastActivityTime = null;
+let activityInterval = null;
+
 /** Current write target: task body > phase body > section. */
 function currentTarget(taskId) {
   if (taskId && taskGroups[taskId]) return taskGroups[taskId].body;
@@ -38,6 +43,7 @@ export function initLogViewer() {
   scroller = createAutoScroller(logOutput);
   tokenBadge = document.getElementById('token-estimate');
   timerBadge = document.getElementById('elapsed-timer');
+  activityBadge = document.getElementById('activity-indicator');
 
   wireCopyButton('copy-log', document.getElementById('log-output'));
   wireCopyButton('copy-process', document.getElementById('process-body'));
@@ -48,11 +54,16 @@ export function initLogViewer() {
       logOutput.innerHTML = '';
       resetState();
       stopTimer();
+      stopActivity();
       scroller.reset();
     } else if (data === 'completed' && stage === 'write') {
       stopTimer();
+      stopActivity();
     } else if (data === 'failed') {
       stopTimer();
+      stopActivity();
+    } else if (data === 'paused' || data === 'pausing') {
+      stopActivity();
     }
     if (data === 'running' && stage !== activeStage) {
       if (!timerStart) startTimer();
@@ -91,8 +102,9 @@ export function initLogViewer() {
     }
   });
 
-  // --- Chunk streaming ---
+  // --- Chunk streaming (+ activity tracking) ---
   on('log:chunk', ({ stage, data }) => {
+    markActivity();
     const callId = data.call_id;
     const taskId = data.task_id || null;
 
@@ -120,7 +132,7 @@ export function initLogViewer() {
       }
 
       // Create fold
-      const fold = createFold(parent, text);
+      const fold = createFold(parent, text, level);
 
       // Track by level
       if (level <= 2) {
@@ -176,6 +188,7 @@ export function initLogViewer() {
   });
 
   on('log:tokens', ({ data }) => {
+    markActivity();
     totalTokens += data.total || 0;
     updateTokenBadge();
   });
@@ -224,6 +237,46 @@ function resetState() {
 }
 
 // --- Timer ---
+
+// --- Activity indicator ---
+
+function markActivity() {
+  lastActivityTime = Date.now();
+  if (!activityInterval) {
+    activityInterval = setInterval(updateActivityBadge, 1000);
+  }
+  updateActivityBadge();
+}
+
+function stopActivity() {
+  if (activityInterval) clearInterval(activityInterval);
+  activityInterval = null;
+  lastActivityTime = null;
+  if (activityBadge) {
+    activityBadge.classList.add('hidden');
+    activityBadge.textContent = '';
+  }
+}
+
+function updateActivityBadge() {
+  if (!activityBadge || !lastActivityTime) return;
+  activityBadge.classList.remove('hidden');
+  const idle = Math.floor((Date.now() - lastActivityTime) / 1000);
+  if (idle < 5) {
+    activityBadge.textContent = 'Active';
+    activityBadge.dataset.state = 'active';
+  } else if (idle < 60) {
+    activityBadge.textContent = `Waiting ${idle}s`;
+    activityBadge.dataset.state = 'waiting';
+  } else {
+    const m = Math.floor(idle / 60);
+    const s = idle % 60;
+    activityBadge.textContent = `No output ${m}m${s}s`;
+    activityBadge.dataset.state = 'stale';
+  }
+}
+
+// --- Elapsed timer ---
 
 function startTimer() {
   timerStart = Date.now();

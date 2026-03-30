@@ -25,9 +25,10 @@ export function safeParse(e) {
  * Used for all collapsible levels: phase, task, tool calls.
  * Returns { label, body }.
  */
-export function createFold(parent, labelText) {
+export function createFold(parent, labelText, level) {
   const label = document.createElement('div');
   label.className = 'fold-label';
+  if (level) label.dataset.level = level;
   label.textContent = labelText;
 
   const body = document.createElement('div');

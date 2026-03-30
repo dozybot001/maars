@@ -49,6 +49,19 @@
   font-weight: 400;
 }
 
+/* Activity indicator */
+.activity-badge {
+  font-size: 11px;
+  margin-left: 8px;
+  font-weight: 400;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.activity-badge.hidden { display: none; }
+.activity-badge[data-state="active"] { color: var(--green); }
+.activity-badge[data-state="waiting"] { color: var(--yellow); }
+.activity-badge[data-state="stale"] { color: var(--red); }
+
 #copy-log, #copy-process {
   position: absolute;
   right: 10px;
@@ -129,6 +142,14 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.fold-label[data-level="3"] {
+  color: var(--text-primary);
+}
+
+.fold-label[data-level="4"] {
+  color: var(--text-secondary);
 }
 
 .fold-label:first-child {
@@ -218,6 +239,14 @@
 /* Exec inside process panel */
 .po-exec {
   padding: 4px 0 8px;
+}
+
+/* Evaluation row: score + report side by side, one row per round */
+.po-eval-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 4px 0;
 }
 
 /* Score element */

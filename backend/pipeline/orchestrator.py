@@ -173,8 +173,13 @@ class PipelineOrchestrator:
         stage = self.stages[stage_name]
         if stage.state != StageState.RUNNING:
             return
+        # Emit pausing state for frontend transition
+        stage._emit("state", "pausing")
         if stage.llm_client:
             stage.llm_client.request_stop()
+        # Kill any running Docker containers immediately
+        from backend.agno.tools.docker_exec import kill_all_containers
+        kill_all_containers()
         # Invalidate current run so CancelledError handler won't change state
         stage._run_id += 1
         await self._cancel_task("pipeline")

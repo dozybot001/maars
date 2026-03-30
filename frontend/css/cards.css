@@ -100,12 +100,25 @@
   color: var(--text-secondary);
 }
 
+.progress-node[data-state="pausing"]::before {
+  border-color: var(--yellow);
+  background: var(--yellow);
+  animation: pulse 1s ease-in-out infinite;
+}
+.progress-node[data-state="pausing"] span {
+  color: var(--yellow);
+}
 .progress-node[data-state="paused"]::before {
   border-color: var(--yellow);
   background: var(--yellow);
 }
 .progress-node[data-state="paused"] span {
   color: var(--yellow);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 .progress-node[data-state="failed"]::before {

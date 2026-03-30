@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     docker_sandbox_memory: str = "4g"
     docker_sandbox_cpu: float = 1.0
     docker_sandbox_network: bool = True
+    docker_sandbox_concurrency: int = 2  # max concurrent containers
 
     class Config:
         env_prefix = "MAARS_"

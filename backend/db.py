@@ -295,7 +295,12 @@ class ResearchDB:
         return path, name
 
     def promote_best_score(self):
-        """If current task has a best_score.json, promote to artifacts root if better."""
+        """If current task has a best_score.json, promote to artifacts root.
+
+        Maintains two files:
+        - latest_score.json: always updated to the most recent score
+        - best_score.json: only updated when the new score is better
+        """
         if not self.current_task_id:
             return
         task_dir = self.get_artifacts_dir(self.current_task_id)
@@ -308,15 +313,28 @@ class ResearchDB:
         except (json.JSONDecodeError, ValueError, TypeError):
             return
 
-        global_path = self.get_artifacts_dir() / "best_score.json"
-        if global_path.exists():
+        artifacts_root = self.get_artifacts_dir()
+        task_content = task_score_path.read_text(encoding="utf-8")
+        minimize = self.get_score_minimize()
+
+        # Always update latest_score.json
+        (artifacts_root / "latest_score.json").write_text(task_content, encoding="utf-8")
+
+        # Only update best_score.json if this score is better
+        best_path = artifacts_root / "best_score.json"
+        if best_path.exists():
             try:
-                global_data = json.loads(global_path.read_text(encoding="utf-8"))
-                if float(global_data.get("score", 0)) == task_score:
+                best_data = json.loads(best_path.read_text(encoding="utf-8"))
+                best_score = float(best_data.get("score", 0))
+                if minimize:
+                    is_better = task_score < best_score
+                else:
+                    is_better = task_score > best_score
+                if not is_better:
                     return
             except (json.JSONDecodeError, ValueError, TypeError):
                 pass
-        global_path.write_text(task_score_path.read_text(encoding="utf-8"), encoding="utf-8")
+        best_path.write_text(task_content, encoding="utf-8")
 
     def save_reproduce_files(self, dockerfile: str, run_sh: str, compose: str):
         """Save Docker reproduction files to reproduce/ subdirectory."""

@@ -25,6 +25,8 @@ async def event_stream(request: Request):
                     yield f"event: {event_type}\ndata: {payload}\n\n"
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"
+        except (asyncio.CancelledError, GeneratorExit):
+            pass
         finally:
             orchestrator.unsubscribe(queue)
 

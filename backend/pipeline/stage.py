@@ -124,9 +124,9 @@ class BaseStage:
 
     async def _stream_llm(self, client, messages: list[dict], call_id: str,
                           my_run_id: int, content_level: int = 2,
-                          timeout: float = 300, max_retries: int = 2) -> str:
+                          timeout: float = 1800, max_retries: int = 3) -> str:
         """Stream LLM response, dispatching events to frontend via SSE.
-        Handles timeout with retry.
+        Retries on timeout and transient API errors with exponential backoff.
         """
         for attempt in range(max_retries):
             result = ""
@@ -148,17 +148,25 @@ class BaseStage:
                         elif event.type == "tokens":
                             self._emit("tokens", event.metadata)
                 return result
-            except TimeoutError:
-                if attempt < max_retries - 1:
+            except (TimeoutError, RuntimeError) as e:
+                is_last = attempt >= max_retries - 1
+                label = "TIMEOUT" if isinstance(e, TimeoutError) else "API ERROR"
+                if is_last:
                     self._emit("chunk", {
-                        "text": f"\n[TIMEOUT] Retrying ({attempt + 1}/{max_retries - 1})...\n",
+                        "text": f"\n[{label}] Failed after {max_retries} attempts: {e}\n",
                         "call_id": call_id,
+                        "level": content_level,
                     })
+                    if isinstance(e, RuntimeError):
+                        raise
                 else:
+                    delay = 2 ** attempt * 5  # 5s, 10s, 20s
                     self._emit("chunk", {
-                        "text": f"\n[TIMEOUT] LLM stream failed after {max_retries} attempts\n",
+                        "text": f"\n[{label}] Retry {attempt + 1}/{max_retries - 1} in {delay}s — {e}\n",
                         "call_id": call_id,
+                        "level": content_level,
                     })
+                    await asyncio.sleep(delay)
         return result
 
     def _is_stale(self, my_run_id: int) -> bool:
