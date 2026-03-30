@@ -4,7 +4,7 @@
 
 **Multi-Agent Automated Research System** — From one idea to a full research paper, fully automated.
 
-MAARS is a hybrid multi-agent research system built around a workflow spine. Give it a research idea or a Kaggle competition URL, and it will refine the problem, decompose it into executable tasks, run experiments in a Docker sandbox, iterate based on results, and produce a complete paper — all autonomously.
+MAARS is a hybrid multi-agent research system. Give it a research idea or a Kaggle competition URL, and it will refine the problem, decompose it into executable tasks, run experiments in a Docker sandbox, iterate based on results, and produce a complete paper — all autonomously.
 
 ## Demo
 
@@ -19,32 +19,51 @@ MAARS will autonomously: search literature → define methodology → write & ex
 
 ## Architecture
 
+### Data Flow
+
+```mermaid
+flowchart LR
+    IN["Research Idea\nor Kaggle URL"] --> REF
+
+    REF["① Refine\nTeam: Explorer + Critic"]
+    RES["② Research\nAgentic Workflow"]
+    WRI["③ Write\nTeam: Writer + Reviewer"]
+
+    REF -- "refined_idea.md" --> RES -- "tasks/ · artifacts/" --> WRI -- "paper.md" --> OUT["Complete\nPaper"]
+
+    DB[(Session DB)]
+    REF & RES & WRI <-.-> DB
+```
+
+### System Architecture
+
 ```mermaid
 flowchart TB
-    UI["Frontend UI<br/>(vanilla JS + SSE)"] --> API["FastAPI"]
-    API --> ORCH["Pipeline Orchestrator"]
+    UI["Frontend UI · SSE"] --> API["FastAPI → Orchestrator"]
 
-    ORCH --> REF["① Refine"]
-    ORCH --> RES["② Research"]
-    ORCH --> WRI["③ Write"]
+    API --> REF["① Refine\nTeam: Explorer + Critic"]
+    API --> RES["② Research\nAgentic Workflow"]
+    API --> WRI["③ Write\nTeam: Writer + Reviewer"]
 
-    REF & RES & WRI --> DB["Session DB<br/>results/{id}/"]
-    REF & RES & WRI --> AGENT["Agno Agent Adapter"]
+    REF -- "refined_idea.md" --> DB
+    RES -- "tasks/ · artifacts/" --> DB
+    WRI -- "paper.md" --> DB
+    DB[(Session DB\nresults/id/)]
 
-    AGENT --> LLM["Google · Anthropic · OpenAI"]
-    AGENT --> TOOLS["DuckDuckGo · arXiv · Wikipedia<br/>Docker Sandbox · DB Tools"]
-    ORCH -. "SSE events" .-> UI
+    REF & RES & WRI --> AGNO["Agno · Google · Anthropic · OpenAI\nSearch · arXiv · Docker Sandbox"]
 ```
 
 The core design principle: **deterministic control stays in the runtime; open-ended execution goes to agents.**
 
-If you think in terms of [harness engineering](https://openai.com/index/harness-engineering/) (OpenAI, 2026), MAARS applies the same ideas — externalized state, tool boundaries, verification loops, feedback cycles — but at the **research-task level** rather than the repo-level scope OpenAI describes. The session DB is the system of record, Docker sandbox is the execution environment, and verify/evaluate/replan form the feedback harness.
+MAARS is a **hybrid multi-agent system**: Refine and Write use Agno Team coordinate mode (multi-agent collaboration), while Research uses a runtime-controlled agentic workflow. The three stages communicate only through the file-based session DB — they are fully decoupled.
 
-| Stage | What it does | How it works |
-|-------|-------------|--------------|
-| **Refine** | Transforms a vague idea into a structured, executable research proposal | Agent-driven exploration: survey landscape → evaluate directions → crystallize problem |
-| **Research** | The workflow core — decomposes, executes, verifies, evaluates, and iterates | Runtime-controlled pipeline: calibrate → strategy → decompose → execute → verify → evaluate → replan |
-| **Write** | Synthesizes all task outputs into a complete research paper | Agent reads completed tasks, artifacts, and figures → produces `paper.md` |
+If you think in terms of [harness engineering](https://openai.com/index/harness-engineering/) (OpenAI, 2026), MAARS applies the same ideas — externalized state, tool boundaries, verification loops, feedback cycles — but at the **research-task level** rather than the repo-level scope OpenAI describes.
+
+| Stage | Mode | What it does |
+|-------|------|-------------|
+| **Refine** | Multi-Agent Team | Explorer surveys literature + Critic challenges novelty/feasibility → refined proposal |
+| **Research** | Agentic Workflow | Runtime-controlled: calibrate → strategy → decompose → execute → verify → evaluate → replan |
+| **Write** | Multi-Agent Team | Writer produces draft + Reviewer gives feedback → revised paper |
 
 ## Research Pipeline Detail
 
@@ -176,7 +195,7 @@ The web UI provides real-time observability via SSE:
 | Component | Technology |
 |-----------|-----------|
 | Backend | FastAPI, Python async |
-| Agent framework | Agno (multi-provider) |
+| Agent framework | Agno (Team coordinate mode + single-client workflow) |
 | LLM providers | Google Gemini, Anthropic Claude, OpenAI GPT |
 | Code execution | Docker containers (Python 3.12 + ML stack) |
 | Frontend | Vanilla JS, SSE, no build step |

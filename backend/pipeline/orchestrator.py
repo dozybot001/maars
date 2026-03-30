@@ -1,7 +1,7 @@
 import asyncio
 
 from backend.db import ResearchDB
-from backend.pipeline.stage import BaseStage, StageState
+from backend.pipeline.stage import Stage, StageState
 
 STAGE_ORDER = ["refine", "research", "write"]
 
@@ -9,16 +9,16 @@ STAGE_ORDER = ["refine", "research", "write"]
 class PipelineOrchestrator:
     """Manages the research pipeline: Refine → Research → Write."""
 
-    def __init__(self, stages: dict[str, BaseStage] | None = None):
+    def __init__(self, stages: dict[str, Stage] | None = None):
         self.research_input = ""
         self.db = ResearchDB()
 
         # SSE subscribers — each connection gets its own queue
         self._subscribers: list[asyncio.Queue] = []
 
-        # Merge: externally provided stages override, rest default to BaseStage
-        self.stages: dict[str, BaseStage] = {
-            name: BaseStage(name=name)
+        # Merge: externally provided stages override, rest default to Stage
+        self.stages: dict[str, Stage] = {
+            name: Stage(name=name)
             for name in STAGE_ORDER
         }
         if stages:
@@ -111,8 +111,9 @@ class PipelineOrchestrator:
         """Reset all stages for a fresh run."""
         for stage in self.stages.values():
             stage.retry()
-            if stage.llm_client:
-                stage.llm_client.reset()
+            llm_client = getattr(stage, "llm_client", None)
+            if llm_client:
+                llm_client.reset()
 
     def _start_kaggle(self, raw_input: str, competition_id: str):
         """Set up Kaggle mode: fetch data, build refined idea, skip Refine."""
@@ -175,8 +176,9 @@ class PipelineOrchestrator:
             return
         # Emit pausing state for frontend transition
         stage._emit("state", "pausing")
-        if stage.llm_client:
-            stage.llm_client.request_stop()
+        llm_client = getattr(stage, "llm_client", None)
+        if llm_client:
+            llm_client.request_stop()
         # Kill any running Docker containers immediately
         from backend.agno.tools.docker_exec import kill_all_containers
         kill_all_containers()
@@ -196,7 +198,8 @@ class PipelineOrchestrator:
         if stage.state != StageState.PAUSED:
             return
         stage.output = ""
-        stage.rounds = []
+        if hasattr(stage, "rounds"):
+            stage.rounds = []
         task = asyncio.create_task(self._run_from(stage_name))
         self._tasks["pipeline"] = task
 

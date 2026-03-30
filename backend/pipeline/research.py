@@ -12,7 +12,7 @@ import json
 
 from backend.config import settings
 from backend.db import ResearchDB
-from backend.pipeline.stage import BaseStage, StageState
+from backend.pipeline.stage import AgentStage, StageState
 from backend.pipeline.decompose import decompose
 from backend.pipeline.prompts import (
     CALIBRATE_SYSTEM, EVALUATE_SYSTEM, REPLAN_SYSTEM, STRATEGY_SYSTEM,
@@ -134,7 +134,7 @@ def _renumber_subtree(children: list[dict], parent_id: str) -> list[dict]:
 # ResearchStage
 # ---------------------------------------------------------------------------
 
-class ResearchStage(BaseStage):
+class ResearchStage(AgentStage):
     """Decomposes, executes, and evaluates research tasks in an iterative loop."""
 
     def __init__(self, name: str = "research", max_iterations: int = 1,

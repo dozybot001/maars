@@ -1,21 +1,32 @@
-"""Agno Agent → LLMClient adapter.
+"""Agno Agent streaming adapter.
 
-Pure adapter: takes messages (system + user), creates an Agno Agent
-with system content as instruction, streams events back.
-No baked-in instruction — all prompts come from the pipeline.
+Wraps an Agno Agent to yield StreamEvents consumed by AgentStage._stream_llm().
+Pure adapter: all prompts come from the pipeline, not from here.
 """
 
 import logging
+from dataclasses import dataclass, field
 from typing import AsyncIterator
 
 from agno.agent import Agent, RunEvent
 
-from backend.llm.client import LLMClient, StreamEvent
-
 log = logging.getLogger(__name__)
 
 
-class AgnoClient(LLMClient):
+@dataclass
+class StreamEvent:
+    """Structured event yielded during LLM streaming.
+
+    AgnoClient produces these; AgentStage._stream_llm() consumes them.
+    """
+    type: str  # "content" | "think" | "tool_call" | "tool_result" | "tokens"
+    text: str = ""
+    call_id: str = ""
+    metadata: dict = field(default_factory=dict)
+
+
+class AgnoClient:
+    """Adapts an Agno Agent into a streaming event source."""
 
     def __init__(
         self,

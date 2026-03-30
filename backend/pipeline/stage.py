@@ -1,7 +1,19 @@
+"""Stage base classes for the pipeline.
+
+Stage          — lifecycle + SSE broadcasting (shared by ALL stages)
+AgentStage     — single-agent execution model (Refine, Research)
+
+Write stage inherits Stage directly (multi-agent, no AgnoClient).
+"""
+
+from __future__ import annotations
+
 import asyncio
 from enum import Enum
+from typing import TYPE_CHECKING
 
-from backend.llm.client import LLMClient, StreamEvent
+if TYPE_CHECKING:
+    from backend.agno.client import AgnoClient
 
 
 class StageState(str, Enum):
@@ -12,31 +24,88 @@ class StageState(str, Enum):
     FAILED = "failed"
 
 
-class BaseStage:
-    """Base class for all pipeline stages.
+# ======================================================================
+# Stage — shared lifecycle for all stages
+# ======================================================================
 
-    Each stage reads its input from DB, runs a single-pass LLM call,
-    and writes its output back to DB. Stages communicate only through DB.
+class Stage:
+    """Lifecycle, SSE broadcasting, and cancellation for all pipeline stages.
 
-    Subclasses set `system_instruction` for the Agent's system prompt.
+    Subclasses must implement ``run()``.
     """
 
-    system_instruction: str = ""
-
-    def __init__(self, name: str, llm_client: LLMClient | None = None,
-                 db=None, broadcast=None, **kwargs):
+    def __init__(self, name: str, db=None, broadcast=None, **kwargs):
         self.name = name
         self.state = StageState.IDLE
         self.output = ""
-        self.rounds: list[dict] = []
-
-        self.llm_client = llm_client
         self.db = db
         self._broadcast = broadcast or (lambda event: None)
         self._run_id = 0
 
     # ------------------------------------------------------------------
-    # Methods to be overridden by concrete stages
+    # Execution (to be overridden)
+    # ------------------------------------------------------------------
+
+    async def run(self) -> str:
+        raise NotImplementedError
+
+    def retry(self):
+        self._run_id += 1
+        self.output = ""
+        self.state = StageState.IDLE
+        self._emit("state", self.state.value)
+
+    def get_status(self) -> dict:
+        return {
+            "name": self.name,
+            "state": self.state.value,
+            "output_length": len(self.output),
+        }
+
+    # ------------------------------------------------------------------
+    # SSE broadcasting
+    # ------------------------------------------------------------------
+
+    def _emit(self, event_type: str, data):
+        self._broadcast({
+            "stage": self.name,
+            "type": event_type,
+            "data": data,
+        })
+
+    # ------------------------------------------------------------------
+    # Cancellation
+    # ------------------------------------------------------------------
+
+    def _is_stale(self, my_run_id: int) -> bool:
+        return my_run_id != self._run_id
+
+
+# ======================================================================
+# AgentStage — single-agent execution via AgnoClient
+# ======================================================================
+
+class AgentStage(Stage):
+    """Stage that executes via an AgnoClient instance.
+
+    Provides:
+    - ``_stream_llm()`` with retry and timeout
+    - Default ``run()`` that does: load_input → LLM call → finalize
+    - ``system_instruction``, ``rounds`` for single-session agents
+
+    RefineStage uses the default run(). ResearchStage overrides run()
+    but reuses _stream_llm() for individual agent calls within its workflow.
+    """
+
+    system_instruction: str = ""
+
+    def __init__(self, name: str, llm_client: AgnoClient | None = None, **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.llm_client = llm_client
+        self.rounds: list[dict] = []
+
+    # ------------------------------------------------------------------
+    # Hooks for subclasses
     # ------------------------------------------------------------------
 
     def load_input(self) -> str:
@@ -51,11 +120,11 @@ class BaseStage:
         return self.output
 
     # ------------------------------------------------------------------
-    # Execution control
+    # Default single-pass execution
     # ------------------------------------------------------------------
 
     async def run(self) -> str:
-        """Execute the stage: load input from DB → LLM call → save to DB."""
+        """Execute: load input → LLM call → save to DB."""
         self._run_id += 1
         my_run_id = self._run_id
 
@@ -119,7 +188,7 @@ class BaseStage:
         }
 
     # ------------------------------------------------------------------
-    # Internal
+    # LLM streaming with retry
     # ------------------------------------------------------------------
 
     async def _stream_llm(self, client, messages: list[dict], call_id: str,
@@ -168,13 +237,3 @@ class BaseStage:
                     })
                     await asyncio.sleep(delay)
         return result
-
-    def _is_stale(self, my_run_id: int) -> bool:
-        return my_run_id != self._run_id
-
-    def _emit(self, event_type: str, data):
-        self._broadcast({
-            "stage": self.name,
-            "type": event_type,
-            "data": data,
-        })
