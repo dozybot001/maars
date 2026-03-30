@@ -6,9 +6,6 @@ cd /d "%~dp0"
 if not "%MAARS_STARTED%"=="1" (
     set "MAARS_STARTED=1"
     cmd /c "%~f0" %* <nul
-    :: After server stops, close the MAARS app window (try both browsers)
-    taskkill /fi "WINDOWTITLE eq MAARS*" /im chrome.exe >nul 2>&1
-    taskkill /fi "WINDOWTITLE eq MAARS*" /im msedge.exe >nul 2>&1
     exit /b
 )
 
@@ -18,7 +15,7 @@ echo ========================================
 echo.
 
 :: --- 1. Check Python ---
-echo [1/4] Checking Python...
+echo [1/6] Checking Python...
 where python >nul 2>&1
 if errorlevel 1 (
     echo   [ERROR] Python not found. Please install Python 3.10+.
@@ -27,8 +24,14 @@ if errorlevel 1 (
 )
 for /f "tokens=*" %%v in ('python --version 2^>^&1') do echo   Found: %%v
 
-:: --- 2. Install dependencies ---
-echo [2/4] Installing Python dependencies...
+:: --- 2. Setup venv ^& install dependencies ---
+echo [2/6] Setting up virtual environment...
+if not exist .venv (
+    python -m venv .venv
+    echo   Virtual environment created.
+)
+call .venv\Scripts\activate.bat
+echo   Installing Python dependencies...
 python -m pip install -r requirements.txt -q
 if errorlevel 1 (
     echo   [ERROR] Failed to install dependencies.
@@ -38,7 +41,7 @@ if errorlevel 1 (
 echo   Dependencies installed.
 
 :: --- 3. Check .env ---
-echo [3/4] Checking .env configuration...
+echo [3/6] Checking .env configuration...
 if not exist .env (
     echo   .env not found. Creating template...
     (
@@ -71,8 +74,22 @@ if %HAS_KEY%==0 (
 )
 echo   .env configured.
 
-:: --- 4. Docker sandbox ---
-echo [4/4] Checking Docker sandbox image...
+:: --- 4. Build frontend ---
+echo [4/6] Building frontend...
+where node >nul 2>&1
+if errorlevel 1 (
+    echo   [WARN] Node.js not found. Using pre-built frontend (if available^).
+    goto :docker
+)
+pushd frontend
+call npm install --silent
+call npm run build
+popd
+echo   Frontend built.
+
+:docker
+:: --- 5. Docker sandbox ---
+echo [5/6] Checking Docker sandbox image...
 where docker >nul 2>&1
 if errorlevel 1 (
     echo   [WARN] Docker not found. Code execution in sandbox will be unavailable.
@@ -90,29 +107,10 @@ if errorlevel 1 (
 :start
 echo.
 echo ========================================
-echo   Starting MAARS on http://localhost:8000
+echo   [6/6] Starting MAARS on http://localhost:8000
 echo   Press Ctrl+C to stop.
 echo ========================================
 echo.
-:: Open browser in app mode (Chrome > Edge > default)
-:: App mode = standalone window, auto-closed on exit
-set "MAARS_BROWSER="
-where chrome >nul 2>&1 && set "MAARS_BROWSER=chrome"
-if not defined MAARS_BROWSER (
-    if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" set "MAARS_BROWSER=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
-)
-if not defined MAARS_BROWSER (
-    if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" set "MAARS_BROWSER=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"
-)
-if not defined MAARS_BROWSER (
-    if exist "%LocalAppData%\Google\Chrome\Application\chrome.exe" set "MAARS_BROWSER=%LocalAppData%\Google\Chrome\Application\chrome.exe"
-)
-if not defined MAARS_BROWSER (
-    where msedge >nul 2>&1 && set "MAARS_BROWSER=msedge"
-)
-if defined MAARS_BROWSER (
-    start /b cmd /c "timeout /t 2 /nobreak >nul && start "" "%MAARS_BROWSER%" --app=http://localhost:8000"
-) else (
-    start /b cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:8000"
-)
+:: Open default browser after a short delay
+start /b cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:8000"
 python -m uvicorn backend.main:app --reload --reload-include "*.py" --reload-dir backend --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown 1

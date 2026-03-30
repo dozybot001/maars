@@ -9,7 +9,7 @@ class StageStatus(BaseModel):
     name: str
     state: str
     output_length: int
-    rounds: int
+    rounds: int = 0
 
 
 class PipelineStatus(BaseModel):
