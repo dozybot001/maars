@@ -90,24 +90,6 @@ Key capabilities:
 - **Iteration with scoring** — tracks scores across rounds, stops when improvement plateaus
 - **Checkpoint/resume** — pause mid-run, resume later with all state preserved
 
-## Write Pipeline Detail
-
-The Write stage mirrors Refine's architecture — Agno Team coordinate mode with Leader + Writer + Reviewer:
-
-```
-Research outputs (tasks/, artifacts/, refined_idea.md)
-  ↓
-Leader → delegates to Writer (reads all task outputs via tools, writes complete draft)
-Leader → delegates to Reviewer (critically reviews the draft)
-Leader → delegates to Writer (revises based on feedback)
-  ↓
-paper.md
-```
-
-- **Writer** has tool access (`read_task_output`, `list_artifacts`, `read_refined_idea`, search tools) — reads research outputs on demand
-- **Reviewer** evaluates structure, completeness, depth, accuracy, readability — no tools
-- **Leader** orchestrates delegation order: Writer → Reviewer → Writer
-
 ## Kaggle Mode
 
 Paste a Kaggle competition URL instead of a research idea:
