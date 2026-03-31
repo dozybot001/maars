@@ -90,24 +90,6 @@ refined_idea.md
 - **带评分的迭代** — 跨轮次跟踪分数，改进停滞时自动停止
 - **断点续跑** — 可以中途暂停，稍后恢复，所有状态完整保留
 
-## 写作流水线详解
-
-Write 阶段与 Refine 对称，使用 Agno Team coordinate 模式（Leader + Writer + Reviewer）：
-
-```
-研究产出 (tasks/, artifacts/, refined_idea.md)
-  ↓
-Leader → 委派 Writer（通过工具读取所有任务产出，写完整初稿）
-Leader → 委派 Reviewer（批判性审查初稿）
-Leader → 委派 Writer（根据反馈修订终稿）
-  ↓
-paper.md
-```
-
-- **Writer** 有工具访问（`read_task_output`、`list_artifacts`、`read_refined_idea`、搜索工具）——按需读取研究产出
-- **Reviewer** 从结构、完整性、深度、准确性、可读性等维度审稿——无工具
-- **Leader** 编排委派顺序：Writer → Reviewer → Writer
-
 ## Kaggle 模式
 
 直接粘贴 Kaggle 比赛链接：
