@@ -1,89 +1,68 @@
+import * as eventBus from './eventBus.js'
+
 const BASE = '/api'
 
-/**
- * Read API key from localStorage (set via settings UI or console).
- * Returns auth headers object, empty if no key configured.
- */
 function authHeaders() {
-  const key = localStorage.getItem('maars_api_key')
-  return key ? { Authorization: `Bearer ${key}` } : {}
+  const token = localStorage.getItem('maars_access_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-export async function startPipeline(input) {
-  const res = await fetch(`${BASE}/pipeline/start`, {
+function emitApiError(message) {
+  eventBus.emit('error', { stage: 'system', data: { message } })
+}
+
+async function request(url, opts = {}) {
+  opts.headers = { ...authHeaders(), ...opts.headers }
+  const res = await fetch(url, opts)
+  if (res.status === 401) {
+    emitApiError('Access Token 无效或未设置，请在侧边栏中填写正确的 Access Token')
+    throw new Error('Unauthorized')
+  }
+  if (!res.ok) {
+    emitApiError(`${opts.method || 'GET'} ${url} failed (${res.status})`)
+    throw new Error(`Request failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export function startPipeline(input) {
+  return request(`${BASE}/pipeline/start`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ input }),
   })
-  if (!res.ok) throw new Error(`Start failed: ${res.status}`)
-  return res.json()
 }
 
-export async function fetchStatus() {
-  const res = await fetch(`${BASE}/pipeline/status`, {
-    headers: authHeaders(),
-  })
-  if (!res.ok) throw new Error(`Status fetch failed: ${res.status}`)
-  return res.json()
+export function fetchStatus() {
+  return request(`${BASE}/pipeline/status`)
 }
 
-export async function stopPipeline() {
-  const res = await fetch(`${BASE}/pipeline/stop`, {
-    method: 'POST',
-    headers: authHeaders(),
-  })
-  if (!res.ok) throw new Error(`Stop failed: ${res.status}`)
-  return res.json()
+export function stopPipeline() {
+  return request(`${BASE}/pipeline/stop`, { method: 'POST' })
 }
 
-export async function stageAction(stageName, action) {
-  const res = await fetch(`${BASE}/stage/${stageName}/${action}`, {
-    method: 'POST',
-    headers: authHeaders(),
-  })
-  if (!res.ok) throw new Error(`${action} failed: ${res.status}`)
-  return res.json()
+export function stageAction(stageName, action) {
+  return request(`${BASE}/stage/${stageName}/${action}`, { method: 'POST' })
 }
 
-export async function checkDockerStatus() {
-  const res = await fetch(`${BASE}/docker/status`, {
-    headers: authHeaders(),
-  })
-  if (!res.ok) throw new Error(`Docker status failed: ${res.status}`)
-  return res.json()
+export function checkDockerStatus() {
+  return request(`${BASE}/docker/status`)
 }
 
 // --- Session management ---
 
-export async function listSessions() {
-  const res = await fetch(`${BASE}/sessions`, {
-    headers: authHeaders(),
-  })
-  if (!res.ok) throw new Error(`List sessions failed: ${res.status}`)
-  return res.json()
+export function listSessions() {
+  return request(`${BASE}/sessions`)
 }
 
-export async function getSession(id) {
-  const res = await fetch(`${BASE}/sessions/${encodeURIComponent(id)}`, {
-    headers: authHeaders(),
-  })
-  if (!res.ok) throw new Error(`Get session failed: ${res.status}`)
-  return res.json()
+export function getSession(id) {
+  return request(`${BASE}/sessions/${encodeURIComponent(id)}`)
 }
 
-export async function getSessionState(id) {
-  const res = await fetch(`${BASE}/sessions/${encodeURIComponent(id)}/state`, {
-    headers: authHeaders(),
-  })
-  if (!res.ok) throw new Error(`Get session state failed: ${res.status}`)
-  return res.json()
+export function getSessionState(id) {
+  return request(`${BASE}/sessions/${encodeURIComponent(id)}/state`)
 }
 
-export async function deleteSession(id) {
-  const res = await fetch(`${BASE}/sessions/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-    headers: authHeaders(),
-  })
-  if (!res.ok) throw new Error(`Delete session failed: ${res.status}`)
-  return res.json()
+export function deleteSession(id) {
+  return request(`${BASE}/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }

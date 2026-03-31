@@ -75,9 +75,9 @@ class TestStageConfig:
         assert resp == "google" and resm == "gemini-2.5-flash" and resk == "gkey"
 
 
-class TestAPIKeySetting:
-    def test_api_key_default_empty(self):
+class TestAccessTokenSetting:
+    def test_access_token_default_empty(self):
         from backend.config import Settings
 
         s = Settings()
-        assert s.api_key == ""
+        assert s.access_token == ""

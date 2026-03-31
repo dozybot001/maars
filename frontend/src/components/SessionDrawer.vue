@@ -52,6 +52,7 @@
           v-for="s in sessions"
           :key="s.id"
           class="session-card history-card"
+          :class="{ 'card-loading': loadingSessionId === s.id }"
           @click="loadSession(s.id)"
         >
           <div class="card-status-row">
@@ -60,6 +61,21 @@
           </div>
           <div class="card-idea">{{ s.idea_summary || '(no input)' }}</div>
           <button class="card-delete" @click.stop="handleDelete(s.id)" title="Delete">&times;</button>
+        </div>
+      </div>
+
+      <!-- Access Token footer -->
+      <div class="sidebar-footer">
+        <div class="token-row">
+          <input
+            v-model="tokenInput"
+            type="password"
+            class="token-input"
+            placeholder="Access Token"
+            autocomplete="off"
+            @keydown.enter="saveToken"
+          >
+          <button class="token-btn" @click="saveToken">{{ tokenSaved ? '✓' : 'Save' }}</button>
         </div>
       </div>
     </aside>
@@ -82,8 +98,24 @@ const contentVisible = ref(false)
 const newInput = ref('')
 const newInputEl = ref(null)
 
+// --- Access Token ---
+const tokenInput = ref(localStorage.getItem('maars_access_token') || '')
+const tokenSaved = ref(false)
+
+function saveToken() {
+  const val = tokenInput.value.trim()
+  if (val) {
+    localStorage.setItem('maars_access_token', val)
+  } else {
+    localStorage.removeItem('maars_access_token')
+  }
+  tokenSaved.value = true
+  setTimeout(() => { tokenSaved.value = false }, 1500)
+}
+
 // --- History ---
 const loading = ref(false)
+const loadingSessionId = ref(null)
 const sessions = ref([])
 
 // --- Computed ---
@@ -169,12 +201,16 @@ async function handleResume() {
 // --- History actions ---
 
 async function loadSession(id) {
+  if (loadingSessionId.value) return
+  loadingSessionId.value = id
   try {
     const state = await getSessionState(id)
     close()
     await store.loadSessionState(state)
   } catch (err) {
     console.error('Failed to load session state:', err)
+  } finally {
+    loadingSessionId.value = null
   }
 }
 
@@ -289,6 +325,53 @@ defineExpose({ open, close, toggle })
   border-color: var(--accent);
 }
 
+/* ---- Footer ---- */
+.sidebar-footer {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.token-row {
+  display: flex;
+  gap: 6px;
+}
+
+.token-input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  outline: none;
+}
+
+.token-input:focus {
+  border-color: var(--accent);
+}
+
+.token-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.token-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 /* ---- Content ---- */
 .sidebar-content {
   flex: 1;
@@ -317,6 +400,10 @@ defineExpose({ open, close, toggle })
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--bg-card);
+}
+.card-loading {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 /* ---- New session card ---- */

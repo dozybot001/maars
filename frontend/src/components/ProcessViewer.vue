@@ -126,11 +126,18 @@ function appendScoreElement(data, container) {
   const current = data.current != null ? data.current.toFixed(5) : '\u2014'
   const prev = data.previous != null ? data.previous.toFixed(5) : 'N/A'
   el.classList.add(data.improved ? 'po-score-improved' : 'po-score-declined')
-  el.innerHTML =
-    `<span class="po-score-label">Score</span>` +
-    `<span class="po-score-current">${current}</span>` +
-    `<span class="po-score-arrow">${data.improved ? '\u2191' : '\u2192'}</span>` +
-    `<span class="po-score-prev">${prev}</span>`
+  const spans = [
+    ['po-score-label', 'Score'],
+    ['po-score-current', current],
+    ['po-score-arrow', data.improved ? '\u2191' : '\u2192'],
+    ['po-score-prev', prev],
+  ]
+  for (const [cls, text] of spans) {
+    const s = document.createElement('span')
+    s.className = cls
+    s.textContent = text
+    el.appendChild(s)
+  }
   t.appendChild(el)
   scroll()
 }
@@ -145,7 +152,7 @@ function renderDecompTree(data) {
     const t = target()
     if (t) t.appendChild(container)
   }
-  container.innerHTML = ''
+  clearChildren(container)
   container.appendChild(renderNode(data, true))
   scroll()
 }
@@ -238,7 +245,7 @@ function renderExecBatches(batches) {
     }
     fragment.appendChild(batchDiv)
   }
-  container.innerHTML = ''
+  clearChildren(container)
   container.appendChild(fragment)
   scroll()
 }
@@ -246,7 +253,7 @@ function renderExecBatches(batches) {
 function updateTaskNode(taskId, status, summary) {
   const body = processBody.value
   if (!body) return
-  const node = body.querySelector(`.exec-node[data-task-id="${taskId}"]`)
+  const node = body.querySelector(`.exec-node[data-task-id="${CSS.escape(taskId)}"]`)
   if (!node) return
   node.classList.remove(
     'exec-pending', 'exec-running', 'exec-verifying',
@@ -265,8 +272,12 @@ function updateTaskNode(taskId, status, summary) {
   }
 }
 
+function clearChildren(el) {
+  while (el && el.firstChild) el.removeChild(el.firstChild)
+}
+
 function resetDOM() {
-  if (processBody.value) processBody.value.innerHTML = ''
+  clearChildren(processBody.value)
   activeStage = null
   currentSection = null
   phaseGroups = {}

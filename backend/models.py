@@ -1,8 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class StartRequest(BaseModel):
-    input: str
+    input: str = Field(..., max_length=100_000)
 
 
 class StageStatus(BaseModel):

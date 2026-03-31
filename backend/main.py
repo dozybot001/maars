@@ -14,20 +14,20 @@ from backend.routes import pipeline as pipeline_routes
 from backend.routes import sessions as session_routes
 
 
-class APIKeyMiddleware(BaseHTTPMiddleware):
+class AccessTokenMiddleware(BaseHTTPMiddleware):
     """Optional Bearer token auth for /api/* routes.
 
-    Only active when MAARS_API_KEY is set. Non-API routes (frontend static
+    Only active when MAARS_ACCESS_TOKEN is set. Non-API routes (frontend static
     files) are always allowed through.
     """
 
     async def dispatch(self, request: Request, call_next):
-        if settings.api_key and request.url.path.startswith("/api"):
+        if settings.access_token and request.url.path.startswith("/api"):
             auth = request.headers.get("Authorization", "")
-            if auth != f"Bearer {settings.api_key}":
+            if auth != f"Bearer {settings.access_token}":
                 return JSONResponse(
                     status_code=401,
-                    content={"detail": "Invalid or missing API key"},
+                    content={"detail": "Invalid or missing access token"},
                 )
         return await call_next(request)
 
@@ -35,11 +35,11 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app):
     # Warn if API is exposed without authentication
-    if not settings.api_key:
+    if not settings.access_token:
         import logging
         logging.getLogger("maars").warning(
-            "\033[33m⚠  MAARS_API_KEY is not set — the API is open without "
-            "authentication. Set MAARS_API_KEY in .env before exposing "
+            "\033[33m⚠  MAARS_ACCESS_TOKEN is not set — the API is open without "
+            "authentication. Set MAARS_ACCESS_TOKEN in .env before exposing "
             "this service on a network.\033[0m"
         )
     yield
@@ -49,7 +49,7 @@ async def lifespan(app):
 
 
 app = FastAPI(title="MAARS", version="0.1.0", lifespan=lifespan)
-app.add_middleware(APIKeyMiddleware)
+app.add_middleware(AccessTokenMiddleware)
 
 # --- Pipeline stages ---
 orchestrator = PipelineOrchestrator()

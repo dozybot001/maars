@@ -38,20 +38,26 @@ function onShowModal(title, content) {
   modal.value?.open(title, content)
 }
 
+let dockerCheckPending = false
 async function checkDocker() {
+  if (dockerCheckPending) return
+  dockerCheckPending = true
   try {
     const data = await checkDockerStatus()
     store.setDockerStatus(data.connected, data.error)
   } catch {
     store.setDockerStatus(false, 'Cannot check Docker status')
+  } finally {
+    dockerCheckPending = false
   }
 }
 
 function onBeforeUnload() {
   if (store.pipelineState === 'running') {
-    const key = localStorage.getItem('maars_api_key')
-    const headers = key ? { Authorization: `Bearer ${key}` } : {}
+    const token = localStorage.getItem('maars_access_token')
+    const headers = token ? { Authorization: `Bearer ${token}` } : {}
     fetch('/api/pipeline/stop', { method: 'POST', keepalive: true, headers })
+      .catch(() => {})
   }
 }
 
@@ -61,7 +67,9 @@ onMounted(async () => {
   try {
     const status = await fetchStatus()
     store.syncFromStatus(status)
-  } catch { /* ignore */ }
+  } catch (err) {
+    console.warn('[App] Failed to fetch initial status:', err.message)
+  }
 
   connectSSE()
 

@@ -195,8 +195,13 @@ class AgentStage(Stage):
                           my_run_id: int, content_level: int = 2,
                           timeout: float = 1800, max_retries: int = 3) -> str:
         """Stream LLM response, dispatching events to frontend via SSE.
+
         Retries on timeout and transient API errors with exponential backoff.
+        On final failure, always raises — callers should never receive a
+        partial result silently.
         """
+        last_error: Exception | None = None
+
         for attempt in range(max_retries):
             result = ""
             try:
@@ -218,6 +223,7 @@ class AgentStage(Stage):
                             self._emit("tokens", event.metadata)
                 return result
             except (TimeoutError, RuntimeError) as e:
+                last_error = e
                 is_last = attempt >= max_retries - 1
                 label = "TIMEOUT" if isinstance(e, TimeoutError) else "API ERROR"
                 if is_last:
@@ -226,8 +232,6 @@ class AgentStage(Stage):
                         "call_id": call_id,
                         "level": content_level,
                     })
-                    if isinstance(e, RuntimeError):
-                        raise
                 else:
                     delay = 2 ** attempt * 5  # 5s, 10s, 20s
                     self._emit("chunk", {
@@ -236,4 +240,6 @@ class AgentStage(Stage):
                         "level": content_level,
                     })
                     await asyncio.sleep(delay)
-        return result
+
+        # All retries exhausted — raise so callers handle failure explicitly
+        raise last_error  # type: ignore[misc]

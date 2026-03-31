@@ -207,9 +207,9 @@ class TestDeleteSession:
         assert resp.status_code == 404
 
 
-class TestAPIKeyAuth:
-    def test_no_key_allows_access(self, tmp_path):
-        """Without MAARS_API_KEY, all requests pass."""
+class TestAccessTokenAuth:
+    def test_no_token_allows_access(self, tmp_path):
+        """Without MAARS_ACCESS_TOKEN, all requests pass."""
         from fastapi import FastAPI
         from backend.routes.sessions import router
 
@@ -224,17 +224,17 @@ class TestAPIKeyAuth:
         resp = client.get("/api/sessions")
         assert resp.status_code == 200
 
-    def test_key_blocks_without_bearer(self, tmp_path, monkeypatch):
-        """With MAARS_API_KEY set, missing auth returns 401."""
+    def test_token_blocks_without_bearer(self, tmp_path, monkeypatch):
+        """With MAARS_ACCESS_TOKEN set, missing auth returns 401."""
         from fastapi import FastAPI
-        from backend.main import APIKeyMiddleware
+        from backend.main import AccessTokenMiddleware
         from backend.routes.sessions import router
         import backend.config as cfg
 
-        monkeypatch.setattr(cfg.settings, "api_key", "test-secret")
+        monkeypatch.setattr(cfg.settings, "access_token", "test-secret")
 
         app = FastAPI()
-        app.add_middleware(APIKeyMiddleware)
+        app.add_middleware(AccessTokenMiddleware)
         app.include_router(router)
 
         class MockOrch:

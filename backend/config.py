@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     # Per-provider config (only the active provider's fields are required)
     google_api_key: str = ""
-    google_model: str = "gemini-2.5-flash"
+    google_model: str = "gemini-3-flash-preview"
 
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-4-5-20250514"
@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     dataset_dir: str = ""  # mounted read-only at /workspace/data in sandbox
 
     # --- API Authentication ---
-    api_key: str = ""  # set MAARS_API_KEY to require Bearer token auth
+    access_token: str = ""  # set MAARS_ACCESS_TOKEN to require Bearer token auth
 
     # --- Docker Sandbox ---
     docker_sandbox_image: str = "maars-sandbox:latest"

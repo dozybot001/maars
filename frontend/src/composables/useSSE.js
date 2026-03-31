@@ -68,8 +68,8 @@ export function useSSE() {
     disconnect()
 
     const store = usePipelineStore()
-    const apiKey = localStorage.getItem('maars_api_key')
-    const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : {}
+    const token = localStorage.getItem('maars_access_token')
+    const headers = token ? { Authorization: `Bearer ${token}` } : {}
 
     controller = new AbortController()
     const connectTimeout = setTimeout(() => controller.abort(), 30000)

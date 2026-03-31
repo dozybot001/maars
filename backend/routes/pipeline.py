@@ -1,7 +1,11 @@
+import logging
+
 from fastapi import APIRouter, HTTPException, Request
 
 from backend.models import StartRequest, ActionResponse, PipelineStatus, StageStatus
 from backend.pipeline.orchestrator import STAGE_ORDER
+
+log = logging.getLogger("maars")
 
 router = APIRouter(prefix="/api")
 
@@ -24,7 +28,8 @@ async def start_pipeline(req: StartRequest, request: Request):
     try:
         await orch.start(req.input)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        log.exception("Pipeline start failed")
+        raise HTTPException(status_code=500, detail=f"Failed to start pipeline: {e}")
     return {"status": "started", "input": req.input}
 
 

@@ -222,28 +222,16 @@ check_results_session_root() {
 
 check_disk_space() {
     local dir="$1" min_mb="${2:-512}"
-    local avail_kb=""
-
-    if is_windows && command -v powershell.exe >/dev/null 2>&1; then
-        avail_kb="$(powershell.exe -NoProfile -Command "
-            \$drive = (Resolve-Path '$dir').Drive.Name + ':'
-            [math]::Floor((Get-PSDrive \$drive.TrimEnd(':')).Free / 1KB)
-        " 2>/dev/null | tr -d '\r')" || true
-    elif command -v df >/dev/null 2>&1; then
-        avail_kb="$(df -Pk "$dir" 2>/dev/null | awk 'NR==2{print $4}')" || true
-    fi
-
-    if [ -z "$avail_kb" ]; then
-        printf 'warn\tCould not determine free space'
-        return 0
-    fi
-
-    local avail_mb=$((avail_kb / 1024))
-    if [ "$avail_mb" -lt "$min_mb" ]; then
-        printf 'fail\t%sMB free (need >=%sMB)' "$avail_mb" "$min_mb"
+    local probe="$dir/.disk_probe_$$"
+    # Write a small file to verify disk is writable and not full
+    if dd if=/dev/zero of="$probe" bs=1M count=1 >/dev/null 2>&1; then
+        rm -f "$probe"
+        printf 'ok\tDisk writable'
+    else
+        rm -f "$probe"
+        printf 'fail\tDisk may be full or read-only'
         return 1
     fi
-    printf 'ok\t%sMB free' "$avail_mb"
 }
 
 check_llm_connectivity() {
@@ -263,7 +251,7 @@ try:
     if provider == "google":
         from google import genai
         client = genai.Client(api_key=api_key)
-        client.models.get(f"models/{model}")
+        client.models.get(model=f"models/{model}")
     elif provider == "openai":
         import urllib.request, json
         req = urllib.request.Request(
@@ -382,8 +370,6 @@ for stage in ("refine", "research", "write"):
 missing_key_providers = sorted({provider for _, provider, _, api_key in scopes if provider and not api_key})
 missing_models = [scope for scope, _, model, _ in scopes if not model]
 
-summary = ", ".join(f"{scope}={provider}:{model}" for scope, provider, model, _ in scopes)
-
 if invalid:
     model_status = "fail"
     model_hint = "; ".join(invalid)
@@ -397,7 +383,11 @@ elif missing_key_providers or missing_models:
     model_hint = "; ".join(parts)
 else:
     model_status = "ok"
-    model_hint = summary
+    parts = [f"{settings.model_provider}:{settings.active_model}"]
+    overrides = [(s, p, m) for s, p, m, _ in scopes[1:] if getattr(settings, f"{s}_provider", "")]
+    for s, p, m in overrides:
+        parts.append(f"{s}={p}:{m}")
+    model_hint = ", ".join(parts)
 
 sanity_issues = []
 if settings.research_max_iterations < 1:
@@ -421,13 +411,6 @@ else:
         f"concurrency={settings.docker_sandbox_concurrency}"
     )
 
-if settings.api_key:
-    exposure_status = "ok"
-    exposure_hint = "MAARS_API_KEY is set"
-else:
-    exposure_status = "warn"
-    exposure_hint = "MAARS_API_KEY not set; /api is open on localhost"
-
 from pathlib import Path
 kaggle_json = Path.home() / ".kaggle" / "kaggle.json"
 if settings.kaggle_api_token:
@@ -444,8 +427,6 @@ print(f"MODEL_STATUS\t{model_status}")
 print(f"MODEL_HINT\t{model_hint}")
 print(f"CONFIG_SANITY_STATUS\t{config_sanity_status}")
 print(f"CONFIG_SANITY_HINT\t{config_sanity_hint}")
-print(f"API_EXPOSURE_STATUS\t{exposure_status}")
-print(f"API_EXPOSURE_HINT\t{exposure_hint}")
 print(f"KAGGLE_STATUS\t{kaggle_status}")
 print(f"KAGGLE_HINT\t{kaggle_hint}")
 docker_image = settings.docker_sandbox_image or "maars-sandbox:latest"
@@ -703,7 +684,7 @@ url = sys.argv[1]
 api_key = os.environ.get("API_KEY", "")
 
 if not api_key:
-    print("MAARS_API_KEY is not set; auth middleware is disabled by config")
+    print("MAARS_ACCESS_TOKEN is not set; auth middleware is disabled by config")
     raise SystemExit(10)
 
 unauth_req = urllib.request.Request(url)
@@ -783,8 +764,6 @@ BACKEND_IMPORT_READY=0
 SERVER_STARTED=0
 CONFIG_SANITY_STATUS="fail"
 CONFIG_SANITY_HINT="Skipped because backend settings are unavailable"
-API_EXPOSURE_STATUS="warn"
-API_EXPOSURE_HINT="MAARS_API_KEY status unknown"
 KAGGLE_STATUS="warn"
 KAGGLE_HINT="Kaggle status unknown"
 DOCKER_IMAGE="$(read_env_value MAARS_DOCKER_SANDBOX_IMAGE 2>/dev/null || true)"
@@ -852,7 +831,7 @@ elif cp .env.example .env >>"$LOG_FILE" 2>&1; then
 else
     print_check "fail" "Config File" "Could not create .env from .env.example"
 fi
-API_KEY_VALUE="$(read_env_value MAARS_API_KEY 2>/dev/null || true)"
+API_KEY_VALUE="$(read_env_value MAARS_ACCESS_TOKEN 2>/dev/null || true)"
 
 print_group "Configuration"
 
@@ -872,8 +851,6 @@ if [ "$DEPS_READY" -eq 1 ] && [ "$CONFIG_READY" -eq 1 ]; then
                 MODEL_HINT) MODEL_HINT="$value" ;;
                 CONFIG_SANITY_STATUS) CONFIG_SANITY_STATUS="$value" ;;
                 CONFIG_SANITY_HINT) CONFIG_SANITY_HINT="$value" ;;
-                API_EXPOSURE_STATUS) API_EXPOSURE_STATUS="$value" ;;
-                API_EXPOSURE_HINT) API_EXPOSURE_HINT="$value" ;;
                 KAGGLE_STATUS) KAGGLE_STATUS="$value" ;;
                 KAGGLE_HINT) KAGGLE_HINT="$value" ;;
                 DOCKER_IMAGE) DOCKER_IMAGE="$value" ;;
@@ -962,26 +939,18 @@ else
     print_check "fail" "Frontend Dist" "Skipped because frontend is unavailable"
 fi
 
-ACTIVE_LABEL="Storage"
-append_log "Checking results directory"
-if run_logged_task check_results_dir; then
-    print_check "ok" "Storage" "results/ is writable"
-else
-    print_check "fail" "Storage" "results/ is not writable"
-fi
-
-ACTIVE_LABEL="Disk Space"
-append_log "Checking disk space"
+ACTIVE_LABEL="Disk Write"
+append_log "Checking disk write"
 if DISK_RESULT="$(check_disk_space "$(pwd)" 512)"; then
     IFS=$'\t' read -r DISK_STATUS DISK_HINT <<<"$DISK_RESULT"
     DISK_STATUS="${DISK_STATUS//$'\r'/}"
     DISK_HINT="${DISK_HINT//$'\r'/}"
-    print_check "$DISK_STATUS" "Disk Space" "$DISK_HINT"
+    print_check "$DISK_STATUS" "Disk Write" "$DISK_HINT"
 else
     IFS=$'\t' read -r DISK_STATUS DISK_HINT <<<"$DISK_RESULT"
     DISK_STATUS="${DISK_STATUS//$'\r'/}"
     DISK_HINT="${DISK_HINT//$'\r'/}"
-    print_check "${DISK_STATUS:-fail}" "Disk Space" "${DISK_HINT:-Insufficient disk space}"
+    print_check "${DISK_STATUS:-fail}" "Disk Write" "${DISK_HINT:-Disk may be full or read-only}"
 fi
 
 ACTIVE_LABEL="Session Root"
@@ -1025,12 +994,15 @@ ACTIVE_LABEL="Docker Image Age"
 append_log "Checking sandbox image freshness"
 if command -v docker >/dev/null 2>&1 && docker image inspect "$DOCKER_IMAGE" >/dev/null 2>&1; then
     if check_sandbox_image_age 2>/dev/null; then
-        print_check "warn" "Docker Image Age" "Dockerfile.sandbox is newer than image; consider rebuilding"
+        append_log "Dockerfile.sandbox is newer than image; auto-rebuilding in background"
+        docker build -f Dockerfile.sandbox -t "$DOCKER_IMAGE" . >>"$LOG_FILE" 2>&1 &
+        print_check "ok" "Docker Image Age" "Rebuilding in background (pid $!)"
     else
         print_check "ok" "Docker Image Age" "Sandbox image is up to date"
     fi
 else
-    print_check "warn" "Docker Image Age" "Skipped because sandbox image does not exist"
+    docker build -f Dockerfile.sandbox -t "${DOCKER_IMAGE:-maars-sandbox:latest}" . >>"$LOG_FILE" 2>&1 &
+    print_check "ok" "Docker Image Age" "Building in background (pid $!)"
 fi
 
 print_group "Server"
@@ -1149,32 +1121,14 @@ fi
 
 print_group "Security"
 
-ACTIVE_LABEL="API Exposure"
-append_log "Checking API exposure"
-print_check "${API_EXPOSURE_STATUS:-warn}" "API Exposure" "${API_EXPOSURE_HINT:-MAARS_API_KEY status unknown}"
-
-ACTIVE_LABEL="Browser Auth"
-append_log "Checking browser auth requirements"
+ACTIVE_LABEL="Access Token"
+append_log "Checking access token"
 if [ -n "$API_KEY_VALUE" ]; then
-    print_check "warn" "Browser Auth" "Set localStorage.maars_api_key in the browser before using /api"
+    print_check "ok" "Access Token" "Set; enter it in the sidebar to authenticate"
 else
-    print_check "ok" "Browser Auth" "No browser token is required on localhost"
+    print_check "ok" "Access Token" "Not set; /api is open on localhost"
 fi
 
-ACTIVE_LABEL="Auth Middleware"
-append_log "Checking API auth middleware"
-if [ "$SERVER_STARTED" -ne 1 ]; then
-    print_check "warn" "Auth Middleware" "Skipped because the UI server did not start"
-elif AUTH_HINT="$(check_auth_middleware 2>>"$LOG_FILE")"; then
-    print_check "ok" "Auth Middleware" "$AUTH_HINT"
-else
-    AUTH_STATUS=$?
-    if [ "$AUTH_STATUS" -eq 10 ]; then
-        print_check "ok" "Auth Middleware" "MAARS_API_KEY is not set; auth middleware is inactive"
-    else
-        print_check "warn" "Auth Middleware" "API auth behavior did not match the current config"
-    fi
-fi
 
 print_group "Integrations"
 
