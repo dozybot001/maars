@@ -26,9 +26,13 @@ export function initLogViewer() {
   wireCopyButton('copy-process', document.getElementById('process-body'));
 
   on('sse', (event) => {
-    const { stage, chunk, task_id } = event;
+    const { stage, chunk, task_id, status, description } = event;
     if (!stage) return;
     ensureSection(stage);
+    // Capture task descriptions from status events
+    if (status && task_id && description) {
+      taskDescriptions[task_id] = description;
+    }
     if (chunk) {
       markActivity();
       renderChunk(chunk, task_id);

@@ -190,10 +190,13 @@ class ResearchStage(Stage):
         self._current_phase = "execute"
         await asyncio.to_thread(_preflight_docker)
 
-        # Initialize task statuses and send done signal for exec list
-        for t in self._all_tasks:
-            if t["id"] not in self._task_results:
-                self.db.update_task_status(t["id"], "pending")
+        # Initialize task statuses with batch numbers
+        batches = topological_batches(self._all_tasks)
+        for batch_idx, batch in enumerate(batches):
+            for t in batch:
+                if t["id"] not in self._task_results:
+                    self.db.update_task_status(t["id"], "pending")
+                    self._update_task_batch(t["id"], batch_idx + 1)
         self._send(chunk={"text": "Execute", "call_id": "Execute", "label": True, "level": 2})
         self._send()  # done: plan_list ready with statuses
 
@@ -332,7 +335,7 @@ class ResearchStage(Stage):
         prior_attempt = self._partial_outputs.get(parent_id, "") if parent_id else ""
 
         call_id = f"Exec {task_id}"
-        self._send(status="running", task_id=task_id)
+        self._send(status="running", task_id=task_id, description=task["description"])
         instruction, user_text = build_execute_prompt(task, prior_attempt)
         result = await self._llm(instruction, user_text, call_id, content_level=4, label=True, label_level=3)
 
@@ -539,6 +542,17 @@ class ResearchStage(Stage):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _update_task_batch(self, task_id: str, batch: int):
+        """Set batch number for a task in plan_list.json."""
+        plan_path = self.db._root / "plan_list.json"
+        from backend.db import _read_json, _write_json
+        tasks = _read_json(plan_path, default=[])
+        for t in tasks:
+            if t["id"] == task_id:
+                t["batch"] = batch
+                break
+        _write_json(plan_path, tasks)
 
     def _renumber_tasks(self, tasks: list[dict], round_num: int) -> list[dict]:
         prefix = f"r{round_num}_"

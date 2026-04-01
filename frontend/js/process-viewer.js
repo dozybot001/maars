@@ -165,29 +165,47 @@ function renderExecList(tasks, parent) {
     container.className = 'po-exec';
     t.appendChild(container);
   }
+
+  // Group tasks by batch number (from plan_list.json)
+  const batches = {};
+  for (const task of tasks) {
+    const b = task.batch || 1;
+    if (!batches[b]) batches[b] = [];
+    batches[b].push(task);
+  }
+
   const existingNodes = {};
   container.querySelectorAll('.exec-node').forEach(n => { existingNodes[n.dataset.taskId] = n; });
+
   const fragment = document.createDocumentFragment();
-  const batchDiv = document.createElement('div');
-  batchDiv.className = 'exec-batch';
-  for (const task of tasks) {
-    const existing = existingNodes[task.id];
-    if (existing) {
-      updateTaskStatus(task.id, task.status || 'pending');
-      batchDiv.appendChild(existing);
-    } else {
-      const node = document.createElement('div');
-      node.className = `exec-node exec-${task.status || 'pending'}`;
-      node.dataset.taskId = task.id;
-      const id = document.createElement('span');
-      id.className = 'tree-id'; id.textContent = task.id;
-      const desc = document.createElement('span');
-      desc.className = 'exec-desc'; desc.textContent = task.description;
-      node.appendChild(id); node.appendChild(desc);
-      batchDiv.appendChild(node);
+  for (const batchNum of Object.keys(batches).sort((a, b) => a - b)) {
+    const batchDiv = document.createElement('div');
+    batchDiv.className = 'exec-batch';
+    const label = document.createElement('div');
+    label.className = 'exec-batch-label';
+    label.textContent = `Batch ${batchNum}`;
+    batchDiv.appendChild(label);
+
+    for (const task of batches[batchNum]) {
+      const existing = existingNodes[task.id];
+      if (existing) {
+        updateTaskStatus(task.id, task.status || 'pending');
+        batchDiv.appendChild(existing);
+        delete existingNodes[task.id];
+      } else {
+        const node = document.createElement('div');
+        node.className = `exec-node exec-${task.status || 'pending'}`;
+        node.dataset.taskId = task.id;
+        const id = document.createElement('span');
+        id.className = 'tree-id'; id.textContent = task.id;
+        const desc = document.createElement('span');
+        desc.className = 'exec-desc'; desc.textContent = task.description;
+        node.appendChild(id); node.appendChild(desc);
+        batchDiv.appendChild(node);
+      }
     }
+    fragment.appendChild(batchDiv);
   }
-  fragment.appendChild(batchDiv);
   container.innerHTML = '';
   container.appendChild(fragment);
   scroller.scroll();
