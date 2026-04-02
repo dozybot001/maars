@@ -173,6 +173,7 @@ class ResearchStage(Stage):
 
     async def _calibrate_once(self, idea: str):
         self._current_phase = "calibrate"
+        self._send(chunk={"text": "Calibrate", "call_id": "Calibrate", "label": True, "level": 2})
         self._atomic_definition = self.db.get_calibration()
         if not self._atomic_definition:
             calibrated = await self._calibrate(idea)
@@ -534,7 +535,6 @@ class ResearchStage(Stage):
 
     async def _research_strategy(self, idea: str) -> str:
         call_id = "Strategy"
-        self._send(chunk={"text": call_id, "call_id": call_id, "label": True, "level": 2})
         parts = [self._build_capability_profile()]
         dataset = self._describe_dataset()
         if dataset:
@@ -636,7 +636,6 @@ class ResearchStage(Stage):
         profile = self._build_capability_profile()
         dataset = self._describe_dataset()
         call_id = "Calibrate"
-        self._send(chunk={"text": call_id, "call_id": call_id, "label": True, "level": 2})
         parts = [profile]
         if dataset:
             parts.append(dataset)

@@ -71,8 +71,8 @@ async def _process_task(task_id, tasks, pending, context, system_prompt,
         return
 
     is_root = task_id == root_id
-    call_id = "Decompose" if is_root and root_id == "0" else f"Judge {task_id}"
-    label_level = 2 if is_root and root_id == "0" else 3
+    call_id = f"Judge {task_id}"
+    label_level = 3
     content_level = label_level + 1
 
     siblings = root_siblings if is_root and root_siblings else _get_siblings(task_id, tasks, root_id)
