@@ -2,11 +2,10 @@
  * Process & Output panel (right side) — state dashboard.
  *
  * Fixed layout with incremental updates:
- *   - Round indicator (updates in place)
  *   - Document cards row (calibration, strategy, evaluation — refresh, not duplicate)
+ *   - Score display (updates in place)
  *   - Decomposition tree (single instance, re-rendered on each done signal)
  *   - Execution list (single instance, re-rendered on each done signal)
- *   - Score display (updates in place)
  */
 import { on } from './events.js';
 import { fetchPlanTree, fetchPlanList, fetchDocument, fetchMeta } from './api.js';
