@@ -1,4 +1,4 @@
-# MAARS 架构设计 v12.0.0
+# MAARS 架构设计 v13.0.0
 
 > 本文是 MAARS 的架构设计文档，不是代码导读。
 > 它回答的是"系统为什么这样设计、核心边界在哪里"，而不是逐文件解释实现。
@@ -37,7 +37,7 @@ MAARS 的架构建立在一个核心判断上：
 
 - session DB 是 system of record
 - Docker sandbox 是执行环境
-- verify / evaluate / replan 是反馈回路
+- verify / evaluate / strategy update 是反馈回路
 - runtime 负责控制，agent 负责执行
 
 MAARS 做的是面向 research workflow 的 harness engineering，而不是面向整个软件仓库生命周期的 harness engineering。
@@ -141,50 +141,72 @@ Research 是 MAARS 的核心。
 
 - 任务是否拆得合理
 - 结果是否足够
-- 是否需要重试
-- 是否需要重新分解
+- 是否需要重试或重新分解
+- 策略是否需要调整
 - 是否需要下一轮改进
 
 Research 的设计定位是：
 
-**一个带反馈回路、DAG 调度、运行时重规划能力的 agentic workflow runtime。**
+**一个带反馈回路、DAG 调度、策略自适应能力的 agentic workflow runtime。**
 
 ```mermaid
 flowchart TB
-    IDEA["refined_idea"] --> CAL["Calibrate Agent"]
-    IDEA --> STR["Strategy Agent"]
+    IDEA["refined_idea"] --> CAL["Calibrate\n能力画像 → 原子定义"]
+    IDEA --> STR["Strategy\n能力画像 + 搜索 → 策略"]
 
     CAL --> RT["Research Runtime"]
     STR --> RT
 
-    RT --> DEC["Decompose Planner"]
+    RT --> DEC["Decompose\n兄弟上下文 + 递归分解"]
     DEC --> PLAN["plan_list.json / plan_tree.json"]
 
-    PLAN --> SCH["Topological Scheduler"]
-    SCH --> WORK["Task Agent x N"]
-    WORK --> RESOUT["Task Result Draft"]
+    PLAN --> SCH["Topological Scheduler\n批次并发, Semaphore 控制"]
+    SCH --> WORK["Execute Agent\n沙箱约束 + 依赖摘要"]
+    WORK --> RESOUT["Result + SUMMARY"]
     WORK --> ART["artifacts/"]
-    RESOUT --> VER["Verify Agent"]
+    RESOUT --> VER["Verify Agent\n工具验证产出"]
 
     VER -->|pass| TASKS["tasks/*.md"]
     VER -->|retry| SCH
-    VER -->|redecompose| DEC
+    VER -->|redecompose| DEC2["Redecompose\ndecompose(root_id=task_id)"]
+    DEC2 --> PLAN
 
-    TASKS --> EVAL["Score Check + Evaluate Agent"]
-    ART --> EVAL
+    TASKS --> EVAL["Evaluate Agent\n分数 + 策略 + 历史 → strategy_update?"]
 
-    EVAL -->|continue| REP["Replan Agent"]
-    REP --> PLAN
-    EVAL -->|stop| FINAL["Research Output\n+ Reproduce Files"]
+    EVAL -->|strategy_update| STUP["Strategy Update\n旧策略 + 反馈 → 新策略"]
+    STUP --> DEC3["Decompose · round N\n已完成工作上下文"]
+    DEC3 --> PLAN
+    EVAL -->|no update| FINAL["Research Output\n+ Reproduce Files"]
 ```
 
-Research 直接继承 `Stage` 基类，通过 `Stage._stream_llm` 调用 Agno Agent 完成各环节（calibrate、strategy、decompose、execute、verify、evaluate、replan）。runtime 代码精确控制每一步的执行和判断。
+#### 设计原则
 
-执行结构分为三个主要方法：
+Research 的每个环节都遵循两个核心设计原则：
 
-- **`_prepare()`**：calibrate（定义原子任务粒度）→ strategy（生成研究策略）→ decompose（分解为 DAG 任务计划）
-- **`_run_iterations()`**：循环执行任务批次 → verify → evaluate → replan，直到达到停止条件
-- **`_check_stop()`**：检查用户暂停请求，在每个关键步骤之间调用
+**1. 能力接地（Capability Grounding）**
+
+每个 LLM 调用都接收确定性的能力画像（`_build_capability_profile`）——沙箱超时、内存、工具列表——确保模型的决策基于真实约束而非想象。Calibrate 和 Strategy 都以此为锚点，Evaluate 同样传入能力画像评判方案可行性。
+
+**2. 上下文连续性（Context Continuity）**
+
+信息在阶段间显式传递而非丢弃：Calibrate 的原子定义注入 Strategy，Strategy 的策略注入 Decompose，Execute 的 SUMMARY 行传给下游任务的 dep_summaries，Evaluate 的历史评估传给下一轮 Evaluate 避免重复建议。每个环节都知道前序环节做了什么。
+
+#### 执行结构
+
+- **`_prepare()`**：calibrate（能力画像 → 原子任务粒度）→ strategy（能力画像 + 搜索 → 研究策略）→ decompose（递归分解 + 兄弟上下文）
+- **`_run_iterations()`**：execute → evaluate → strategy update → decompose round N 循环，由 Evaluate 的 `strategy_update` 字段控制是否继续
+- **`_execute_all_tasks()`**：拓扑批次调度，API semaphore 确保每个任务的 execute→verify→retry 原子化执行
+
+#### 关键设计决策
+
+| 决策 | 选择 | 理由 |
+|------|------|------|
+| 迭代控制 | Evaluate LLM 通过 `strategy_update` 字段决定 | 比硬编码分数阈值更灵活，LLM 能综合判断 |
+| 迭代反馈 | 更新 Strategy → 重新 Decompose | 比旧的 Replan（直接追加任务）更结构化，复用完整分解流程 |
+| 任务粒度校准 | 确定性能力画像 + LLM 微调 | 同配置产出相同画像，减少分解随机性 |
+| 重分解 | `decompose(root_id=task_id)` | 复用完整分解引擎，零 ID 重映射，兄弟上下文自动生效 |
+| Summary 归属 | Execute agent 写 SUMMARY 行 | 执行者最了解产出；Verify 专注于验证产出是否存在 |
+| 验证 fallback | `pass=False` | JSON 解析失败时不放过质量问题 |
 
 ### 4.3 Write：结果综合与论文生产（Multi-Agent）
 
@@ -298,13 +320,17 @@ backend/
 │   ├── stage.py                 #   Stage 基类（生命周期 + SSE + _stream_llm）
 │   ├── research.py              #   ResearchStage — workflow 引擎
 │   ├── decompose.py             #   任务分解 DAG
-│   └── prompts.py               #   Research 专属 prompts
+│   ├── prompts.py               #   语言分发层（选择 zh/en）
+│   ├── prompts_zh.py            #   全中文 prompt + builder 函数
+│   └── prompts_en.py            #   全英文 prompt + builder 函数
 │
 ├── team/                        # Multi-Agent 协作模式
 │   ├── stage.py                 #   TeamStage — 共享 run() + 内联事件处理
 │   ├── refine.py                #   RefineStage: Explorer + Critic
 │   ├── write.py                 #   WriteStage: Writer + Reviewer
-│   └── prompts.py               #   所有 Team prompts
+│   ├── prompts.py               #   语言分发层
+│   ├── prompts_zh.py            #   全中文 Team prompts
+│   └── prompts_en.py            #   全英文 Team prompts
 │
 ├── agno/                        # Agno 基础设施
 │   ├── __init__.py              #   Stage factory
@@ -323,4 +349,4 @@ backend/
 
 ## 7. 最终口径
 
-**MAARS 是一个混合式多智能体研究系统。Refine 和 Write 使用 Agno Team coordinate 模式实现 agent 间的真实协作，Research 使用 runtime 驱动的 agentic workflow 实现带反馈回路的任务执行。所有阶段共享 `Stage` 基类的生命周期语义和统一 SSE 广播机制（`_send`），Research 通过 `_stream_llm` 直接调用 Agno Agent。三个阶段通过文件型 DB 完全解耦，DB 是唯一的 truth source：`log.jsonl` 记录流式输出，`plan_list.json` 带 status 跟踪任务状态，`meta.json` 保存全局元信息。前端作为 runtime 的观察器，通过 SSE 事件驱动三个独立组件（pipeline-ui、log-viewer、process-viewer）实现全流程可视化。**
+**MAARS 是一个混合式多智能体研究系统。Refine 和 Write 使用 Agno Team coordinate 模式实现 agent 间的真实协作，Research 使用 runtime 驱动的 agentic workflow 实现带反馈回路的任务执行。Research 的迭代由 Evaluate agent 通过 `strategy_update` 字段自主决策：有更新则驱动 Strategy → Decompose → Execute 新一轮循环，无更新则停止。所有 LLM 调用基于确定性能力画像接地，prompt 支持中英双语按配置切换。三个阶段通过文件型 DB 完全解耦，DB 是唯一的 truth source。前端作为 runtime 的观察器，通过 SSE 事件驱动三个独立组件实现全流程可视化。**
