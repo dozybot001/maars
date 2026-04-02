@@ -37,7 +37,14 @@ export function initProcessViewer() {
     if (phase) ensurePhase(phase);
 
     if (status && task_id) { updateTaskStatus(task_id, status); return; }
-    if (chunk) return;
+    if (chunk) {
+      // Update phase label from level-2 label chunks (e.g. "Strategy · round 1")
+      if (chunk.label && chunk.level <= 2 && chunk.text && phase) {
+        const group = phaseGroups[currentPhaseName];
+        if (group && group.label) group.label.textContent = chunk.text;
+      }
+      return;
+    }
 
     const container = target();
     await handleDoneSignal(stage, phase, task_id, container);
