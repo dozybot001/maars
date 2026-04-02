@@ -223,10 +223,13 @@ class ResearchStage(Stage):
 
         # --- Main loop: execute → evaluate → strategy update → decompose ---
         for iteration in range(start_iteration, self._max_iterations):
+            round_label = f"round {iteration + 1}"
+
             # Execute
             self._current_phase = "execute"
             self._init_task_batches()
-            self._send(chunk={"text": "Execute", "call_id": "Execute", "label": True, "level": 2})
+            execute_tag = f"Execute · {round_label}"
+            self._send(chunk={"text": execute_tag, "call_id": execute_tag, "label": True, "level": 2})
             self._send()
 
             self._check_stop()
@@ -237,6 +240,8 @@ class ResearchStage(Stage):
 
             # Evaluate
             self._current_phase = "evaluate"
+            evaluate_tag = f"Evaluate · {round_label}"
+            self._send(chunk={"text": evaluate_tag, "call_id": evaluate_tag, "label": True, "level": 2})
             minimize = self.db.get_score_minimize()
             _, current_score = self._check_score_improved(self._prev_score, minimize)
             prev_score_snapshot = self._prev_score
@@ -269,9 +274,9 @@ class ResearchStage(Stage):
             self._check_stop()
 
             # Strategy Update
-            next_round = iteration + 2
-            evaluation["_round"] = next_round
             self._current_phase = "strategy"
+            strategy_tag = f"Strategy · {round_label}"
+            self._send(chunk={"text": strategy_tag, "call_id": strategy_tag, "label": True, "level": 2})
             new_strategy = await self._update_strategy(idea, evaluation)
             self._strategy = new_strategy
             self.db.save_strategy(new_strategy)
@@ -279,9 +284,9 @@ class ResearchStage(Stage):
 
             self._check_stop()
 
-            # Decompose next round
+            # Decompose
             self._current_phase = "decompose"
-            await self._decompose_round(idea, next_round)
+            await self._decompose_round(idea, iteration + 1)
 
     # ------------------------------------------------------------------
     # Decompose helpers
@@ -310,8 +315,8 @@ class ResearchStage(Stage):
         """Iteration decompose with enriched context."""
         iteration_context = self._build_iteration_context(idea)
 
-        label = f"Decompose · round {round_num}"
-        self._send(chunk={"text": label, "call_id": label, "label": True, "level": 2})
+        tag = f"Decompose · round {round_num}"
+        self._send(chunk={"text": tag, "call_id": tag, "label": True, "level": 2})
 
         def _on_done(tree):
             self.db.save_tree(tree)
@@ -581,7 +586,6 @@ class ResearchStage(Stage):
         iteration: int,
     ) -> dict:
         call_id = "Evaluate"
-        self._send(chunk={"text": call_id, "call_id": call_id, "label": True, "level": 2})
         summaries_text = "\n".join(
             f"- **Task [{s['id']}]**: {s['summary']}" for s in task_summaries
         )
@@ -601,9 +605,7 @@ class ResearchStage(Stage):
         return parse_json_fenced(response, fallback={"feedback": "", "suggestions": []})
 
     async def _update_strategy(self, idea: str, evaluation: dict) -> str:
-        round_label = f"Strategy · round {evaluation.get('_round', '?')}"
-        call_id = round_label
-        self._send(chunk={"text": call_id, "call_id": call_id, "label": True, "level": 2})
+        call_id = "Strategy"
         user_text = build_strategy_update_user(
             idea=idea,
             old_strategy=self._strategy or "",
