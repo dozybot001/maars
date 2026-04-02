@@ -1,50 +1,65 @@
 /**
- * Process & Output panel (right side).
- * Done signals → fetch DB → render structured content.
+ * Process & Output panel (right side) — state dashboard.
+ *
+ * Fixed layout with incremental updates:
+ *   - Round indicator (updates in place)
+ *   - Document cards row (calibration, strategy, evaluation — refresh, not duplicate)
+ *   - Decomposition tree (single instance, re-rendered on each done signal)
+ *   - Execution list (single instance, re-rendered on each done signal)
+ *   - Score display (updates in place)
  */
 import { on } from './events.js';
 import { fetchPlanTree, fetchPlanList, fetchDocument, fetchMeta } from './api.js';
 import { createAutoScroller } from './autoscroll.js';
-import { STAGE_LABELS, createFold, appendSeparator } from './shared.js';
 import { showModal } from './modal.js';
 
 const PHASE_DOCS = { calibrate: 'calibration', strategy: 'strategy', evaluate: 'evaluation' };
 
 let processBody, scroller;
-let activeStage = null, currentSection = null;
-let phaseGroups = {}, currentPhaseName = null;
 const documentCache = {}, taskSummaryCache = {};
 
-function target() {
-  if (currentPhaseName && phaseGroups[currentPhaseName]) return phaseGroups[currentPhaseName].body;
-  return currentSection;
-}
+// Fixed DOM containers (created once)
+let roundBadge, docsRow, treeContainer, execContainer, scoreContainer;
 
 export function initProcessViewer() {
   processBody = document.getElementById('process-body');
   scroller = createAutoScroller(processBody);
   const tokenBadge = document.getElementById('token-estimate');
 
+  // Build fixed layout
+  roundBadge = el('div', 'po-round-badge', '');
+  docsRow = el('div', 'po-docs-row');
+  treeContainer = el('ul', 'po-tree');
+  treeContainer.id = 'tree-output';
+  execContainer = el('div', 'po-exec');
+  execContainer.id = 'exec-output';
+  scoreContainer = el('div', 'po-score-container');
+
+  processBody.appendChild(roundBadge);
+  processBody.appendChild(docsRow);
+  processBody.appendChild(scoreContainer);
+  processBody.appendChild(treeContainer);
+  processBody.appendChild(execContainer);
+
   on('sse', async (event) => {
     const { stage, phase, chunk, status, task_id } = event;
     if (!stage) return;
 
-    ensureProcessSection(stage);
-
+    // Task status updates (running/verifying/retrying/etc.)
     if (status && task_id) { updateTaskStatus(task_id, status); return; }
+
+    // Label chunks → update round badge
     if (chunk) {
-      // Level-2 label chunks create/update phase groups with the actual label text
-      if (chunk.label && chunk.level <= 2 && chunk.text && phase) {
-        ensurePhase(phase, chunk.text);
+      if (chunk.label && chunk.level <= 2 && chunk.text) {
+        updateRoundBadge(chunk.text);
       }
       return;
     }
-    // Done signals: select existing phase group (no label override)
-    if (phase) ensurePhase(phase);
 
-    const container = target();
-    await handleDoneSignal(stage, phase, task_id, container);
+    // Done signals → fetch DB and update fixed containers
+    await handleDoneSignal(stage, phase, task_id);
 
+    // Token counter
     const meta = await fetchMeta();
     if (meta && tokenBadge) {
       const total = meta.tokens_total || 0;
@@ -57,29 +72,21 @@ export function initProcessViewer() {
   });
 }
 
-function ensureProcessSection(stage) {
-  if (activeStage === stage && currentSection) return;
-  if (currentSection) {
-    currentSection.classList.add('collapsed');
-    const prevSep = currentSection.previousElementSibling;
-    if (prevSep) prevSep.classList.add('is-collapsed');
-  }
-  activeStage = stage;
-  phaseGroups = {}; currentPhaseName = null;
-  currentSection = appendSeparator(processBody, STAGE_LABELS[stage] || stage.toUpperCase(), scroller);
+// ------------------------------------------------------------------
+// Round badge
+// ------------------------------------------------------------------
+
+function updateRoundBadge(text) {
+  roundBadge.textContent = text;
+  roundBadge.classList.add('po-round-active');
 }
 
-function ensurePhase(phase, displayText) {
-  // Label chunks pass displayText (e.g. "Evaluate · round 2") → round-specific key
-  // Done signals pass only phase → use currentPhaseName (already set by preceding label chunk)
-  const key = displayText || currentPhaseName || phase;
-  if (phaseGroups[key]) { currentPhaseName = key; return; }
-  currentPhaseName = key;
-  phaseGroups[key] = createFold(currentSection, displayText || phase);
-  scroller.scroll();
-}
+// ------------------------------------------------------------------
+// Done signal handler
+// ------------------------------------------------------------------
 
-async function handleDoneSignal(stage, phase, taskId, container) {
+async function handleDoneSignal(stage, phase, taskId) {
+  // Task completion → update exec node with summary
   if (taskId) {
     const tasks = await fetchPlanList();
     if (tasks) {
@@ -97,47 +104,92 @@ async function handleDoneSignal(stage, phase, taskId, container) {
     return;
   }
 
+  // Document cards (calibration, strategy, evaluation)
   if (phase && PHASE_DOCS[phase]) {
-    const doc = await fetchDocument(PHASE_DOCS[phase]);
+    const docName = PHASE_DOCS[phase];
+    const doc = await fetchDocument(docName);
     if (doc && doc.content) {
-      documentCache[PHASE_DOCS[phase]] = doc.content;
-      const group = phaseGroups[currentPhaseName] || phaseGroups[phase];
-      const displayName = (group && group.label) ? group.label.textContent : phase;
-      appendDocCard(PHASE_DOCS[phase], displayName, container);
+      documentCache[docName] = doc.content;
+      ensureDocCard(docName);
     }
   }
 
+  // Decomposition tree
   if (phase === 'decompose' || !phase) {
     const tree = await fetchPlanTree();
-    if (tree && tree.id) renderTree(tree, container);
+    if (tree && tree.id) renderTree(tree);
   }
 
+  // Execution list
   if (phase === 'execute') {
     const tasks = await fetchPlanList();
-    if (tasks && tasks.length > 0) renderExecList(tasks, container);
+    if (tasks && tasks.length > 0) renderExecList(tasks);
   }
 
+  // Score
   if (phase === 'evaluate') {
     const meta = await fetchMeta();
-    if (meta && meta.current_score != null) appendScoreElement(meta, container);
+    if (meta && meta.current_score != null) renderScore(meta);
   }
 
+  // Refine / Write stage docs
   if (!phase) {
     if (stage === 'refine') {
       const doc = await fetchDocument('refined_idea');
       if (doc && doc.content) {
         documentCache['refined_idea'] = doc.content;
-        appendDocCard('refined_idea', 'Refined Idea', container);
+        ensureDocCard('refined_idea');
       }
     } else if (stage === 'write') {
       const doc = await fetchDocument('paper');
       if (doc && doc.content) {
         documentCache['paper'] = doc.content;
-        appendDocCard('paper', 'Paper', container);
+        ensureDocCard('paper');
       }
     }
   }
 }
+
+// ------------------------------------------------------------------
+// Document cards (horizontal row, refresh in place)
+// ------------------------------------------------------------------
+
+function ensureDocCard(name) {
+  let card = docsRow.querySelector(`[data-doc-name="${name}"]`);
+  if (card) {
+    // Refresh click handler with latest content
+    card.onclick = () => showModal(name, documentCache[name] || '');
+    return;
+  }
+  card = el('div', 'po-file-item');
+  card.dataset.docName = name;
+  card.textContent = '\uD83D\uDCC4 ' + name;
+  card.onclick = () => showModal(name, documentCache[name] || '');
+  docsRow.appendChild(card);
+}
+
+// ------------------------------------------------------------------
+// Score (single element, updated in place)
+// ------------------------------------------------------------------
+
+function renderScore(meta) {
+  scoreContainer.innerHTML = '';
+  const score = el('div', 'po-score');
+  const current = meta.current_score != null ? meta.current_score.toFixed(5) : '\u2014';
+  const prev = meta.previous_score != null ? meta.previous_score.toFixed(5) : 'N/A';
+  const improved = meta.improved;
+  score.classList.add(improved ? 'po-score-improved' : 'po-score-declined');
+  score.innerHTML =
+    `<span class="po-score-label">Score</span>` +
+    `<span class="po-score-current">${current}</span>` +
+    `<span class="po-score-arrow">${improved ? '\u2191' : '\u2192'}</span>` +
+    `<span class="po-score-prev">${prev}</span>`;
+  scoreContainer.appendChild(score);
+}
+
+// ------------------------------------------------------------------
+// Task status
+// ------------------------------------------------------------------
 
 function updateTaskStatus(taskId, status) {
   const node = processBody.querySelector(`.exec-node[data-task-id="${taskId}"]`);
@@ -147,107 +199,14 @@ function updateTaskStatus(taskId, status) {
   node.classList.add(`exec-${status}`);
 }
 
-function renderTree(data, parent) {
-  const t = parent || target();
-  if (!t) return;
-  let container = processBody.querySelector('#tree-output');
-  if (!container) {
-    container = document.createElement('ul');
-    container.id = 'tree-output';
-    container.className = 'po-tree';
-    t.appendChild(container);
-  }
-  container.innerHTML = '';
-  container.appendChild(renderDecompNode(data, true));
+// ------------------------------------------------------------------
+// Decomposition tree (single instance, full re-render)
+// ------------------------------------------------------------------
+
+function renderTree(data) {
+  treeContainer.innerHTML = '';
+  treeContainer.appendChild(renderDecompNode(data, true));
   scroller.scroll();
-}
-
-function renderExecList(tasks, parent) {
-  const t = parent || target();
-  if (!t) return;
-  let container = processBody.querySelector('#exec-output');
-  if (!container) {
-    container = document.createElement('div');
-    container.id = 'exec-output';
-    container.className = 'po-exec';
-    t.appendChild(container);
-  }
-
-  // Group tasks by batch number (from plan_list.json)
-  const batches = {};
-  for (const task of tasks) {
-    const b = task.batch || 1;
-    if (!batches[b]) batches[b] = [];
-    batches[b].push(task);
-  }
-
-  const existingNodes = {};
-  container.querySelectorAll('.exec-node').forEach(n => { existingNodes[n.dataset.taskId] = n; });
-
-  const fragment = document.createDocumentFragment();
-  for (const batchNum of Object.keys(batches).sort((a, b) => a - b)) {
-    const batchDiv = document.createElement('div');
-    batchDiv.className = 'exec-batch';
-    const label = document.createElement('div');
-    label.className = 'exec-batch-label';
-    label.textContent = `Batch ${batchNum}`;
-    batchDiv.appendChild(label);
-
-    for (const task of batches[batchNum]) {
-      const existing = existingNodes[task.id];
-      if (existing) {
-        updateTaskStatus(task.id, task.status || 'pending');
-        batchDiv.appendChild(existing);
-        delete existingNodes[task.id];
-      } else {
-        const node = document.createElement('div');
-        node.className = `exec-node exec-${task.status || 'pending'}`;
-        node.dataset.taskId = task.id;
-        const id = document.createElement('span');
-        id.className = 'tree-id'; id.textContent = task.id;
-        const desc = document.createElement('span');
-        desc.className = 'exec-desc'; desc.textContent = task.description;
-        node.appendChild(id); node.appendChild(desc);
-        batchDiv.appendChild(node);
-      }
-    }
-    fragment.appendChild(batchDiv);
-  }
-  container.innerHTML = '';
-  container.appendChild(fragment);
-  scroller.scroll();
-}
-
-function appendDocCard(name, label, parent) {
-  const t = parent || target();
-  if (!t) return;
-  const existing = t.querySelector(`[data-doc-name="${name}"]`);
-  if (existing) {
-    // Update content for subsequent rounds (e.g. evaluation.md refreshed)
-    existing.onclick = () => showModal(label, documentCache[name] || '');
-    return;
-  }
-  const item = document.createElement('div');
-  item.className = 'po-file-item'; item.dataset.docName = name;
-  item.appendChild(document.createTextNode('\uD83D\uDCC4 '));
-  const span = document.createElement('span');
-  span.textContent = label; item.appendChild(span);
-  item.addEventListener('click', () => showModal(label, documentCache[name] || ''));
-  t.appendChild(item); scroller.scroll();
-}
-
-function appendScoreElement(meta, parent) {
-  const t = parent || target();
-  if (!t) return;
-  const row = document.createElement('div'); row.className = 'po-eval-row';
-  t.appendChild(row);
-  const el = document.createElement('div'); el.className = 'po-score';
-  const current = meta.current_score != null ? meta.current_score.toFixed(5) : '\u2014';
-  const prev = meta.previous_score != null ? meta.previous_score.toFixed(5) : 'N/A';
-  const improved = meta.improved;
-  el.classList.add(improved ? 'po-score-improved' : 'po-score-declined');
-  el.innerHTML = `<span class="po-score-label">Score</span><span class="po-score-current">${current}</span><span class="po-score-arrow">${improved ? '\u2191' : '\u2192'}</span><span class="po-score-prev">${prev}</span>`;
-  row.appendChild(el); scroller.scroll();
 }
 
 function renderDecompNode(node, isRoot) {
@@ -277,4 +236,63 @@ function renderDecompNode(node, isRoot) {
     li.appendChild(ul);
   }
   return li;
+}
+
+// ------------------------------------------------------------------
+// Execution list (single instance, full re-render preserving status)
+// ------------------------------------------------------------------
+
+function renderExecList(tasks) {
+  const batches = {};
+  for (const task of tasks) {
+    const b = task.batch || 1;
+    if (!batches[b]) batches[b] = [];
+    batches[b].push(task);
+  }
+
+  const existingNodes = {};
+  execContainer.querySelectorAll('.exec-node').forEach(n => { existingNodes[n.dataset.taskId] = n; });
+
+  const fragment = document.createDocumentFragment();
+  for (const batchNum of Object.keys(batches).sort((a, b) => a - b)) {
+    const batchDiv = el('div', 'exec-batch');
+    const label = el('div', 'exec-batch-label', `Batch ${batchNum}`);
+    batchDiv.appendChild(label);
+
+    for (const task of batches[batchNum]) {
+      const existing = existingNodes[task.id];
+      if (existing) {
+        updateTaskStatus(task.id, task.status || 'pending');
+        batchDiv.appendChild(existing);
+        delete existingNodes[task.id];
+      } else {
+        const node = el('div', `exec-node exec-${task.status || 'pending'}`);
+        node.dataset.taskId = task.id;
+        const id = el('span', 'tree-id', task.id);
+        const desc = el('span', 'exec-desc', task.description);
+        node.appendChild(id); node.appendChild(desc);
+        if (task.summary) {
+          taskSummaryCache[task.id] = task.summary;
+          node.style.cursor = 'pointer';
+          node.onclick = () => showModal(`Task ${task.id}`, taskSummaryCache[task.id]);
+        }
+        batchDiv.appendChild(node);
+      }
+    }
+    fragment.appendChild(batchDiv);
+  }
+  execContainer.innerHTML = '';
+  execContainer.appendChild(fragment);
+  scroller.scroll();
+}
+
+// ------------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------------
+
+function el(tag, className, text) {
+  const e = document.createElement(tag);
+  if (className) e.className = className;
+  if (text) e.textContent = text;
+  return e;
 }

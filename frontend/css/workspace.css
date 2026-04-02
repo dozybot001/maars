@@ -191,7 +191,7 @@
   border-bottom: 1px solid var(--border);
 }
 
-/* ---- Process & Output (right) ---- */
+/* ---- Process & Output (right) — state dashboard ---- */
 
 #process-body {
   font-size: 13px;
@@ -202,13 +202,32 @@
   content: "";
 }
 
-/* File item (Refined Idea / Paper) */
+/* Round badge */
+.po-round-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 4px 0 8px;
+  min-height: 20px;
+}
+.po-round-badge.po-round-active {
+  color: var(--accent);
+}
+
+/* Document cards row */
+.po-docs-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0 8px;
+}
+
+/* File item card */
 .po-file-item {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  margin: 4px 0;
   border-radius: var(--radius);
   background: var(--bg-input);
   font-size: 13px;
@@ -219,6 +238,11 @@
 
 .po-file-item:hover {
   background: var(--border-light);
+}
+
+/* Score container */
+.po-score-container {
+  padding: 4px 0;
 }
 
 /* Tree inside process panel */
