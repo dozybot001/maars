@@ -30,7 +30,6 @@ export function initProcessViewer() {
     if (!stage) return;
 
     ensureProcessSection(stage);
-    if (phase) ensurePhase(phase);
 
     if (status && task_id) { updateTaskStatus(task_id, status); return; }
     if (chunk) {
@@ -40,6 +39,8 @@ export function initProcessViewer() {
       }
       return;
     }
+    // Done signals: select existing phase group (no label override)
+    if (phase) ensurePhase(phase);
 
     const container = target();
     await handleDoneSignal(stage, phase, task_id, container);
