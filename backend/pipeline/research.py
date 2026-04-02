@@ -474,7 +474,7 @@ class ResearchStage(Stage):
             return (True, task, result, review)
 
         self._send(status="retrying", task_id=task_id)
-        ri, rt = build_retry_prompt(task, result, review)
+        ri, rt = build_retry_prompt(task, result, review, dep_summaries)
         result = await self._llm(ri, rt, call_id, content_level=4, _skip_semaphore=True)
 
         retry_summary = self._extract_summary(result)
@@ -604,6 +604,8 @@ class ResearchStage(Stage):
             idea=idea,
             old_strategy=self._strategy or "",
             evaluation=evaluation,
+            capabilities=self._build_capability_profile(),
+            dataset=self._describe_dataset(),
         )
         response = await self._llm(STRATEGY_SYSTEM, user_text, call_id, content_level=3)
         direction_data = parse_json_fenced(response, fallback={})

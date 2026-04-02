@@ -203,8 +203,14 @@ def build_strategy_update_user(
     idea: str,
     old_strategy: str,
     evaluation: dict,
+    capabilities: str = "",
+    dataset: str = "",
 ) -> str:
     parts = [f"## 研究课题\n{idea}"]
+    if capabilities:
+        parts.append(f"\n{capabilities}")
+    if dataset:
+        parts.append(f"\n{dataset}")
     parts.append(f"\n## 上一轮策略\n{old_strategy}")
     feedback = evaluation.get("feedback", "")
     suggestions = evaluation.get("suggestions", [])
@@ -275,8 +281,9 @@ def build_verify_prompt(task: dict, result: str) -> tuple[str, str]:
     )
 
 
-def build_retry_prompt(task: dict, result: str, review: str) -> tuple[str, str]:
-    _, original_user = build_execute_prompt(task)
+def build_retry_prompt(task: dict, result: str, review: str,
+                       dep_summaries: dict[str, str] | None = None) -> tuple[str, str]:
+    _, original_user = build_execute_prompt(task, dep_summaries=dep_summaries)
     return EXECUTE_SYSTEM, (
         f"{original_user}\n\n"
         f"---\n\n[先前输出]\n{result}\n\n"
