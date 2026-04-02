@@ -98,63 +98,43 @@ At the very end, output a single JSON line indicating the score direction:
 Keep it concise (under 500 words). This will be injected into the task planner's context."""
 
 # ---------------------------------------------------------------------------
-# Evaluate & Replan
+# Evaluate
 # ---------------------------------------------------------------------------
 
 EVALUATE_SYSTEM = _AUTO + """\
-You are a research quality evaluator with tool access. Your job is to analyze \
-completed work and identify concrete improvements — NOT to decide whether to stop.
+You are a research quality evaluator with tool access. Analyze completed work, \
+assess the current strategy, and decide whether a strategy update is needed.
 
 WORKFLOW:
-1. REVIEW the score progression and previous feedback provided below
+1. REVIEW the score progression, current strategy, and previous feedback below
 2. USE YOUR TOOLS to investigate deeper:
    - Call read_task_output(task_id) to read FULL outputs of key tasks
    - Call list_artifacts() to see what files exist
    - Look for actual metrics: CV scores, RMSLE, accuracy, etc.
-3. Analyze and provide structured feedback
+3. Evaluate along the dimensions below
+4. Decide whether to propose a strategy update
 
 EVALUATION DIMENSIONS:
 - **Score Analysis**: current vs previous score, trend, gap to competitive targets
 - **Methodology**: are the chosen approaches sound? any fundamental flaws?
 - **Untried Approaches**: what models, features, or techniques haven't been explored yet?
 - **Error Analysis**: where are the biggest errors or failure modes?
-- **Priority**: what should the next iteration focus on first for maximum impact?
+
+STRATEGY UPDATE DECISION:
+- If there is meaningful room for improvement, include a "strategy_update" field \
+describing how the research strategy should change for the next iteration.
+- If the results are already strong, near the ceiling, or further iterations are \
+unlikely to yield significant gains, OMIT the "strategy_update" field entirely.
+- The strategy_update should be a concise direction change, NOT a full strategy \
+rewrite — focus on what should be DIFFERENT from the current strategy.
 
 RULES:
 - Be specific: cite actual numbers, task IDs, file names
 - Do NOT repeat suggestions from previous evaluations that were already attempted
-- Focus on the HIGHEST-IMPACT improvements (2-4 suggestions, not a laundry list)
-- You do NOT decide whether to stop — just provide analysis
+- Focus on the HIGHEST-IMPACT improvements (2-4 suggestions)
 
 Output a JSON block at the end:
-{"feedback": "Analysis of current results with specific numbers", "suggestions": ["specific improvement 1", "specific improvement 2"]}"""
-
-REPLAN_SYSTEM = """\
-You are a research planner with tools. Given completed work and evaluation feedback, \
-investigate what went wrong or what's missing, then decide what NEW tasks to add.
-
-WORKFLOW:
-1. First, USE YOUR TOOLS to investigate:
-   - Search for better approaches or techniques relevant to the feedback
-   - Read previous task outputs (read_task_output) to understand what was actually done
-   - Check artifacts (list_artifacts) to see what files exist
-2. Based on your investigation, decide what new tasks to add
-3. Output a JSON block at the end of your response:
-
-```json
-{"add": [
-  {"id": "1", "description": "Specific actionable task", "dependencies": []},
-  {"id": "2", "description": "Another task that depends on 1", "dependencies": ["1"]}
-]}
-```
-
-Rules:
-- IDs are simple integers: "1", "2", "3"
-- Dependencies are ONLY between NEW tasks (siblings), not existing completed tasks
-- Each task description must be specific and actionable
-- Tasks should BUILD ON existing work, not redo it
-- MAXIMIZE PARALLELISM: only add dependency when truly needed
-全文使用中文。"""
+{"feedback": "Analysis with specific numbers", "suggestions": ["improvement 1", "improvement 2"], "strategy_update": "How to adjust the strategy (omit this field to stop)"}"""
 
 REDECOMPOSE_CONTEXT = (
     "## 原始任务 [{task_id}]\n{description}\n\n"
@@ -176,9 +156,14 @@ def build_evaluate_user(
     prev_score: float | None,
     minimize: bool,
     capabilities: str,
+    strategy: str,
     prior_evaluations: list[dict],
 ) -> str:
     parts = [f"## Research Goal\n{idea}"]
+
+    # Current strategy
+    if strategy:
+        parts.append(f"\n## Current Strategy\n{strategy}")
 
     # Score progression
     direction = "lower is better" if minimize else "higher is better"
@@ -212,6 +197,32 @@ def build_evaluate_user(
     parts.append(
         "\nUse read_task_output and list_artifacts to investigate actual results. "
         "Analyze what can be improved and provide specific suggestions."
+    )
+    return "\n".join(parts)
+
+
+def build_strategy_update_user(
+    idea: str,
+    old_strategy: str,
+    evaluation: dict,
+) -> str:
+    parts = [f"## Research Topic\n{idea}"]
+    parts.append(f"\n## Previous Strategy\n{old_strategy}")
+
+    feedback = evaluation.get("feedback", "")
+    suggestions = evaluation.get("suggestions", [])
+    strategy_update = evaluation.get("strategy_update", "")
+
+    parts.append(f"\n## Evaluation Feedback\n{feedback}")
+    if suggestions:
+        parts.append("\n## Suggestions\n" + "\n".join(f"- {s}" for s in suggestions))
+    if strategy_update:
+        parts.append(f"\n## Requested Strategy Adjustment\n{strategy_update}")
+
+    parts.append(
+        "\nProduce an UPDATED strategy document that incorporates the lessons learned. "
+        "Keep the same format as the previous strategy. "
+        "Do NOT repeat approaches that already failed — focus on what's NEW."
     )
     return "\n".join(parts)
 

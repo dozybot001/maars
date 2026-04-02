@@ -13,9 +13,9 @@ from backend.db import ResearchDB
 from backend.pipeline.stage import Stage, StageState
 from backend.pipeline.decompose import decompose
 from backend.pipeline.prompts import (
-    CALIBRATE_SYSTEM, EVALUATE_SYSTEM, REPLAN_SYSTEM, REDECOMPOSE_CONTEXT,
+    CALIBRATE_SYSTEM, EVALUATE_SYSTEM, REDECOMPOSE_CONTEXT,
     STRATEGY_SYSTEM, build_execute_prompt, build_verify_prompt, build_retry_prompt,
-    build_evaluate_user,
+    build_evaluate_user, build_strategy_update_user,
 )
 from backend.utils import parse_json_fenced
 
@@ -184,7 +184,7 @@ class ResearchStage(Stage):
         self._send()  # done: decompose finished
 
     # ------------------------------------------------------------------
-    # Iterate: execute → evaluate → replan loop
+    # Iterate: execute → evaluate → strategy update → decompose loop
     # ------------------------------------------------------------------
 
     async def _run_iterations(self, idea: str):
@@ -214,17 +214,17 @@ class ResearchStage(Stage):
             is_last = iteration >= self._max_iterations - 1
             self._current_phase = "evaluate"
 
+            # Update score tracking for meta display
             minimize = self.db.get_score_minimize()
-            improved, current_score = self._check_score_improved(self._prev_score, minimize)
+            _, current_score = self._check_score_improved(self._prev_score, minimize)
             prev_score_snapshot = self._prev_score
             if current_score is not None:
-                self.db.update_meta(current_score=current_score, previous_score=self._prev_score, improved=improved)
+                self.db.update_meta(current_score=current_score, previous_score=self._prev_score)
                 self._prev_score = current_score
-
-            stopping = is_last or (not improved and prev_score_snapshot is not None)
 
             self._check_stop()
 
+            # Evaluate results — LLM decides whether to continue via strategy_update
             summaries = [
                 {"id": tid, "summary": self._task_summaries.get(tid, "(no summary)")}
                 for tid in sorted(self._task_results.keys())
@@ -234,40 +234,79 @@ class ResearchStage(Stage):
                 minimize, iteration,
             )
             evaluation["score"] = current_score
-            if stopping:
+            strategy_update = evaluation.get("strategy_update", "").strip()
+
+            if is_last or not strategy_update:
                 evaluation["satisfied"] = True
             self.db.save_evaluation(evaluation, iteration)
             self._send()  # done: evaluation saved
 
-            if stopping:
+            if is_last or not strategy_update:
                 break
 
             self._check_stop()
 
-            new_tasks = await self._replan(idea, evaluation)
-            if not new_tasks:
+            # Strategy update → Decompose → next iteration
+            round_num = iteration + 1
+            evaluation["_round"] = round_num
+
+            self._current_phase = "strategy"
+            new_strategy = await self._update_strategy(idea, evaluation)
+            self._strategy = new_strategy
+            self.db.save_strategy(new_strategy)
+            self._send()  # done: strategy updated
+
+            self._check_stop()
+
+            # Decompose with enriched context (includes completed work)
+            self._current_phase = "decompose"
+            iteration_context = self._build_iteration_context(idea)
+
+            decompose_label = f"Decompose · round {round_num}"
+            self._send(chunk={"text": decompose_label, "call_id": decompose_label,
+                              "label": True, "level": 2})
+
+            def _on_judge_done(tree):
+                self.db.save_tree(tree)
+                self._send()
+
+            new_flat, new_subtree = await decompose(
+                idea=iteration_context,
+                stream_fn=lambda inst, ut, cid, cl, **kw: self._llm(
+                    inst, ut, cid, content_level=cl, **kw),
+                max_depth=10,
+                atomic_definition=self._atomic_definition,
+                strategy=self._strategy,
+                on_judge_done=_on_judge_done,
+                is_stale=lambda: False,
+            )
+
+            if not new_flat:
                 break
 
-            round_num = iteration + 1
-            new_tasks = self._renumber_tasks(new_tasks, round_num)
-            self._all_tasks.extend(new_tasks)
+            new_flat = self._renumber_tasks(new_flat, round_num)
+            self._all_tasks.extend(new_flat)
 
-            replan_subtree = {
+            round_subtree = {
                 "id": f"r{round_num}",
-                "description": f"Replan round {round_num}",
+                "description": f"Round {round_num}",
                 "is_atomic": False,
                 "dependencies": [],
                 "children": [
                     {"id": t["id"], "description": t["description"], "is_atomic": True,
                      "dependencies": t.get("dependencies", []), "children": []}
-                    for t in new_tasks
+                    for t in new_flat
                 ],
             }
             if self._tree:
-                self._tree.setdefault("children", []).append(replan_subtree)
-            self.db.save_plan_amendment(new_tasks, round_num, replan_subtree)
+                self._tree.setdefault("children", []).append(round_subtree)
+            self.db.save_plan_amendment(new_flat, round_num, round_subtree)
+            self._send()  # done: decompose round finished
 
             self._current_phase = "execute"
+            execute_label = f"Execute · round {round_num}"
+            self._send(chunk={"text": execute_label, "call_id": execute_label,
+                              "label": True, "level": 2})
 
     # ------------------------------------------------------------------
     # Task execution
@@ -395,39 +434,6 @@ class ResearchStage(Stage):
     # Replan
     # ------------------------------------------------------------------
 
-    async def _replan(self, idea: str, evaluation: dict) -> list[dict]:
-        feedback = evaluation.get("feedback", "")
-        suggestions = evaluation.get("suggestions", [])
-        if not feedback and not suggestions:
-            return []
-        completed_ids = sorted(self._task_results.keys())
-        completed_summary = "\n".join(
-            f"- Task [{tid}]: {self._task_summaries.get(tid, 'completed')}"
-            for tid in completed_ids
-        )
-        artifacts_dir = self.db.get_artifacts_dir()
-        artifacts = []
-        if artifacts_dir.exists():
-            artifacts = [f.name for f in artifacts_dir.iterdir()
-                         if f.is_file() and not f.name.startswith("run_")]
-        user_parts = [f"## Research Goal\n{idea}"]
-        user_parts.append(f"\n## Completed Tasks\n{completed_summary}")
-        if artifacts:
-            user_parts.append(f"\n## Available Artifacts\n{', '.join(artifacts)}")
-        user_parts.append(f"\n## Evaluation Feedback\n{feedback}")
-        if suggestions:
-            user_parts.append("\n## Suggestions\n" + "\n".join(f"- {s}" for s in suggestions))
-        call_id = "Replan"
-        self._send(chunk={"text": call_id, "call_id": call_id, "label": True, "level": 3})
-        response = await self._llm(REPLAN_SYSTEM, "\n".join(user_parts), call_id, content_level=3)
-        data = parse_json_fenced(response, fallback={"add": []})
-        valid = []
-        for t in data.get("add", []):
-            if isinstance(t, dict) and "id" in t and "description" in t:
-                valid.append({"id": t["id"], "description": t["description"],
-                              "dependencies": t.get("dependencies", [])})
-        return valid
-
     def _load_prev_score(self) -> float | None:
         try:
             return self.db.get_latest_score()
@@ -486,10 +492,47 @@ class ResearchStage(Stage):
             prev_score=prev_score,
             minimize=minimize,
             capabilities=capabilities,
+            strategy=self._strategy or "",
             prior_evaluations=prior_evals,
         )
         response = await self._llm(EVALUATE_SYSTEM, user_text, call_id, content_level=3)
         return parse_json_fenced(response, fallback={"feedback": "", "suggestions": []})
+
+    async def _update_strategy(self, idea: str, evaluation: dict) -> str:
+        round_label = f"Strategy · round {evaluation.get('_round', '?')}"
+        call_id = round_label
+        self._send(chunk={"text": call_id, "call_id": call_id, "label": True, "level": 2})
+        user_text = build_strategy_update_user(
+            idea=idea,
+            old_strategy=self._strategy or "",
+            evaluation=evaluation,
+        )
+        response = await self._llm(STRATEGY_SYSTEM, user_text, call_id, content_level=3)
+        direction_data = parse_json_fenced(response, fallback={})
+        if "score_direction" in direction_data:
+            minimize = direction_data["score_direction"] != "maximize"
+            self.db.save_score_direction(minimize)
+        return response.strip()
+
+    def _build_iteration_context(self, idea: str) -> str:
+        parts = [f"## Research Goal\n{idea}"]
+        completed_ids = sorted(self._task_results.keys())
+        if completed_ids:
+            summary_lines = [
+                f"- Task [{tid}]: {self._task_summaries.get(tid, 'completed')}"
+                for tid in completed_ids
+            ]
+            parts.append("\n## Completed Work (do NOT redo these)\n"
+                         + "\n".join(summary_lines))
+        artifacts_dir = self.db.get_artifacts_dir()
+        if artifacts_dir.exists():
+            artifact_names = [
+                f.name for f in artifacts_dir.iterdir()
+                if f.is_file() and not f.name.startswith("run_")
+            ]
+            if artifact_names:
+                parts.append(f"\n## Available Artifacts\n{', '.join(artifact_names)}")
+        return "\n".join(parts)
 
     async def _calibrate(self, idea: str) -> str:
         capabilities = self._describe_capabilities()
