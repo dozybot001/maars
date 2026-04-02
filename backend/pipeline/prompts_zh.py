@@ -157,6 +157,7 @@ def build_evaluate_user(
     capabilities: str,
     strategy: str,
     prior_evaluations: list[dict],
+    is_final: bool = False,
 ) -> str:
     parts = [f"## 研究目标\n{idea}"]
     if strategy:
@@ -185,6 +186,12 @@ def build_evaluate_user(
         parts.append("\n## 历史评估（已尝试过——不要重复）\n" + "\n".join(history_lines))
     parts.append(f"\n## 已完成任务摘要\n{summaries_text}")
     parts.append(f"\n## Agent 能力\n{capabilities}")
+    if is_final:
+        parts.append(
+            "\n## 最终轮次"
+            "\n这是最后一轮评估。请全面总结当前成果，给出未来改进方向的建议。"
+            "不要输出 strategy_update 字段。"
+        )
     parts.append(
         "\n使用 read_task_output 和 list_artifacts 调查实际结果。"
         "分析可改进之处并提供具体建议。"

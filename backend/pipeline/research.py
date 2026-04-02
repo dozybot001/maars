@@ -189,11 +189,12 @@ class ResearchStage(Stage):
     async def _run_loop(self, idea: str):
         await asyncio.to_thread(_preflight_docker)
 
-        start_iteration = self.db.get_iteration()
+        iteration = self.db.get_iteration()
         evaluation = None  # None = first pass; has data = subsequent pass
 
-        for iteration in range(start_iteration, self._max_iterations):
+        while True:
             round_label = f"round {iteration + 1}"
+            is_final = iteration >= self._max_iterations - 1
 
             # Strategy
             self._current_phase = "strategy"
@@ -263,21 +264,21 @@ class ResearchStage(Stage):
             ]
             evaluation = await self._evaluate_results(
                 idea, summaries, current_score, prev_score_snapshot,
-                minimize, iteration,
+                minimize, iteration, is_final,
             )
             evaluation["score"] = current_score
             strategy_update = evaluation.get("strategy_update", "").strip()
 
-            is_last = iteration >= self._max_iterations - 1
-            if is_last or not strategy_update:
+            if not strategy_update:
                 evaluation["satisfied"] = True
             self.db.save_evaluation(evaluation, iteration)
             self._send()
 
-            if is_last or not strategy_update:
+            if not strategy_update:
                 break
 
             self._check_stop()
+            iteration += 1
 
     # ------------------------------------------------------------------
     # Decompose helpers
@@ -575,6 +576,7 @@ class ResearchStage(Stage):
         prev_score: float | None,
         minimize: bool,
         iteration: int,
+        is_final: bool = False,
     ) -> dict:
         call_id = "Evaluate"
         summaries_text = "\n".join(
@@ -591,6 +593,7 @@ class ResearchStage(Stage):
             capabilities=capabilities,
             strategy=self._strategy or "",
             prior_evaluations=prior_evals,
+            is_final=is_final,
         )
         response = await self._llm(EVALUATE_SYSTEM, user_text, call_id, content_level=3)
         return parse_json_fenced(response, fallback={"feedback": "", "suggestions": []})

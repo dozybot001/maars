@@ -163,6 +163,7 @@ def build_evaluate_user(
     capabilities: str,
     strategy: str,
     prior_evaluations: list[dict],
+    is_final: bool = False,
 ) -> str:
     parts = [f"## Research Goal\n{idea}"]
     if strategy:
@@ -192,6 +193,13 @@ def build_evaluate_user(
                      + "\n".join(history_lines))
     parts.append(f"\n## Completed Task Summaries\n{summaries_text}")
     parts.append(f"\n## Agent Capabilities\n{capabilities}")
+    if is_final:
+        parts.append(
+            "\n## Final Round"
+            "\nThis is the last evaluation round. Provide a comprehensive summary of "
+            "current results and suggest directions for future improvement. "
+            "Do NOT include strategy_update."
+        )
     parts.append(
         "\nUse read_task_output and list_artifacts to investigate actual results. "
         "Analyze what can be improved and provide specific suggestions."
