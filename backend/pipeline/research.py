@@ -15,6 +15,7 @@ from backend.pipeline.decompose import decompose
 from backend.pipeline.prompts import (
     CALIBRATE_SYSTEM, EVALUATE_SYSTEM, REPLAN_SYSTEM, REDECOMPOSE_CONTEXT,
     STRATEGY_SYSTEM, build_execute_prompt, build_verify_prompt, build_retry_prompt,
+    build_evaluate_user,
 )
 from backend.utils import parse_json_fenced
 
@@ -215,17 +216,12 @@ class ResearchStage(Stage):
 
             minimize = self.db.get_score_minimize()
             improved, current_score = self._check_score_improved(self._prev_score, minimize)
+            prev_score_snapshot = self._prev_score
             if current_score is not None:
                 self.db.update_meta(current_score=current_score, previous_score=self._prev_score, improved=improved)
                 self._prev_score = current_score
 
-            if is_last:
-                self.db.save_evaluation({"satisfied": True, "score": current_score}, iteration)
-                break
-
-            if not improved and self._prev_score is not None:
-                self.db.save_evaluation({"satisfied": True, "score": current_score}, iteration)
-                break
+            stopping = is_last or (not improved and prev_score_snapshot is not None)
 
             self._check_stop()
 
@@ -233,10 +229,18 @@ class ResearchStage(Stage):
                 {"id": tid, "summary": self._task_summaries.get(tid, "(no summary)")}
                 for tid in sorted(self._task_results.keys())
             ]
-            evaluation = await self._evaluate_results(idea, summaries)
+            evaluation = await self._evaluate_results(
+                idea, summaries, current_score, prev_score_snapshot,
+                minimize, iteration,
+            )
             evaluation["score"] = current_score
+            if stopping:
+                evaluation["satisfied"] = True
             self.db.save_evaluation(evaluation, iteration)
             self._send()  # done: evaluation saved
+
+            if stopping:
+                break
 
             self._check_stop()
 
@@ -459,17 +463,30 @@ class ResearchStage(Stage):
             improved = current > prev_score * 1.005
         return improved, current
 
-    async def _evaluate_results(self, idea: str, task_summaries: list[dict]) -> dict:
+    async def _evaluate_results(
+        self,
+        idea: str,
+        task_summaries: list[dict],
+        current_score: float | None,
+        prev_score: float | None,
+        minimize: bool,
+        iteration: int,
+    ) -> dict:
         call_id = "Evaluate"
         self._send(chunk={"text": call_id, "call_id": call_id, "label": True, "level": 2})
         summaries_text = "\n".join(
             f"- **Task [{s['id']}]**: {s['summary']}" for s in task_summaries
         )
-        user_text = (
-            f"## Research Goal\n{idea}\n\n"
-            f"## Completed Task Summaries\n{summaries_text}\n\n"
-            f"Use read_task_output and list_artifacts to investigate actual results. "
-            f"Analyze what can be improved and provide specific suggestions."
+        prior_evals = self.db.load_evaluations() if iteration > 0 else []
+        capabilities = self._describe_capabilities()
+        user_text = build_evaluate_user(
+            idea=idea,
+            summaries_text=summaries_text,
+            current_score=current_score,
+            prev_score=prev_score,
+            minimize=minimize,
+            capabilities=capabilities,
+            prior_evaluations=prior_evals,
         )
         response = await self._llm(EVALUATE_SYSTEM, user_text, call_id, content_level=3)
         return parse_json_fenced(response, fallback={"feedback": "", "suggestions": []})

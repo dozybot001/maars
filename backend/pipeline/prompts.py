@@ -1,5 +1,7 @@
 """All prompts for the Research pipeline — single source of truth."""
 
+from __future__ import annotations
+
 _AUTO = (
     "This is a fully automated pipeline. No human is in the loop. "
     "Do NOT ask questions or request input. Make all decisions autonomously. "
@@ -99,27 +101,33 @@ Keep it concise (under 500 words). This will be injected into the task planner's
 # Evaluate & Replan
 # ---------------------------------------------------------------------------
 
-EVALUATE_SYSTEM = """\
+EVALUATE_SYSTEM = _AUTO + """\
 You are a research quality evaluator with tool access. Your job is to analyze \
 completed work and identify concrete improvements — NOT to decide whether to stop.
 
 WORKFLOW:
-1. USE YOUR TOOLS to investigate:
+1. REVIEW the score progression and previous feedback provided below
+2. USE YOUR TOOLS to investigate deeper:
    - Call read_task_output(task_id) to read FULL outputs of key tasks
-   - Call list_artifacts() to see what files exist, including best_score.json
+   - Call list_artifacts() to see what files exist
    - Look for actual metrics: CV scores, RMSLE, accuracy, etc.
-2. Analyze what was done well and what can be improved
-3. Provide specific, actionable improvement directions
+3. Analyze and provide structured feedback
 
-FOCUS ON:
-- Untried approaches (models, feature engineering techniques, ensembles)
-- Weaknesses in current approach (overfitting, missing features, poor preprocessing)
-- Specific numbers: current best score, where the biggest errors are
-- What the next iteration should prioritize
+EVALUATION DIMENSIONS:
+- **Score Analysis**: current vs previous score, trend, gap to competitive targets
+- **Methodology**: are the chosen approaches sound? any fundamental flaws?
+- **Untried Approaches**: what models, features, or techniques haven't been explored yet?
+- **Error Analysis**: where are the biggest errors or failure modes?
+- **Priority**: what should the next iteration focus on first for maximum impact?
+
+RULES:
+- Be specific: cite actual numbers, task IDs, file names
+- Do NOT repeat suggestions from previous evaluations that were already attempted
+- Focus on the HIGHEST-IMPACT improvements (2-4 suggestions, not a laundry list)
+- You do NOT decide whether to stop — just provide analysis
 
 Output a JSON block at the end:
-{"feedback": "Analysis of current results with specific numbers", "suggestions": ["specific improvement 1", "specific improvement 2"]}
-全文使用中文。"""
+{"feedback": "Analysis of current results with specific numbers", "suggestions": ["specific improvement 1", "specific improvement 2"]}"""
 
 REPLAN_SYSTEM = """\
 You are a research planner with tools. Given completed work and evaluation feedback, \
@@ -159,6 +167,53 @@ REDECOMPOSE_CONTEXT = (
 # ---------------------------------------------------------------------------
 # Prompt builders
 # ---------------------------------------------------------------------------
+
+
+def build_evaluate_user(
+    idea: str,
+    summaries_text: str,
+    current_score: float | None,
+    prev_score: float | None,
+    minimize: bool,
+    capabilities: str,
+    prior_evaluations: list[dict],
+) -> str:
+    parts = [f"## Research Goal\n{idea}"]
+
+    # Score progression
+    direction = "lower is better" if minimize else "higher is better"
+    if current_score is not None:
+        score_line = f"Current score: **{current_score}** ({direction})"
+        if prev_score is not None:
+            delta = current_score - prev_score
+            score_line += f" | Previous: {prev_score} | Delta: {delta:+.6f}"
+        parts.append(f"\n## Score Progression\n{score_line}")
+
+    # Previous evaluation history
+    if prior_evaluations:
+        history_lines = []
+        for i, ev in enumerate(prior_evaluations):
+            fb = ev.get("feedback", "")
+            sugs = ev.get("suggestions", [])
+            s = ev.get("score")
+            header = f"Round {i}"
+            if s is not None:
+                header += f" (score: {s})"
+            history_lines.append(f"### {header}")
+            if fb:
+                history_lines.append(f"Feedback: {fb}")
+            if sugs:
+                history_lines.append("Suggestions: " + "; ".join(sugs))
+        parts.append("\n## Previous Evaluations (already attempted — do NOT repeat)\n"
+                     + "\n".join(history_lines))
+
+    parts.append(f"\n## Completed Task Summaries\n{summaries_text}")
+    parts.append(f"\n## Agent Capabilities\n{capabilities}")
+    parts.append(
+        "\nUse read_task_output and list_artifacts to investigate actual results. "
+        "Analyze what can be improved and provide specific suggestions."
+    )
+    return "\n".join(parts)
 
 def build_execute_prompt(task: dict, prior_attempt: str = "") -> tuple[str, str]:
     parts = []

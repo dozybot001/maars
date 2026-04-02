@@ -3,6 +3,8 @@
 Each research session gets a unique folder under results/.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 from datetime import datetime
 import json
@@ -267,6 +269,19 @@ class ResearchDB:
         data = _read_json(files[-1])
         score = data.get("score")
         return float(score) if score is not None else None
+
+    def load_evaluations(self) -> list[dict]:
+        """Load all previous evaluation JSONs, sorted by iteration."""
+        self._ensure_root()
+        eval_dir = self._root / "evaluations"
+        if not eval_dir.exists():
+            return []
+        results = []
+        for f in sorted(eval_dir.glob("eval_v*.json")):
+            data = _read_json(f)
+            if data:
+                results.append(data)
+        return results
 
     def list_completed_tasks(self) -> list[dict]:
         self._ensure_root()
