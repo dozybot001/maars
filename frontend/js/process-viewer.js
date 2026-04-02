@@ -105,7 +105,9 @@ async function handleDoneSignal(stage, phase, taskId, container) {
     const doc = await fetchDocument(PHASE_DOCS[phase]);
     if (doc && doc.content) {
       documentCache[PHASE_DOCS[phase]] = doc.content;
-      appendDocCard(PHASE_DOCS[phase], PHASE_LABELS[phase] || phase, container);
+      const group = phaseGroups[phase];
+      const displayName = (group && group.label) ? group.label.textContent : phase;
+      appendDocCard(PHASE_DOCS[phase], displayName, container);
     }
   }
 
