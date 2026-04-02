@@ -8,10 +8,6 @@ import { createAutoScroller } from './autoscroll.js';
 import { STAGE_LABELS, createFold, appendSeparator } from './shared.js';
 import { showModal } from './modal.js';
 
-const PHASE_LABELS = {
-  calibrate: 'Calibrate', strategy: 'Strategy',
-  decompose: 'Decompose', execute: 'Execute', evaluate: 'Evaluate',
-};
 const PHASE_DOCS = { calibrate: 'calibration', strategy: 'strategy', evaluate: 'evaluation' };
 
 let processBody, scroller;
@@ -38,10 +34,9 @@ export function initProcessViewer() {
 
     if (status && task_id) { updateTaskStatus(task_id, status); return; }
     if (chunk) {
-      // Update phase label from level-2 label chunks (e.g. "Strategy · round 1")
+      // Level-2 label chunks create/update phase groups with the actual label text
       if (chunk.label && chunk.level <= 2 && chunk.text && phase) {
-        const group = phaseGroups[currentPhaseName];
-        if (group && group.label) group.label.textContent = chunk.text;
+        ensurePhase(phase, chunk.text);
       }
       return;
     }
@@ -73,11 +68,17 @@ function ensureProcessSection(stage) {
   currentSection = appendSeparator(processBody, STAGE_LABELS[stage] || stage.toUpperCase(), scroller);
 }
 
-function ensurePhase(phase) {
-  const label = PHASE_LABELS[phase] || phase;
-  if (phaseGroups[label]) { currentPhaseName = label; return; }
-  currentPhaseName = label;
-  phaseGroups[label] = createFold(currentSection, label);
+function ensurePhase(phase, displayText) {
+  if (phaseGroups[phase]) {
+    // Update display text if a new label arrives (e.g. round change)
+    if (displayText && phaseGroups[phase].label) {
+      phaseGroups[phase].label.textContent = displayText;
+    }
+    currentPhaseName = phase;
+    return;
+  }
+  currentPhaseName = phase;
+  phaseGroups[phase] = createFold(currentSection, displayText || phase);
   scroller.scroll();
 }
 
