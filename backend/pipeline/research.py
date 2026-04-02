@@ -308,9 +308,6 @@ class ResearchStage(Stage):
         """Iteration decompose with enriched context."""
         iteration_context = self._build_iteration_context(idea)
 
-        tag = f"Decompose · round {round_num}"
-        self._send(chunk={"text": tag, "call_id": tag, "label": True, "level": 2})
-
         def _on_done(tree):
             self.db.save_tree(tree)
             self._send()
