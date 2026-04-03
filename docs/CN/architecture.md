@@ -76,10 +76,8 @@ flowchart LR
     subgraph loop ["主循环 · while strategy_update"]
         direction TB
         STR["Strategy"] --> DEC["Decompose"]
-        DEC --> EXEC["Execute"]
-        EXEC --> VER{Verify}
-        VER -->|pass| EVAL{Evaluate}
-        VER -->|retry| EXEC
+        DEC --> EXEC["Execute ⇄ Verify"]
+        EXEC -->|all pass| EVAL{Evaluate}
         EVAL -->|strategy_update| STR
     end
 
@@ -87,7 +85,10 @@ flowchart LR
     EVAL -->|done| OUT["Research Output"]
 ```
 
-Verify 还有一条 `redecompose` 路径：调用 `decompose(root_id=task_id)` 在原位拆分任务后重新执行。
+Execute ⇄ Verify 内部包含三条路径：
+- **pass** → 任务完成，继续下一个
+- **retry** → 携带 review 反馈重试一次
+- **redecompose** → `decompose(root_id=task_id)` 局部拆分后执行新子任务
 
 #### 设计原则
 
