@@ -2,223 +2,154 @@
 
 中文 | [English](README.md)
 
-**多智能体自动化研究系统** — 从一个想法到一篇完整论文，全自动。
+**多智能体自动化研究系统** — 从研究想法或 Kaggle 比赛链接，到可执行任务、实验产物与 `paper.md` 的端到端编排。
 
-MAARS 是一个混合式多智能体研究系统。给它一个研究想法或一个 Kaggle 比赛链接，它会自动精炼问题、分解为可执行任务、在 Docker 沙箱中运行实验、基于结果迭代改进，最终产出一篇完整论文。
+## 功能概览
 
-## 效果展示
+- **精炼（Refine）**：Agno Team 把输入整理为可执行研究方案（`refined_idea.md`）。
+- **研究（Research）**：runtime 驱动工作流 + Agno Agent：校准 → 策略 → 分解 → 执行 ⇄ 验证 → 评估；状态与产出在 `results/<会话>/`。
+- **写作（Write）**：Agno Team 将研究结果整理为 `paper.md`。
+- **沙箱**：在 Docker 中执行代码（`Dockerfile.sandbox`）；集成搜索、arXiv、Wikipedia，以及 Kaggle 赛题数据拉取。
 
-输入一个想法，看它自主完成研究：
-
-```
-"对比不同刚性特征下的 ODE 数值求解器 ——
- 对显式方法与隐式方法的效率-精度权衡做系统性基准测试"
-```
-
-MAARS 会自动：搜索文献 → 确定方法论 → 编写并执行基准测试代码 → 生成图表 → 评估结果 → 迭代改进 → 撰写带嵌入图表的完整论文。
-
-## 架构
-
-### 类层级
-
-```
-Stage                          — 生命周期 + 统一 SSE
-├── ResearchStage              — agentic workflow（直接调用 Agno Agent）
-└── TeamStage                  — 多 Agent 协作（Agno Team coordinate）
-    ├── RefineStage
-    └── WriteStage
-```
-
-### 数据流
-
-```mermaid
-flowchart LR
-    IN["研究想法\n或 Kaggle 链接"] --> REF
-
-    REF["① 精炼\nTeam: Explorer + Critic"]
-    RES["② 研究\nAgentic Workflow"]
-    WRI["③ 写作\nTeam: Writer + Reviewer"]
-
-    REF -- "refined_idea.md" --> RES -- "tasks/ · artifacts/" --> WRI -- "paper.md" --> OUT["完整\n论文"]
-
-    DB[(Session DB)]
-    REF & RES & WRI <-.-> DB
-```
-
-### 系统架构
-
-```mermaid
-flowchart TB
-    UI["前端 UI · SSE"] --> API["FastAPI → 编排器"]
-
-    API --> REF["① 精炼\nTeam: Explorer + Critic"]
-    API --> RES["② 研究\nAgentic Workflow"]
-    API --> WRI["③ 写作\nTeam: Writer + Reviewer"]
-
-    REF -- "refined_idea.md" --> DB
-    RES -- "tasks/ · artifacts/" --> DB
-    WRI -- "paper.md" --> DB
-    DB[(Session DB\nresults/id/)]
-
-    REF & RES & WRI --> AGNO["Agno · Google Gemini\nSearch · arXiv · Docker 沙箱"]
-```
-
-核心设计原则：**确定性控制交给 runtime，开放性执行交给 agent。**
-
-MAARS 是一个**混合式多智能体系统**：精炼和写作阶段使用 Agno Team coordinate 模式（多 agent 协作），研究阶段使用 runtime 驱动的 agentic workflow。三个阶段仅通过文件型会话 DB 通信——完全解耦。
-
-如果用 [harness engineering](https://openai.com/index/harness-engineering/)（OpenAI, 2026）的视角来看，MAARS 做的是同一类工作 — 状态外化、工具边界、验证回路、反馈循环 — 但作用在 **research-task 级别**，而非 OpenAI 所描述的 repo 级别。
-
-| 阶段 | 模式 | 做什么 |
-|------|------|-------|
-| **精炼** | Multi-Agent Team | Explorer 调研文献 + Critic 质疑新颖性/可行性 → 精炼后的研究方案 |
-| **研究** | Agentic Workflow | Runtime 控制：校准 → 策略 → 分解 → 执行 → 验证 → 评估 → 重规划 |
-| **写作** | Multi-Agent Team | Writer 写初稿 + Reviewer 审稿反馈 → 修订后的论文 |
-
-## 研究流水线详解
-
-Research 阶段是核心工作引擎，以 **agentic workflow runtime** 形式运行，带反馈回路：
-
-```
-refined_idea.md
-  ↓
-校准    → Agent 评估当前领域"原子任务"的粒度边界
-策略    → Agent 调研最佳方法、技术路线、基准线
-分解    → 递归拆解为带依赖关系的原子任务 DAG
-  ↓
-┌─ 执行  → 按拓扑序分批运行（可并行）
-│  验证  → 逐任务评分：通过 / 失败重试 / 重新分解
-│  评估  → 跨迭代比较分数，判断是否改进停滞
-│  重规划 → 根据评估反馈追加新任务
-└─ 循环直到：迭代上限 或 分数停滞（<0.5% 改进）
-  ↓
-任务产出 + 实验产物 → 交给写作阶段
-```
-
-核心能力：
-- **Docker 沙箱执行** — 真实代码在隔离容器中运行，预装 ML 工具栈
-- **DAG 调度** — 任务按依赖顺序执行，安全时并行化
-- **自动重分解** — 任务过于复杂时自动拆分为子任务
-- **带评分的迭代** — 跨轮次跟踪 `best_score.json`，改进停滞时自动停止
-- **断点续跑** — 可以中途暂停，稍后恢复，所有状态完整保留
-
-## Kaggle 模式
-
-直接粘贴 Kaggle 比赛链接：
-
-```
-https://www.kaggle.com/competitions/titanic
-```
-
-MAARS 会自动：拉取比赛元数据 → 下载数据集 → 构建上下文丰富的研究方案 → 跳过精炼阶段 → 直接进入研究阶段，数据挂载在 `/workspace/data/`。
+控制流、重试与迭代上限由 runtime 管理；开放推理与编码由 agent 完成。各阶段仅通过**文件型会话 DB**（`results/...`）衔接。
 
 ## 快速开始
 
-### 一键启动（推荐）
+**环境：** Python **3.10+**；代码执行需可选安装 **Docker**。
+
+### 推荐
 
 ```bash
 bash start.sh
 ```
 
-脚本自动完成：安装依赖、检查 `.env`、构建 Docker 镜像、启动服务、打开浏览器。
+脚本会创建 `.venv`、安装依赖、从 `.env.example` 补全 `.env` 键、可选构建沙箱镜像、用 **热重载** 启动 uvicorn（端口 `MAARS_SERVER_PORT`，默认 **8000**），并尝试打开浏览器。
 
-### 手动启动
+### 手动
 
 ```bash
 git clone https://github.com/dozybot001/MAARS.git && cd MAARS
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env          # 填入 API key
-docker build -f Dockerfile.sandbox -t maars-sandbox:latest .   # 可选，用于代码执行
+cp .env.example .env   # 填写 MAARS_GOOGLE_API_KEY
+docker build -f Dockerfile.sandbox -t maars-sandbox:latest .   # 可选
 uvicorn backend.main:app --host 0.0.0.0 --port 8000
-# 打开 http://localhost:8000
+# 浏览器打开 http://localhost:8000
 ```
 
 ## 配置
 
-所有配置项使用 `MAARS_` 前缀。将 `.env.example` 复制为 `.env` 后配置：
+复制 `.env.example` 为 `.env`。变量均带 `MAARS_` 前缀（见 `backend/config.py`）。
 
-```env
-MAARS_GOOGLE_API_KEY=your-key
-MAARS_GOOGLE_MODEL=gemini-3-flash-preview
-MAARS_API_CONCURRENCY=1
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `MAARS_GOOGLE_API_KEY` | — | **必填。** Gemini API 密钥（同时写入 `GOOGLE_API_KEY` 供 SDK 使用）。 |
+| `MAARS_GOOGLE_MODEL` | `gemini-3-flash-preview` | 传给 Agno 的模型 id。 |
+| `MAARS_API_CONCURRENCY` | `1` | LLM 并发上限。 |
+| `MAARS_OUTPUT_LANGUAGE` | `Chinese` | 提示词/输出语言包。 |
+| `MAARS_RESEARCH_MAX_ITERATIONS` | `3` | **评估轮数**上限（每轮：策略 → 分解 → 执行 → 评估）。若 Evaluate 不再输出 `strategy_update` 会提前结束。 |
+| `MAARS_KAGGLE_API_TOKEN` | — | 可选；也可用 `~/.kaggle/kaggle.json`。 |
+| `MAARS_KAGGLE_COMPETITION_ID` | — | 使用赛题链接时一般由程序写入。 |
+| `MAARS_DATASET_DIR` | — | Kaggle 拉取数据后由会话设置。 |
+| `MAARS_DOCKER_SANDBOX_IMAGE` | `maars-sandbox:latest` | 沙箱 / `code_execute` 使用的镜像。 |
+| `MAARS_DOCKER_SANDBOX_TIMEOUT` | `600` | 单容器超时（秒）。 |
+| `MAARS_DOCKER_SANDBOX_MEMORY` | `4g` | 内存上限（如 `512m`、`4g`）。 |
+| `MAARS_DOCKER_SANDBOX_CPU` | `1.0` | CPU 配额。 |
+| `MAARS_DOCKER_SANDBOX_NETWORK` | `true` | 沙箱内是否联网。 |
+| `MAARS_SERVER_PORT` | `8000` | 仅 `start.sh` 使用。 |
+
+## 架构概览
+
+### 流水线
+
+```mermaid
+flowchart LR
+    IN["研究想法或 Kaggle 链接"] --> REF
+
+    REF["① 精炼 · Team"]
+    RES["② 研究 · workflow"]
+    WRI["③ 写作 · Team"]
+
+    REF -- refined_idea.md --> RES -- tasks/ · artifacts/ --> WRI -- paper.md --> OUT["paper.md"]
+
+    DB[(会话 DB)]
+    REF & RES & WRI <-.-> DB
 ```
 
-| 配置项 | 默认值 | 说明 |
-|--------|--------|------|
-| `MAARS_GOOGLE_API_KEY` | — | Google Gemini API 密钥 |
-| `MAARS_GOOGLE_MODEL` | `gemini-3-flash-preview` | 使用的 Gemini 模型 |
-| `MAARS_API_CONCURRENCY` | `1` | API 并发请求数 |
-| `MAARS_RESEARCH_MAX_ITERATIONS` | `3` | 最大评估迭代轮数（1 = 不迭代） |
-| `MAARS_DOCKER_SANDBOX_TIMEOUT` | `600` | 单容器超时时间（秒） |
-| `MAARS_DOCKER_SANDBOX_MEMORY` | `4g` | 单容器内存限制 |
-| `MAARS_KAGGLE_API_TOKEN` | — | Kaggle API token（或使用 `~/.kaggle/kaggle.json`） |
+### 阶段
 
-## 产出结构
+| 阶段 | 机制 | 作用 |
+|------|------|------|
+| **精炼** | Agno Team（Explorer + Critic） | 文献相关精炼 → `refined_idea.md` |
+| **研究** | `ResearchStage` 工作流 + Agno Agent | 校准 → 策略 → 分解 → 执行 ⇄ 验证 → 评估；可因 `strategy_update` 多轮 |
+| **写作** | Agno Team（Writer + Reviewer） | 输出 `paper.md` |
 
-每次运行创建带时间戳的会话文件夹：
+### 类关系
 
 ```
-results/{timestamp}-{slug}/
-├── idea.md                  # 原始输入
-├── refined_idea.md          # 精炼后的研究方案
-├── calibration.md           # 原子任务定义
-├── strategy.md              # 研究策略
-├── plan_list.json           # 扁平任务列表（执行视图）
-├── plan_tree.json           # 层级分解树
-├── tasks/                   # 各任务输出（markdown）
-├── artifacts/               # 代码脚本、图表、CSV、模型
-│   ├── {task_id}/           # 每任务工作目录
-│   └── best_score.json      # 全局最佳分数追踪
-├── evaluations/             # 迭代评估结果
-│   ├── eval_v0.json
-│   └── eval_v1.json
-├── paper.md                 # 最终论文
-├── log.jsonl                # 运行日志
-├── execution_log.jsonl      # 执行日志
-├── meta.json                # 会话元数据
-└── reproduce/               # 自动生成的复现文件
-    ├── Dockerfile
-    ├── run.sh
-    └── docker-compose.yml
+Stage                    — 生命周期、统一 SSE (_send)、LLM 流式
+├── ResearchStage        — agentic workflow（Agno Agent）
+└── TeamStage            — Agno Team coordinate
+    ├── RefineStage
+    └── WriteStage
+```
+
+### Research 主循环（与代码一致）
+
+每**轮**：Strategy → Decompose → Execute → Verify → **Evaluate**。仅当评估结果里存在非空 **`strategy_update`**，且未超过 **`MAARS_RESEARCH_MAX_ITERATIONS`** 时进入下一轮。分数可在 `artifacts/` 中维护（如 `best_score.json` 的晋升逻辑）。
+
+细则见 [docs/CN/architecture.md](docs/CN/architecture.md)。
+
+## Kaggle 模式
+
+输入包含 `kaggle.com/competitions/<id>` 时：拉取赛题元数据、下载数据、生成写入 `refined_idea.md` 的上下文、**跳过精炼阶段**，从 **Research** 开始（数据目录由会话配置，供沙箱挂载使用）。
+
+## 会话产出目录
+
+每次运行在 `results/<时间戳>-<slug>/`（见 `backend/db.py` 中 `ResearchDB`）：
+
+```
+results/<会话>/
+├── idea.md
+├── refined_idea.md
+├── calibration.md
+├── strategy/
+│   └── round_<n>.md
+├── plan_tree.json              # 分解树真值
+├── plan_list.json              # 派生扁平任务列表
+├── tasks/
+├── artifacts/
+│   ├── <task_id>/
+│   ├── best_score.json
+│   └── latest_score.json
+├── evaluations/
+│   ├── round_<n>.json
+│   └── round_<n>.md
+├── paper.md
+├── meta.json
+├── log.jsonl
+├── execution_log.jsonl
+└── reproduce/
 ```
 
 ## 前端
 
-Web UI 通过统一 SSE 提供实时观测。所有阶段共享同一事件格式：
-
-```json
-{"stage": "research", "phase": "execute", "chunk": "正在运行任务..."}
-```
-
-三个监听器驱动整个界面更新：
-
-- **进度监听** — 根据 `stage` 更新 7 阶段流水线进度条（精炼 → 校准 → 策略 → 分解 → 执行 → 评估 → 写作）
-- **日志监听** — 根据 `chunk` 实时流式展示 LLM 推理过程、工具调用和返回结果
-- **状态监听** — 根据 `phase` 更新任务树、执行批次、产物等过程视图
-
-UI 完全数据驱动，无需为每个阶段编写独立逻辑。其他功能：
-
-- **命令面板** (Ctrl+K) — 启动、暂停、恢复流水线
-- **Docker 状态** — 沙箱连接指示器
+静态资源位于 `frontend/`，通过 **SSE** 推送阶段与日志；会话数据以磁盘为准。支持命令面板（**Cmd/Ctrl+K**）等交互。
 
 ## 技术栈
 
-| 组件 | 技术 |
+| 层级 | 技术 |
 |------|------|
-| 后端 | FastAPI, Python async |
-| Agent 框架 | Agno（Team coordinate + 直接 Agent 调用） |
-| LLM | Google Gemini（通过 Agno） |
-| 代码执行 | Docker 容器（Python 3.12 + ML 工具栈） |
-| 前端 | 原生 JS, SSE, 无构建步骤 |
-| 存储 | 文件型会话 DB |
-| 搜索工具 | DuckDuckGo, arXiv, Wikipedia |
+| API | FastAPI、uvicorn |
+| Agent | Agno（Team + Agent）、Google Gemini |
+| 工具 | Docker 沙箱、ddgs / arXiv / Wikipedia、Kaggle API |
+| 存储 | `results/` 文件型会话 DB |
 
 ## 文档
 
 | 文档 | 内容 |
 |------|------|
-| [架构设计](docs/CN/architecture.md) | 系统设计理念与演进策略 |
-| [SSE 重构](docs/CN/SSE_REFACTOR.md) | 统一 SSE 事件格式与前端监听架构 |
+| [架构设计](docs/CN/architecture.md) | 边界、Research 环节、SSE、落盘结构 |
 
 ## 社区
 
