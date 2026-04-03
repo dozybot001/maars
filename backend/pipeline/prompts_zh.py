@@ -73,14 +73,8 @@ CALIBRATE_SYSTEM = _PREFIX + """\
 
 核心原则：可靠性 > 雄心。
 
-关键约束提醒：
-- 单次 code_execute 有超时限制，计算密集型任务需考虑时间上限
-- 在单核 CPU + 有限内存下，超参搜索（如 Optuna/GridSearch）极易超时。优先使用模型默认参数或手动设定少量关键参数，而非自动搜索
-- 每个任务是独立 session，无法访问其他任务的运行时状态，只能通过 read_task_output 读取已完成任务的输出
-- stdout 有截断限制，过长的输出会丢失信息
-
 仅输出一段简洁的原子定义（3-5 句），它将被逐字注入任务规划器的系统提示。必须包含：
-1. 基于上述超时和内存约束，什么规模的计算任务能可靠完成
+1. 基于上述约束，什么规模的计算任务能可靠完成
 2. 针对本研究课题的 2-3 个原子任务具体示例（每个恰好产出一个可验证制品）
 3. 2-3 个过大任务的具体示例（超出单次 session 约束的任务）"""
 
@@ -238,8 +232,7 @@ def build_execute_prompt(task: dict, prior_attempt: str = "",
     parts.append(
         f"## 环境约束\n"
         f"- 单次 code_execute 超时：{settings.docker_sandbox_timeout}s\n"
-        f"- 内存限制：{settings.docker_sandbox_memory}\n"
-        f"- 处理大数据时注意分块，避免超时或内存溢出\n---\n"
+        f"- 内存限制：{settings.docker_sandbox_memory}\n---\n"
     )
 
     # Dependency summaries

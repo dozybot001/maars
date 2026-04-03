@@ -73,14 +73,8 @@ Below is the execution agent's **full capability profile** (sandbox constraints,
 
 Key principle: RELIABILITY > AMBITION.
 
-Key constraint reminders:
-- Each code_execute has a timeout limit — compute-intensive tasks must fit within it
-- On single-core CPU with limited memory, hyperparameter search (Optuna/GridSearch) will likely timeout. Prefer model defaults or manually set key parameters instead of automated search
-- Each task is an independent session with no access to other tasks' runtime state; it can only read completed tasks via read_task_output
-- stdout is truncated — excessively long output loses information
-
 Output ONLY a concise ATOMIC DEFINITION block (3-5 sentences) to be injected verbatim into the task planner's system prompt. Must include:
-1. What scale of computation can reliably complete given the timeout and memory constraints above
+1. What scale of computation can reliably complete given the constraints above
 2. 2-3 concrete atomic task examples specific to this research topic (each producing exactly ONE verifiable artifact)
 3. 2-3 concrete examples of tasks that are TOO LARGE (exceeding single-session constraints)"""
 
@@ -245,8 +239,7 @@ def build_execute_prompt(task: dict, prior_attempt: str = "",
     parts.append(
         f"## Environment Constraints\n"
         f"- code_execute timeout: {settings.docker_sandbox_timeout}s\n"
-        f"- Memory limit: {settings.docker_sandbox_memory}\n"
-        f"- Process large data in chunks to avoid timeout or OOM\n---\n"
+        f"- Memory limit: {settings.docker_sandbox_memory}\n---\n"
     )
 
     # Dependency summaries
