@@ -305,14 +305,23 @@ class ResearchStage(Stage):
     async def _decompose_round(self, idea: str, round_num: int):
         """Iteration decompose with enriched context."""
         iteration_context = self._build_iteration_context(idea)
+        round_id = f"r{round_num}"
 
-        def _on_done(tree):
-            # Don't save to DB — this is the new round's partial tree, not the full tree.
-            # Full tree is saved after round_subtree is appended to self._tree.
+        def _on_done(subtree):
+            # Real-time: append/replace round subtree in main tree and save
+            if self._tree:
+                children = self._tree.setdefault("children", [])
+                for i, c in enumerate(children):
+                    if c.get("id") == round_id:
+                        children[i] = subtree
+                        break
+                else:
+                    children.append(subtree)
+                self.db.save_plan(self._tree)
             self._send()
 
-        new_flat, _ = await decompose(
-            idea=iteration_context,
+        new_flat, subtree = await decompose(
+            idea=f"Round {round_num}",
             stream_fn=lambda inst, ut, cid, cl, **kw: self._llm(
                 inst, ut, cid, content_level=cl, **kw),
             max_depth=10,
@@ -320,28 +329,14 @@ class ResearchStage(Stage):
             strategy=self._strategy,
             on_judge_done=_on_done,
             is_stale=lambda: False,
+            context=iteration_context,
+            root_id=round_id,
         )
 
         if not new_flat:
             return
 
-        new_flat = self._renumber_tasks(new_flat, round_num)
         self._all_tasks.extend(new_flat)
-
-        # Append round subtree to main tree (tree = source of truth)
-        round_subtree = {
-            "id": f"r{round_num}",
-            "description": f"Round {round_num}",
-            "is_atomic": False,
-            "dependencies": [],
-            "children": [
-                {"id": t["id"], "description": t["description"], "is_atomic": True,
-                 "dependencies": t.get("dependencies", []), "children": []}
-                for t in new_flat
-            ],
-        }
-        if self._tree:
-            self._tree.setdefault("children", []).append(round_subtree)
 
         # Derive batch numbers for new tasks (continue from max existing batch)
         max_batch = max(
@@ -354,8 +349,7 @@ class ResearchStage(Stage):
                 t["status"] = "pending"
                 t["batch"] = max_batch + batch_idx + 1
 
-        # Persist: tree + append new tasks to list cache
-        self.db.save_plan(self._tree)
+        # Persist: tree already saved by _on_done, append tasks to list cache
         self.db.append_tasks(new_flat)
 
         self._send()  # done: decompose round finished
@@ -724,15 +718,6 @@ class ResearchStage(Stage):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-
-    def _renumber_tasks(self, tasks: list[dict], round_num: int) -> list[dict]:
-        prefix = f"r{round_num}_"
-        id_map = {t["id"]: f"{prefix}{t['id']}" for t in tasks}
-        renumbered = []
-        for task in tasks:
-            new_deps = [id_map.get(dep, dep) for dep in task.get("dependencies", [])]
-            renumbered.append({"id": id_map[task["id"]], "description": task["description"], "dependencies": new_deps})
-        return renumbered
 
     def _build_final_output(self) -> str:
         if self.db:
