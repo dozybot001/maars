@@ -76,16 +76,13 @@ refined_idea → Calibrate → Strategy → Decompose → Execute ⇄ Verify →
 Execute ⇄ Verify 内部：
 
 ```
-Task Agent (execute + SUMMARY)
-    ↓
-  Verify (list_artifacts)
-    ├── pass → ✓ 完成
-    └── fail → Retry (携带 review)
-                  ↓
-                Verify
-                  ├── pass → ✓ 完成
-                  ├── fail + redecompose → decompose(root_id) → 回到 Task
-                  └── fail → ✗ 失败
+Task Agent → Verify ──pass──→ ✓ 完成
+               │
+              fail
+               │
+             Retry → Verify ──pass──→ ✓ 完成
+                        ├───fail───→ ✗ 失败
+                        └─redecompose─→ decompose(root_id) → 回到 Task Agent
 ```
 
 #### 设计原则
