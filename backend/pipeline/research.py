@@ -9,7 +9,6 @@ import logging
 from backend.config import settings
 
 log = logging.getLogger(__name__)
-from backend.db import ResearchDB
 from backend.pipeline.stage import Stage, StageState
 from backend.pipeline.decompose import decompose
 from backend.pipeline.prompts import (
@@ -59,7 +58,6 @@ def _find_node(tree: dict, node_id: str) -> dict | None:
         if found:
             return found
     return None
-
 
 
 class ResearchStage(Stage):
@@ -251,10 +249,10 @@ class ResearchStage(Stage):
             evaluate_tag = f"Evaluate · {round_label}"
             self._send(chunk={"text": evaluate_tag, "call_id": evaluate_tag, "label": True, "level": 2})
             minimize = self.db.get_score_minimize()
-            _, current_score = self._check_score_improved(self._prev_score, minimize)
+            improved, current_score = self._check_score_improved(self._prev_score, minimize)
             prev_score_snapshot = self._prev_score
             if current_score is not None:
-                self.db.update_meta(current_score=current_score, previous_score=self._prev_score)
+                self.db.update_meta(current_score=current_score, previous_score=self._prev_score, improved=improved)
                 self._prev_score = current_score
 
             self._check_stop()
@@ -363,19 +361,15 @@ class ResearchStage(Stage):
         self._send()  # done: decompose round finished
 
     def _init_task_batches(self):
-        """Set batch numbers and pending status for unexecuted tasks, write list once."""
+        """Set batch numbers and pending status for unexecuted tasks (single write)."""
         batches = topological_batches(self._all_tasks)
-        plan = self.db.get_plan_list()
-        plan_map = {t["id"]: t for t in plan}
+        updates = {}
         for batch_idx, batch in enumerate(batches):
             for t in batch:
                 if t["id"] not in self._task_results:
-                    entry = plan_map.get(t["id"])
-                    if entry:
-                        entry["status"] = "pending"
-                        entry["batch"] = batch_idx + 1
-        from backend.db import _write_json
-        _write_json(self.db._root / "plan_list.json", plan)
+                    updates[t["id"]] = {"status": "pending", "batch": batch_idx + 1}
+        if updates:
+            self.db.bulk_update_tasks(updates)
 
     # ------------------------------------------------------------------
     # Task execution
@@ -432,9 +426,6 @@ class ResearchStage(Stage):
         return False
 
     async def _execute_task(self, task: dict) -> tuple[bool, dict, str, str]:
-        return await self._execute_task_inner(task)
-
-    async def _execute_task_inner(self, task: dict) -> tuple[bool, dict, str, str]:
         task_id = task["id"]
         # Derive parent from ID; _partial_outputs only has entries for redecomposed parents
         parts = task_id.rsplit("_", 1)

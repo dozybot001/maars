@@ -171,7 +171,7 @@ class ResearchDB:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
     def update_task_status(self, task_id: str, status: str, summary: str = ""):
-        """Update a task's status in plan_list.json."""
+        """Update a task's status (and optional summary) in plan_list.json."""
         self._ensure_root()
         plan_path = self._root / "plan_list.json"
         tasks = _read_json(plan_path, default=[])
@@ -181,6 +181,17 @@ class ResearchDB:
                 if summary:
                     t["summary"] = summary
                 break
+        _write_json(plan_path, tasks)
+
+    def bulk_update_tasks(self, updates: dict[str, dict]):
+        """Batch-update fields on multiple tasks. updates = {task_id: {field: value, ...}}."""
+        self._ensure_root()
+        plan_path = self._root / "plan_list.json"
+        tasks = _read_json(plan_path, default=[])
+        for t in tasks:
+            fields = updates.get(t["id"])
+            if fields:
+                t.update(fields)
         _write_json(plan_path, tasks)
 
     def update_meta(self, **kwargs):
