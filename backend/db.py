@@ -119,18 +119,13 @@ class ResearchDB:
                 "\n\n".join(parts), encoding="utf-8"
             )
 
-    def save_plan_amendment(self, tasks: list[dict], iteration: int,
-                            replan_subtree: dict | None = None):
+    def save_plan_amendment(self, tasks: list[dict]):
+        """Append new tasks to plan_list.json. Tree is saved separately via save_tree."""
         self._ensure_root()
         plan_path = self._root / "plan_list.json"
         existing = _read_json(plan_path, default=[])
         existing.extend(tasks)
         _write_json(plan_path, existing)
-        if replan_subtree:
-            tree_path = self._root / "plan_tree.json"
-            tree = _read_json(tree_path)
-            tree.get("children", []).append(replan_subtree)
-            _write_json(tree_path, tree)
 
     def save_script(self, code: str, language: str = "python") -> tuple[Path, str]:
         self._ensure_root()

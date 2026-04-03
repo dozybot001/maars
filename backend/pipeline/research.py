@@ -344,7 +344,7 @@ class ResearchStage(Stage):
         if self._tree:
             self._tree.setdefault("children", []).append(round_subtree)
             self.db.save_tree(self._tree)
-        self.db.save_plan_amendment(new_flat, round_num)
+        self.db.save_plan_amendment(new_flat)
 
         # Assign batch numbers and pending status
         new_batches = topological_batches(new_flat)
