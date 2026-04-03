@@ -375,6 +375,10 @@
   color: var(--text-secondary);
 }
 
+#modal-content.plain-text {
+  white-space: pre-wrap;
+}
+
 #modal-content h1, #modal-content h2, #modal-content h3 {
   color: var(--text-primary);
   margin: 12px 0 6px;
