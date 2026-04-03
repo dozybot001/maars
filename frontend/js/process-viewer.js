@@ -16,6 +16,7 @@ const PHASE_DOCS = { calibrate: 'calibration', strategy: 'strategy', evaluate: '
 
 let processBody, scroller;
 const documentCache = {};
+const pendingStatuses = {};  // Buffer for status events that arrive before DOM nodes exist
 
 // Fixed DOM containers (created once)
 let docsRow, treeContainer, execContainer, scoreContainer;
@@ -171,7 +172,11 @@ function renderScore(meta) {
 
 function updateTaskStatus(taskId, status) {
   const node = processBody.querySelector(`.exec-node[data-task-id="${taskId}"]`);
-  if (!node) return;
+  if (!node) {
+    // DOM not ready yet — buffer for renderExecList to apply later
+    pendingStatuses[taskId] = status;
+    return;
+  }
   node.classList.remove('exec-pending', 'exec-running', 'exec-verifying',
     'exec-retrying', 'exec-decomposing', 'exec-completed', 'exec-failed');
   node.classList.add(`exec-${status}`);
@@ -263,6 +268,13 @@ function renderExecList(tasks) {
   }
   execContainer.innerHTML = '';
   execContainer.appendChild(fragment);
+
+  // Apply buffered status events that arrived before DOM was ready
+  for (const [tid, status] of Object.entries(pendingStatuses)) {
+    updateTaskStatus(tid, status);
+  }
+  for (const key of Object.keys(pendingStatuses)) delete pendingStatuses[key];
+
   scroller.scroll();
 }
 
