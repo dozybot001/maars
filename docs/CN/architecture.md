@@ -23,21 +23,6 @@ MAARS 是一个 **hybrid multi-agent research system**：
 
 ## 3. 总体架构
 
-```mermaid
-flowchart TB
-    UI["前端 UI · SSE"] --> API["FastAPI → 编排器"]
-    API --> REF["① Refine\nTeam: Explorer + Critic"]
-    API --> RES["② Research\nAgentic Workflow"]
-    API --> WRI["③ Write\nTeam: Writer + Reviewer"]
-
-    REF -- "refined_idea.md" --> DB
-    RES -- "tasks/ · artifacts/" --> DB
-    WRI -- "paper.md" --> DB
-    DB[(Session DB\nresults/id/)]
-
-    REF & RES & WRI --> AGNO["Agno · Google Gemini\nSearch · arXiv · Docker 沙箱"]
-```
-
 五个层次：
 1. **入口层**：前端 + FastAPI
 2. **编排层**：三阶段顺序和生命周期控制
@@ -57,34 +42,46 @@ Stage                          — 生命周期 + 统一 SSE (_send) + LLM strea
 
 ## 4. 三阶段设计
 
+```mermaid
+flowchart LR
+    subgraph Refine ["Refine (Team)"]
+        RL[Leader] <--> RE[Explorer]
+        RL <--> RC[Critic]
+    end
+
+    Refine -- "refined_idea" --> Calibrate
+
+    subgraph Research ["Research: Agentic Workflow x N"]
+        Calibrate --> Strategy
+        Strategy --> D1["Decompose(1st)"]
+        D1 --> Decompose
+
+        subgraph Loop ["Execute ⇄ Verify"]
+            Decompose --> Execute
+            Execute --> Verify
+            Verify -- "retry" --> Execute
+            Verify -- "redecomp" --> Decompose
+        end
+
+        Verify -- "pass" --> Artifacts[(Artifacts)]
+        Artifacts --> Evaluate
+        Evaluate -- "strategy_update" --> Strategy
+    end
+
+    Evaluate -- "done" --> RArt[(Research Artifacts)]
+    RArt --> Write
+
+    subgraph Write ["Write (Team)"]
+        WL[Leader] <--> WW[Writer]
+        WL <--> WR[Reviewer]
+    end
+```
+
 ### 4.1 Refine：研究问题形成（Multi-Agent）
 
-把输入意图转化为可执行的研究目标。使用 Agno Team coordinate 模式：
-
-```
-Leader → Explorer（搜索文献、产出提案） → Critic（批判新颖性/可行性） → Explorer（修订）→ refined_idea.md
-```
+把输入意图转化为可执行的研究目标。使用 Agno Team coordinate 模式。
 
 ### 4.2 Research：执行型工作流核心（Agentic Workflow）
-
-```
-refined_idea → Calibrate → Strategy → Decompose → Execute ⇄ Verify → Evaluate
-                              ↑                                          │
-                              └──────── strategy_update ─────────────────┘
-```
-
-Execute ⇄ Verify 内部：
-
-```
-    ┌──────── retry (携带 review) ─────────┐
-    │    ┌─── redecompose (root_id) ───┐   │
-    │    │                             │   │
-    ▼    ▼                             │   │
-Task Agent ──→ Verify Agent ───pass──→ ✓ done
-                  ├────────retry───────┘   │
-                  ├────redecompose─────────┘
-                  └────────fail──────→ ✗ failed
-```
 
 #### 设计原则
 
@@ -162,10 +159,6 @@ while True:
 `evaluation=None` 区分首轮和后续轮，循环体无条件分支。
 
 ### 4.3 Write：结果综合（Multi-Agent）
-
-```
-Leader → Writer（读取所有产出、写论文） → Reviewer（审查） → Writer（修订） → paper.md
-```
 
 ## 5. Prompt 架构
 
