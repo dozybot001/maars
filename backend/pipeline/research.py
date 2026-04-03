@@ -288,7 +288,7 @@ class ResearchStage(Stage):
     async def _decompose_fresh(self, idea: str):
         """First-pass decompose from research idea."""
         def _on_done(tree):
-            self.db.save_tree(tree)
+            self.db.save_plan(tree)  # tree progress, list written at end
             self._send()
 
         flat_tasks, tree = await decompose(
@@ -302,7 +302,7 @@ class ResearchStage(Stage):
         )
         self._all_tasks = flat_tasks
         self._tree = tree
-        self.db.save_plan(flat_tasks, tree)
+        self.db.save_plan(tree, flat_tasks)
 
     async def _decompose_round(self, idea: str, round_num: int):
         """Iteration decompose with enriched context."""
@@ -330,6 +330,7 @@ class ResearchStage(Stage):
         new_flat = self._renumber_tasks(new_flat, round_num)
         self._all_tasks.extend(new_flat)
 
+        # Append round subtree to main tree (tree = source of truth)
         round_subtree = {
             "id": f"r{round_num}",
             "description": f"Round {round_num}",
@@ -343,32 +344,38 @@ class ResearchStage(Stage):
         }
         if self._tree:
             self._tree.setdefault("children", []).append(round_subtree)
-            self.db.save_tree(self._tree)
-        self.db.save_plan_amendment(new_flat)
 
-        # Assign batch numbers and pending status
-        new_batches = topological_batches(new_flat)
+        # Derive batch numbers for new tasks (continue from max existing batch)
         max_batch = max(
-            (t.get("batch", 0)
-             for t in self.db.get_plan_list()
-             if t["id"] not in [nt["id"] for nt in new_flat]),
+            (t.get("batch", 0) for t in self.db.get_plan_list()),
             default=0,
         )
+        new_batches = topological_batches(new_flat)
         for batch_idx, batch in enumerate(new_batches):
             for t in batch:
-                self.db.update_task_status(t["id"], "pending")
-                self._update_task_batch(t["id"], max_batch + batch_idx + 1)
+                t["status"] = "pending"
+                t["batch"] = max_batch + batch_idx + 1
+
+        # Persist: tree + append new tasks to list cache
+        self.db.save_plan(self._tree)
+        self.db.append_tasks(new_flat)
 
         self._send()  # done: decompose round finished
 
     def _init_task_batches(self):
-        """Set batch numbers and pending status for unexecuted tasks."""
+        """Set batch numbers and pending status for unexecuted tasks, write list once."""
         batches = topological_batches(self._all_tasks)
+        plan = self.db.get_plan_list()
+        plan_map = {t["id"]: t for t in plan}
         for batch_idx, batch in enumerate(batches):
             for t in batch:
                 if t["id"] not in self._task_results:
-                    self.db.update_task_status(t["id"], "pending")
-                    self._update_task_batch(t["id"], batch_idx + 1)
+                    entry = plan_map.get(t["id"])
+                    if entry:
+                        entry["status"] = "pending"
+                        entry["batch"] = batch_idx + 1
+        from backend.db import _write_json
+        _write_json(self.db._root / "plan_list.json", plan)
 
     # ------------------------------------------------------------------
     # Task execution
@@ -694,7 +701,7 @@ class ResearchStage(Stage):
                 node = _find_node(self._tree, task_id)
                 if node:
                     node.update(tree)
-                self.db.save_tree(self._tree)
+                self.db.save_plan(self._tree)
             saved = self._current_phase
             self._current_phase = "decompose"
             self._send()
@@ -717,7 +724,7 @@ class ResearchStage(Stage):
 
         if self.db:
             updated = [t for t in self._all_tasks if t["id"] != task_id] + flat_tasks
-            self.db.save_plan(updated, self._tree or {})
+            self.db.save_plan(self._tree or {}, updated)
             self._current_phase = "execute"
             self._send()
 
@@ -726,17 +733,6 @@ class ResearchStage(Stage):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-
-    def _update_task_batch(self, task_id: str, batch: int):
-        """Set batch number for a task in plan_list.json."""
-        plan_path = self.db._root / "plan_list.json"
-        from backend.db import _read_json, _write_json
-        tasks = _read_json(plan_path, default=[])
-        for t in tasks:
-            if t["id"] == task_id:
-                t["batch"] = batch
-                break
-        _write_json(plan_path, tasks)
 
     def _renumber_tasks(self, tasks: list[dict], round_num: int) -> list[dict]:
         prefix = f"r{round_num}_"

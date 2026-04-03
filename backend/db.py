@@ -66,14 +66,16 @@ class ResearchDB:
         self._ensure_root()
         (self._root / "refined_idea.md").write_text(text, encoding="utf-8")
 
-    def save_plan(self, flat_tasks: list[dict], tree: dict):
-        self._ensure_root()
-        _write_json(self._root / "plan_list.json", flat_tasks)
-        _write_json(self._root / "plan_tree.json", tree)
+    def save_plan(self, tree: dict, flat_tasks: list[dict] | None = None):
+        """Save tree (source of truth) and derive/update flat task list.
 
-    def save_tree(self, tree: dict):
+        If flat_tasks is provided, it replaces the list entirely (first decompose).
+        Otherwise the existing list is kept (tree-only update during decompose progress).
+        """
         self._ensure_root()
         _write_json(self._root / "plan_tree.json", tree)
+        if flat_tasks is not None:
+            _write_json(self._root / "plan_list.json", flat_tasks)
 
     def save_paper(self, text: str):
         self._ensure_root()
@@ -119,8 +121,8 @@ class ResearchDB:
                 "\n\n".join(parts), encoding="utf-8"
             )
 
-    def save_plan_amendment(self, tasks: list[dict]):
-        """Append new tasks to plan_list.json. Tree is saved separately via save_tree."""
+    def append_tasks(self, tasks: list[dict]):
+        """Append new atomic tasks to plan_list.json (derived cache)."""
         self._ensure_root()
         plan_path = self._root / "plan_list.json"
         existing = _read_json(plan_path, default=[])
