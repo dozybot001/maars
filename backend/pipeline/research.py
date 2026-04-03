@@ -338,18 +338,8 @@ class ResearchStage(Stage):
 
         self._all_tasks.extend(new_flat)
 
-        # Derive batch numbers for new tasks (continue from max existing batch)
-        max_batch = max(
-            (t.get("batch", 0) for t in self.db.get_plan_list()),
-            default=0,
-        )
-        new_batches = topological_batches(new_flat)
-        for batch_idx, batch in enumerate(new_batches):
-            for t in batch:
-                t["status"] = "pending"
-                t["batch"] = max_batch + batch_idx + 1
-
         # Persist: tree already saved by _on_done, append tasks to list cache
+        # Batch numbers are set by _init_task_batches before execute starts
         self.db.append_tasks(new_flat)
 
         self._send()  # done: decompose round finished
