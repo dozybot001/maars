@@ -1,4 +1,4 @@
-# MAARS 架构设计 v13.2.0
+# MAARS 架构设计 v13.3.0
 
 > 架构边界：runtime 管控制流与状态；agent 管开放任务。三阶段经文件型 session DB 衔接。
 
@@ -74,7 +74,7 @@ flowchart TB
 
 - **Refine**：意图 -> 可执行研究目标（双 Agent 循环）。
 - **Research**：分解 -> 执行 <-> 验证 -> 评估，产出 artifacts（agentic workflow）。
-- **Write**：综合为论文（双 Agent 循环，后续需专门适配）。
+- **Write**：综合为论文（双 Agent 循环，Writer + Reviewer）。
 
 ## 3. Refine 阶段
 
@@ -311,22 +311,30 @@ TeamStage 的 level-2 标签（`Explorer`、`Critic` 等）由 `_stream_llm(labe
 
 ```
 results/{session}/
-+-- calibration.md              # 原子任务定义（一次性）
-+-- strategy/                   # 策略版本
-|   +-- round_0.md
-|   +-- round_1.md
-+-- evaluations/                # 评估版本
-|   +-- round_0.json            # 结构化数据（代码消费）
-|   +-- round_0.md              # 可读格式（前端展示）
-|   +-- round_1.json
-|   +-- round_1.md
-+-- plan_tree.json              # 分解树（真值）
-+-- plan_list.json              # 扁平任务列表（派生缓存，含 status/batch/summary）
-+-- tasks/                      # 各任务 markdown 产出
-+-- artifacts/                  # 代码、图表等产出文件
 +-- idea.md                     # 用户原始输入
-+-- refined_idea.md             # Refine 阶段产出
-+-- paper.md                    # Write 阶段产出
++-- proposals/                  # Refine: Explorer 各版提案
+|   +-- round_1.md
+|   +-- round_2.md
++-- critiques/                  # Refine: Critic 各轮评审
+|   +-- round_1.md + .json
+|   +-- round_2.md + .json
++-- refined_idea.md             # Refine 最终产出
++-- calibration.md              # Research: 原子任务定义（一次性）
++-- strategy/                   # Research: 策略版本
+|   +-- round_1.md
++-- plan_tree.json              # Research: 分解树（真值）
++-- plan_list.json              # Research: 扁平任务列表（派生缓存，含 status/batch/summary）
++-- tasks/                      # Research: 各任务 markdown 产出
++-- artifacts/                  # Research: 代码、图表等产出文件
++-- evaluations/                # Research: 评估版本
+|   +-- round_1.json + .md
++-- drafts/                     # Write: Writer 各版论文草稿
+|   +-- round_1.md
+|   +-- round_2.md
++-- reviews/                    # Write: Reviewer 各轮评审
+|   +-- round_1.md + .json
+|   +-- round_2.md + .json
++-- paper.md                    # Write 最终产出
 +-- meta.json                   # 元信息（tokens、score、score_direction）
 +-- log.jsonl                   # 流式 chunk 日志
 +-- execution_log.jsonl         # Docker 执行记录
@@ -350,7 +358,7 @@ backend/
 +-- team/
 |   +-- stage.py                 # TeamStage -- 自编排双 Agent 循环 + IterationState
 |   +-- refine.py                # RefineStage: Explorer + Critic
-|   +-- write.py                 # WriteStage: Writer + Reviewer（待专门适配）
+|   +-- write.py                 # WriteStage: Writer + Reviewer
 |   +-- prompts.py               # 语言分发层
 |   +-- prompts_zh.py            # 全中文 Team prompts + _REVIEWER_OUTPUT_FORMAT
 |   +-- prompts_en.py            # 全英文 Team prompts + _REVIEWER_OUTPUT_FORMAT

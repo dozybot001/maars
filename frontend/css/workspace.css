@@ -175,10 +175,6 @@
   overflow-y: auto;
 }
 
-.fold-text.folded {
-  display: none;
-}
-
 /* ---- Shared separator style (both panels) ---- */
 
 .log-separator {
