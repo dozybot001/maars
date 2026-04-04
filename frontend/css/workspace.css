@@ -206,6 +206,8 @@
 .po-stage-section {
   padding: 8px 0;
   border-bottom: 1px solid var(--border);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .po-stage-section:last-child {
@@ -281,6 +283,7 @@
   list-style: none;
   font-size: 12px;
   line-height: 1.4;
+  overflow-x: auto;
 }
 
 .po-tree ul {
@@ -293,6 +296,7 @@
 /* Exec inside process panel */
 .po-exec {
   padding: 4px 0 8px;
+  overflow-x: auto;
 }
 
 /* Evaluation row: score + report side by side, one row per round */
