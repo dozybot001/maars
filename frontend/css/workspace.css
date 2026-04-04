@@ -17,6 +17,7 @@
 .panel-divider {
   width: 1px;
   background: var(--border);
+  margin: 12px 0;
 }
 
 .panel-header {
