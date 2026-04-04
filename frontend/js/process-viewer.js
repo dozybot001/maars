@@ -13,15 +13,13 @@ import { fetchPlanTree, fetchPlanList, fetchDocument, fetchMeta, fetchTaskOutput
 import { createAutoScroller } from './autoscroll.js';
 import { showModal } from './modal.js';
 
-const PHASE_DOCS = { calibrate: 'calibration', strategy: 'strategy', evaluate: 'evaluations' };
-
 let processBody, scroller;
 const documentCache = {};
 const pendingStatuses = {};
 
 // Fixed DOM containers (created once per section)
 let refineSection, refineProposals, refineCritiques, refineFinal;
-let researchSection, researchDocs, scoreContainer;
+let researchSection, researchCalibration, researchStrategies, researchEvaluations, scoreContainer;
 let treeSection, treeContainer;
 let taskSection, execContainer;
 let writeSection, writeFinal;
@@ -42,10 +40,14 @@ export function initProcessViewer() {
   ]);
 
   // Research section
-  researchDocs = el('div', 'po-docs-row');
+  researchCalibration = el('div', 'po-docs-row');
+  researchStrategies = el('div', 'po-docs-row');
+  researchEvaluations = el('div', 'po-docs-row');
   scoreContainer = el('div', 'po-score-container');
   researchSection = stageSection('Research', [
-    subRow('Documents', researchDocs),
+    subRow('Calibration', researchCalibration),
+    subRow('Strategies', researchStrategies),
+    subRow('Evaluations', researchEvaluations),
     subRow('Score', scoreContainer),
   ]);
 
@@ -67,6 +69,17 @@ export function initProcessViewer() {
 
   for (const s of [refineSection, researchSection, treeSection, taskSection, writeSection]) {
     processBody.appendChild(s);
+  }
+
+  // DEBUG: test doc cards overflow
+  for (let i = 1; i <= 8; i++) {
+    refineProposals.appendChild(el('div', 'po-file-item', `\uD83D\uDCC4 proposals/round_${i}`));
+    refineCritiques.appendChild(el('div', 'po-file-item', `\uD83D\uDCC4 critiques/round_${i}`));
+  }
+  researchCalibration.appendChild(el('div', 'po-file-item', '\uD83D\uDCC4 calibration'));
+  for (let i = 1; i <= 4; i++) {
+    researchStrategies.appendChild(el('div', 'po-file-item', `\uD83D\uDCC4 strategy/round_${i}`));
+    researchEvaluations.appendChild(el('div', 'po-file-item', `\uD83D\uDCC4 evaluations/round_${i}`));
   }
 
   on('sse', async (event) => {
@@ -130,15 +143,14 @@ async function handleDoneSignal(stage, phase, taskId) {
 
   // --- Research stage ---
   if (stage === 'research') {
-    if (phase && PHASE_DOCS[phase]) {
-
-      const baseName = PHASE_DOCS[phase];
-      await loadDocCards(baseName, researchDocs);
-
-      if (phase === 'evaluate') {
-        const meta = await fetchMeta();
-        if (meta && meta.current_score != null) appendScore(meta);
-      }
+    if (phase === 'calibrate') {
+      await loadDocCards('calibration', researchCalibration);
+    } else if (phase === 'strategy') {
+      await loadDocCards('strategy', researchStrategies);
+    } else if (phase === 'evaluate') {
+      await loadDocCards('evaluations', researchEvaluations);
+      const meta = await fetchMeta();
+      if (meta && meta.current_score != null) appendScore(meta);
     }
 
     if (phase === 'decompose' || !phase) {
