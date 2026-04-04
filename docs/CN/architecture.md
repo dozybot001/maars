@@ -8,7 +8,7 @@
 
 **分工**：`if/for/while`、调度、重试、迭代终止 → runtime；检索、编码、解释 → agent。
 
-**形态**：Research = agentic workflow（DAG、checkpoint、反馈在代码里）；Refine / Write = 自编排双 Agent 循环（ProposalState 状态管理）。
+**形态**：Research = agentic workflow（DAG、checkpoint、反馈在代码里）；Refine / Write = 自编排双 Agent 循环（IterationState 状态管理）。
 
 ## 2. 系统全景
 
@@ -25,7 +25,7 @@
 ```
 Stage                          -- 生命周期 + 统一 SSE (_send) + LLM streaming (_stream_llm)
 +-- ResearchStage              -- agentic workflow（直接调用 Agno Agent）
-+-- TeamStage                  -- 自编排双 Agent 循环（primary + reviewer + ProposalState）
++-- TeamStage                  -- 自编排双 Agent 循环（primary + reviewer + IterationState）
     +-- RefineStage
     +-- WriteStage
 ```
@@ -35,7 +35,7 @@ Stage                          -- 生命周期 + 统一 SSE (_send) + LLM stream
 ```mermaid
 flowchart TB
     subgraph Refine ["Refine (Explorer <-> Critic)"]
-        RE[Explorer] -- "proposal" --> PS[(ProposalState)]
+        RE[Explorer] -- "proposal" --> PS[(IterationState)]
         PS -- "proposal + issues" --> RC[Critic]
         RC -- "{issues, resolved, pass}" --> PS
         PS -- "proposal + issues" --> RE
@@ -63,7 +63,7 @@ flowchart TB
     RArt --> Write
 
     subgraph Write ["Write (Writer <-> Reviewer)"]
-        WW[Writer] -- "paper" --> WPS[(ProposalState)]
+        WW[Writer] -- "paper" --> WPS[(IterationState)]
         WPS -- "paper + issues" --> WR[Reviewer]
         WR -- "{issues, resolved, pass}" --> WPS
         WPS -- "paper + issues" --> WW
@@ -84,11 +84,11 @@ flowchart TB
 - **恒定上下文**：每轮 Agent 收到的 prompt 大小恒定（原始 idea + 最新提案 + 未解决 issues），不随迭代轮数增长。
 - **结构化通信**：Critic 输出 JSON `{pass, issues, resolved}`，runtime 机械执行状态更新，不依赖 LLM 做状态管理。
 
-### 3.2 ProposalState
+### 3.2 IterationState
 
 ```python
 @dataclass
-class ProposalState:
+class IterationState:
     proposal: str           # 最新一版完整提案
     issues: list[dict]      # [{id, severity, section, problem, suggestion}]
     iteration: int           # 当前轮次
@@ -99,7 +99,7 @@ class ProposalState:
 - `issues`：Critic 输出 `resolved` 列表 -> 按 id 移除；Critic 输出 `issues` 列表 -> 追加
 - `iteration`：每轮 +1
 
-**上下文注入**：ProposalState 不是 Agent 可感知的对象，而是通过 `_build_primary_prompt()` / `_build_reviewer_prompt()` 拼接到 user_text 中。
+**上下文注入**：IterationState 不是 Agent 可感知的对象，而是通过 `_build_primary_prompt()` / `_build_reviewer_prompt()` 拼接到 user_text 中。
 
 ### 3.3 工作流
 
@@ -115,7 +115,7 @@ for round in range(max_delegations):
     # issues = remove resolved + append new
 ```
 
-### 3.4 典型 ProposalState 生命周期
+### 3.4 典型 IterationState 生命周期
 
 ```
 Round 0:
@@ -139,10 +139,10 @@ Round 2:
 | | Research | Refine |
 |---|---|---|
 | 循环 | strategy -> decompose -> execute -> evaluate | primary -> reviewer -> primary -> reviewer |
-| 状态 | task_results + plan_tree + score | ProposalState (proposal + issues) |
+| 状态 | task_results + plan_tree + score | IterationState (proposal + issues) |
 | 编排者 | Python runtime (`_run_loop`) | Python runtime (`_execute` for 循环) |
 | Agent 角色 | 每个 task 独立 Agent | 两个固定角色交替 |
-| 通信方式 | 通过 artifacts/DB | 通过 ProposalState 注入 prompt |
+| 通信方式 | 通过 artifacts/DB | 通过 IterationState 注入 prompt |
 | 持久化 | 有（checkpoint/resume） | 无（一次性，最终产物持久化） |
 | 终止条件 | Evaluate 无 strategy_update | Critic pass=true 或达到 max_delegations |
 
@@ -348,7 +348,7 @@ backend/
 |   +-- prompts_zh.py            # 全中文 prompt + builder 函数
 |   +-- prompts_en.py            # 全英文 prompt + builder 函数
 +-- team/
-|   +-- stage.py                 # TeamStage -- 自编排双 Agent 循环 + ProposalState
+|   +-- stage.py                 # TeamStage -- 自编排双 Agent 循环 + IterationState
 |   +-- refine.py                # RefineStage: Explorer + Critic
 |   +-- write.py                 # WriteStage: Writer + Reviewer（待专门适配）
 |   +-- prompts.py               # 语言分发层

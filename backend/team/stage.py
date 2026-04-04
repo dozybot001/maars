@@ -148,16 +148,14 @@ class TeamStage(Stage):
         return "\n".join(parts)
 
     def _save_round_md(self, dirname: str, text: str, iteration: int):
-        from pathlib import Path
         self.db._ensure_root()
         d = self.db._root / dirname
         d.mkdir(exist_ok=True)
         (d / f"round_{iteration}.md").write_text(text, encoding="utf-8")
 
     def _save_round_json(self, dirname: str, data: dict, iteration: int):
-        from pathlib import Path
+        from backend.db import _write_json
         self.db._ensure_root()
         d = self.db._root / dirname
         d.mkdir(exist_ok=True)
-        from backend.db import _write_json
         _write_json(d / f"round_{iteration}.json", data)
