@@ -475,7 +475,6 @@ class ResearchStage(Stage):
         if redecompose:
             return (True, task, result, review)
 
-        self.db.update_task_status(task_id, "failed")
         raise RuntimeError(f"Task {task_id} failed verification after retry: {review}")
 
     def _save_task(self, task_id: str, result: str):
@@ -487,6 +486,7 @@ class ResearchStage(Stage):
             self.db.save_task_output(task_id, result)
             self.db.update_task_status(task_id, "completed", summary)
         self._task_results[task_id] = result
+        self.db.promote_best_score()
         self._send(task_id=task_id)  # done: task output saved
 
     @staticmethod

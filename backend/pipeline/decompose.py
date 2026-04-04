@@ -90,8 +90,14 @@ async def _process_task(task_id, tasks, pending, context, system_prompt,
             progress_fn(_serialize_tree(tasks, root_id))
             return
 
+    subtasks = data.get("subtasks", [])
+    if not subtasks or not all("id" in st and "description" in st for st in subtasks):
+        task.is_atomic = True
+        progress_fn(_serialize_tree(tasks, root_id))
+        return
+
     task.is_atomic = False
-    for st in data["subtasks"]:
+    for st in subtasks:
         child_id = st["id"] if is_root and root_id == "0" else f"{task_id}_{st['id']}"
         child_deps = [
             d if is_root and root_id == "0" else f"{task_id}_{d}"
