@@ -28,10 +28,10 @@
 
 ```
 Stage                          -- 生命周期 + 统一 SSE (_send) + LLM streaming (_stream_llm)
-+-- ResearchStage              -- Multi-Agent（任务分解 + 并行执行 + 评估循环）
-+-- TeamStage                  -- Multi-Agent（primary + reviewer + IterationState）
-    +-- RefineStage
-    +-- WriteStage
+├── ResearchStage              -- Multi-Agent（任务分解 + 并行执行 + 评估循环）
+└── TeamStage                  -- Multi-Agent（primary + reviewer + IterationState）
+    ├── RefineStage
+    └── WriteStage
 ```
 
 ### 2.3 三阶段工作流（端到端）
@@ -147,49 +147,49 @@ WRITE       Drafts  [round_1] [round_2] ...
 
 ```
 results/{session}/
-+-- idea.md                     # 用户原始输入
-+-- proposals/round_N.md        # Refine: Explorer 各版提案
-+-- critiques/round_N.md+.json  # Refine: Critic 各轮评审
-+-- refined_idea.md             # Refine 最终产出
-+-- calibration.md              # Research: 原子任务定义
-+-- strategy/round_N.md         # Research: 策略版本
-+-- plan_tree.json              # Research: 分解树（真值）
-+-- plan_list.json              # Research: 扁平任务列表（派生缓存）
-+-- tasks/{id}.md               # Research: 各任务产出
-+-- artifacts/{id}/             # Research: 代码、图表等
-+-- evaluations/round_N.json+md # Research: 评估版本
-+-- drafts/round_N.md           # Write: Writer 各版论文
-+-- reviews/round_N.md+.json    # Write: Reviewer 各轮评审
-+-- paper.md                    # Write 最终产出
-+-- meta.json                   # 元信息（tokens、score）
-+-- log.jsonl                   # 流式 chunk 日志
-+-- execution_log.jsonl         # Docker 执行记录
-+-- reproduce/                  # 复现文件
+├── idea.md                     # 用户原始输入
+├── proposals/round_N.md        # Refine: Explorer 各版提案
+├── critiques/round_N.md+.json  # Refine: Critic 各轮评审
+├── refined_idea.md             # Refine 最终产出
+├── calibration.md              # Research: 原子任务定义
+├── strategy/round_N.md         # Research: 策略版本
+├── plan_tree.json              # Research: 分解树（真值）
+├── plan_list.json              # Research: 扁平任务列表（派生缓存）
+├── tasks/{id}.md               # Research: 各任务产出
+├── artifacts/{id}/             # Research: 代码、图表等
+├── evaluations/round_N.json+md # Research: 评估版本
+├── drafts/round_N.md           # Write: Writer 各版论文
+├── reviews/round_N.md+.json    # Write: Reviewer 各轮评审
+├── paper.md                    # Write 最终产出
+├── meta.json                   # 元信息（tokens、score）
+├── log.jsonl                   # 流式 chunk 日志
+├── execution_log.jsonl         # Docker 执行记录
+└── reproduce/                  # 复现文件
 ```
 
 ## 5. 代码结构
 
 ```
 backend/
-+-- pipeline/
-|   +-- orchestrator.py          # 三阶段顺序控制
-|   +-- stage.py                 # Stage 基类（生命周期 + SSE + _stream_llm）
-|   +-- research.py              # ResearchStage -- Multi-Agent 引擎
-|   +-- decompose.py             # 通用分解引擎（支持 root_id）
-|   +-- prompts.py               # 语言分发层
-|   +-- prompts_zh.py / _en.py   # Research prompts + builder 函数
-+-- team/
-|   +-- stage.py                 # TeamStage -- IterationState + Multi-Agent 循环
-|   +-- refine.py                # RefineStage: Explorer + Critic
-|   +-- write.py                 # WriteStage: Writer + Reviewer
-|   +-- prompts.py               # 语言分发层
-|   +-- prompts_zh.py / _en.py   # Team prompts + _REVIEWER_OUTPUT_FORMAT
-+-- agno/
-|   +-- __init__.py              # Stage factory + 工具组装
-|   +-- models.py                # Model factory（Gemini search=True）
-|   +-- tools/                   # Agent 工具（DB, Docker）
-+-- main.py                      # FastAPI 入口
-+-- config.py                    # 环境变量
-+-- db.py                        # 文件型 Session DB
-+-- routes/                      # API 路由
+├── pipeline/
+│   ├── orchestrator.py          # 三阶段顺序控制
+│   ├── stage.py                 # Stage 基类（生命周期 + SSE + _stream_llm）
+│   ├── research.py              # ResearchStage -- Multi-Agent 引擎
+│   ├── decompose.py             # 通用分解引擎（支持 root_id）
+│   ├── prompts.py               # 语言分发层
+│   └── prompts_zh.py / _en.py   # Research prompts + builder 函数
+├── team/
+│   ├── stage.py                 # TeamStage -- IterationState + Multi-Agent 循环
+│   ├── refine.py                # RefineStage: Explorer + Critic
+│   ├── write.py                 # WriteStage: Writer + Reviewer
+│   ├── prompts.py               # 语言分发层
+│   └── prompts_zh.py / _en.py   # Team prompts + _REVIEWER_OUTPUT_FORMAT
+├── agno/
+│   ├── __init__.py              # Stage factory + 工具组装
+│   ├── models.py                # Model factory（Gemini search=True）
+│   └── tools/                   # Agent 工具（DB, Docker）
+├── main.py                      # FastAPI 入口
+├── config.py                    # 环境变量
+├── db.py                        # 文件型 Session DB
+└── routes/                      # API 路由
 ```

@@ -28,10 +28,10 @@
 
 ```
 Stage                          -- lifecycle + SSE (_send) + LLM streaming (_stream_llm)
-+-- ResearchStage              -- multi-agent (task decomposition + parallel execution + evaluation loop)
-+-- TeamStage                  -- Multi-Agent (primary + reviewer + IterationState)
-    +-- RefineStage
-    +-- WriteStage
+├── ResearchStage              -- multi-agent (task decomposition + parallel execution + evaluation loop)
+└── TeamStage                  -- Multi-Agent (primary + reviewer + IterationState)
+    ├── RefineStage
+    └── WriteStage
 ```
 
 ### 2.3 End-to-End Pipeline
@@ -147,49 +147,49 @@ WRITE       Drafts  [round_1] [round_2] ...
 
 ```
 results/{session}/
-+-- idea.md                     # User raw input
-+-- proposals/round_N.md        # Refine: Explorer draft versions
-+-- critiques/round_N.md+.json  # Refine: Critic reviews
-+-- refined_idea.md             # Refine final output
-+-- calibration.md              # Research: atomic task definition
-+-- strategy/round_N.md         # Research: strategy versions
-+-- plan_tree.json              # Research: decomposition tree (source of truth)
-+-- plan_list.json              # Research: flat task list (derived cache)
-+-- tasks/{id}.md               # Research: task outputs
-+-- artifacts/{id}/             # Research: code, figures, data
-+-- evaluations/round_N.json+md # Research: evaluation versions
-+-- drafts/round_N.md           # Write: Writer draft versions
-+-- reviews/round_N.md+.json    # Write: Reviewer reviews
-+-- paper.md                    # Write final output
-+-- meta.json                   # Metadata (tokens, score)
-+-- log.jsonl                   # Streaming chunk log
-+-- execution_log.jsonl         # Docker execution log
-+-- reproduce/                  # Reproduction files
+├── idea.md                     # User raw input
+├── proposals/round_N.md        # Refine: Explorer draft versions
+├── critiques/round_N.md+.json  # Refine: Critic reviews
+├── refined_idea.md             # Refine final output
+├── calibration.md              # Research: atomic task definition
+├── strategy/round_N.md         # Research: strategy versions
+├── plan_tree.json              # Research: decomposition tree (source of truth)
+├── plan_list.json              # Research: flat task list (derived cache)
+├── tasks/{id}.md               # Research: task outputs
+├── artifacts/{id}/             # Research: code, figures, data
+├── evaluations/round_N.json+md # Research: evaluation versions
+├── drafts/round_N.md           # Write: Writer draft versions
+├── reviews/round_N.md+.json    # Write: Reviewer reviews
+├── paper.md                    # Write final output
+├── meta.json                   # Metadata (tokens, score)
+├── log.jsonl                   # Streaming chunk log
+├── execution_log.jsonl         # Docker execution log
+└── reproduce/                  # Reproduction files
 ```
 
 ## 5. Code Structure
 
 ```
 backend/
-+-- pipeline/
-|   +-- orchestrator.py          # Three-stage sequencing
-|   +-- stage.py                 # Stage base class (lifecycle + SSE + _stream_llm)
-|   +-- research.py              # ResearchStage -- Multi-Agent engine
-|   +-- decompose.py             # Recursive decomposition engine
-|   +-- prompts.py               # Language dispatcher
-|   +-- prompts_zh.py / _en.py   # Research prompts + builder functions
-+-- team/
-|   +-- stage.py                 # TeamStage -- IterationState + Multi-Agent loop
-|   +-- refine.py                # RefineStage: Explorer + Critic
-|   +-- write.py                 # WriteStage: Writer + Reviewer
-|   +-- prompts.py               # Language dispatcher
-|   +-- prompts_zh.py / _en.py   # Team prompts + _REVIEWER_OUTPUT_FORMAT
-+-- agno/
-|   +-- __init__.py              # Stage factory + tool assembly
-|   +-- models.py                # Model factory (Gemini search=True)
-|   +-- tools/                   # Agent tools (DB, Docker)
-+-- main.py                      # FastAPI entry
-+-- config.py                    # Environment config
-+-- db.py                        # File-based Session DB
-+-- routes/                      # API routes
+├── pipeline/
+│   ├── orchestrator.py          # Three-stage sequencing
+│   ├── stage.py                 # Stage base class (lifecycle + SSE + _stream_llm)
+│   ├── research.py              # ResearchStage -- Multi-Agent engine
+│   ├── decompose.py             # Recursive decomposition engine
+│   ├── prompts.py               # Language dispatcher
+│   └── prompts_zh.py / _en.py   # Research prompts + builder functions
+├── team/
+│   ├── stage.py                 # TeamStage -- IterationState + Multi-Agent loop
+│   ├── refine.py                # RefineStage: Explorer + Critic
+│   ├── write.py                 # WriteStage: Writer + Reviewer
+│   ├── prompts.py               # Language dispatcher
+│   └── prompts_zh.py / _en.py   # Team prompts + _REVIEWER_OUTPUT_FORMAT
+├── agno/
+│   ├── __init__.py              # Stage factory + tool assembly
+│   ├── models.py                # Model factory (Gemini search=True)
+│   └── tools/                   # Agent tools (DB, Docker)
+├── main.py                      # FastAPI entry
+├── config.py                    # Environment config
+├── db.py                        # File-based Session DB
+└── routes/                      # API routes
 ```
