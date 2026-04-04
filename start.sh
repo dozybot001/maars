@@ -161,6 +161,7 @@ sync_env_keys() {
 }
 
 # ===================================================================
+clear
 print_logo
 append_log "MAARS startup on $OS_NAME ($(date))"
 
