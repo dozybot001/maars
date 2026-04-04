@@ -40,7 +40,6 @@ body {
 }
 
 main {
-  padding: 0 24px;
   flex: 1;
   overflow: hidden;
 }
