@@ -15,13 +15,19 @@ MAARS 接受一个模糊的研究想法（或 Kaggle 比赛链接），通过三
 
 ## 流水线
 
-```
-          Refine                    Research                     Write
-   ┌─────────────────┐   ┌───────────────────────┐   ┌─────────────────┐
-   │ Explorer <-> Critic│   │ Calibrate -> Strategy │   │ Writer <-> Reviewer│
-   │                   │──>│ -> Decompose -> Execute│──>│                   │
-   │  refined_idea.md  │   │   <-> Verify -> Evaluate│   │    paper.md       │
-   └─────────────────┘   └───────────────────────┘   └─────────────────┘
+```mermaid
+graph LR
+    subgraph Refine
+        E[Explorer] <--> C[Critic]
+    end
+    subgraph Research
+        Cal[Calibrate] --> Str[Strategy] --> Dec[Decompose] --> Exec[Execute] <--> Ver[Verify] --> Eval[Evaluate]
+        Eval -.->|strategy update| Str
+    end
+    subgraph Write
+        W[Writer] <--> R[Reviewer]
+    end
+    Refine -->|refined_idea| Research -->|artifacts| Write -->|paper.md| Final((Done))
 ```
 
 - **Refine**：Explorer 调研文献并起草提案；Critic 评审并推动更强的表述。迭代直到 Critic 满意。

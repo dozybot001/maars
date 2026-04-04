@@ -15,13 +15,19 @@ Each stage is orchestrated by Python runtime with LLM agents executing the open-
 
 ## Pipeline
 
-```
-          Refine                    Research                     Write
-   ┌─────────────────┐   ┌───────────────────────┐   ┌─────────────────┐
-   │ Explorer ←→ Critic│   │ Calibrate → Strategy  │   │ Writer ←→ Reviewer│
-   │                   │──→│ → Decompose → Execute │──→│                   │
-   │  refined_idea.md  │   │   ⇄ Verify → Evaluate │   │    paper.md       │
-   └─────────────────┘   └───────────────────────┘   └─────────────────┘
+```mermaid
+graph LR
+    subgraph Refine
+        E[Explorer] <--> C[Critic]
+    end
+    subgraph Research
+        Cal[Calibrate] --> Str[Strategy] --> Dec[Decompose] --> Exec[Execute] <--> Ver[Verify] --> Eval[Evaluate]
+        Eval -.->|strategy update| Str
+    end
+    subgraph Write
+        W[Writer] <--> R[Reviewer]
+    end
+    Refine -->|refined_idea| Research -->|artifacts| Write -->|paper.md| Final((Done))
 ```
 
 - **Refine**: Explorer surveys literature and drafts a proposal; Critic reviews and pushes for stronger formulations. Iterates until the Critic is satisfied.
