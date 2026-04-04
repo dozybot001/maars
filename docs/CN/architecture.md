@@ -148,23 +148,37 @@ WRITE       Drafts  [round_1] [round_2] ...
 ```
 results/{session}/
 ├── idea.md                     # 用户原始输入
-├── proposals/round_N.md        # Refine: Explorer 各版提案
-├── critiques/round_N.md+.json  # Refine: Critic 各轮评审
 ├── refined_idea.md             # Refine 最终产出
+├── proposals/                  # Refine: Explorer 各版提案
+│   └── round_N.md
+├── critiques/                  # Refine: Critic 各轮评审
+│   ├── round_N.md
+│   └── round_N.json
 ├── calibration.md              # Research: 原子任务定义
-├── strategy/round_N.md         # Research: 策略版本
+├── strategy/                   # Research: 策略版本
+│   └── round_N.md
 ├── plan_tree.json              # Research: 分解树（真值）
 ├── plan_list.json              # Research: 扁平任务列表（派生缓存）
-├── tasks/{id}.md               # Research: 各任务产出
-├── artifacts/{id}/             # Research: 代码、图表等
-├── evaluations/round_N.json+md # Research: 评估版本
-├── drafts/round_N.md           # Write: Writer 各版论文
-├── reviews/round_N.md+.json    # Write: Reviewer 各轮评审
+├── tasks/                      # Research: 各任务产出
+│   └── {id}.md
+├── artifacts/                  # Research: 代码、图表等
+│   └── {id}/
+├── evaluations/                # Research: 评估版本
+│   ├── round_N.json
+│   └── round_N.md
+├── drafts/                     # Write: Writer 各版论文
+│   └── round_N.md
+├── reviews/                    # Write: Reviewer 各轮评审
+│   ├── round_N.md
+│   └── round_N.json
 ├── paper.md                    # Write 最终产出
 ├── meta.json                   # 元信息（tokens、score）
 ├── log.jsonl                   # 流式 chunk 日志
 ├── execution_log.jsonl         # Docker 执行记录
 └── reproduce/                  # 复现文件
+    ├── Dockerfile
+    ├── run.sh
+    └── docker-compose.yml
 ```
 
 ## 5. 代码结构
