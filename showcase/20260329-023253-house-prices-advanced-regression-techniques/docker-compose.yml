@@ -1,7 +1,0 @@
-services:
-  experiment:
-    build:
-      context: .
-      dockerfile: Dockerfile.experiment
-    volumes:
-      - ./results:/workspace/results

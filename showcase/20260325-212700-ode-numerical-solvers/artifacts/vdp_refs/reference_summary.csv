@@ -1,8 +1,0 @@
-mu,n_points,t_end_reached,status,filename
-1.0,4419.0,10.5,Success,vdp_mu_1.npz
-10.0,11445.0,34.71,Success,vdp_mu_10.npz
-100.0,16217.0,252.60000000000002,Success,vdp_mu_100.npz
-1000.0,20230.0,2431.5,Success,vdp_mu_1000.npz
-10000.0,24315.0,24220.500000000004,Success,vdp_mu_10000.npz
-100000.0,28090.0,242110.5,Success,vdp_mu_100000.npz
-1000000.0,,,Failed: Required step size is less than spacing between numbers.,

@@ -1,9 +1,0 @@
-FROM maars-sandbox:latest
-USER root
-RUN pip install --no-cache-dir mpmath pandas
-COPY scripts/ /workspace/scripts/
-COPY run.sh /workspace/run.sh
-RUN chmod +x /workspace/run.sh && chown -R sandbox:sandbox /workspace
-USER sandbox
-WORKDIR /workspace
-CMD ["bash", "run.sh"]

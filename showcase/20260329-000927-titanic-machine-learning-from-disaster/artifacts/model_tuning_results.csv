@@ -1,4 +1,0 @@
-Model,Mean CV Accuracy,Std CV Accuracy,Best Params
-RandomForest,0.849588851923922,0.026537463372892603,"{'n_estimators': 280, 'max_depth': 12, 'min_samples_split': 12, 'min_samples_leaf': 1, 'max_features': None}"
-XGBoost,0.8496014060636495,0.022053589659605428,"{'n_estimators': 500, 'max_depth': 4, 'learning_rate': 0.06569516926992114, 'subsample': 0.6500224428304437, 'colsample_bytree': 0.7022332671403443, 'gamma': 1.2166494848249776}"
-HistGradientBoosting,0.8507312786391312,0.019638432790567085,"{'max_iter': 98, 'max_depth': 3, 'learning_rate': 0.19442465885425078, 'l2_regularization': 0.6060971381184996, 'max_leaf_nodes': 21}"

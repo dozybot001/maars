@@ -1,6 +1,0 @@
-Method,Time Span,CPU Time,Func Evals,Stability/Performance Notes
-Euler (Fixed Step),0 - 0.1,0.0004s,100,Successful (Transient only)
-RK4 (Fixed Step),0 - 0.1,0.0012s,400,Successful (Transient only)
-DP5 (RK45),0 - 100,2.09s,"732,290",Highly Inefficient (Stability bound)
-BDF (Implicit),0 - 1e11,0.0558s,4057,Extremely Efficient (A-Stable)
-Radau (Impl. RK),0 - 1e11,0.0762s,8413,Extremely Efficient (L-Stable)

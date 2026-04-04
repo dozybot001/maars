@@ -1,4 +1,0 @@
-Model,Mean Accuracy,Std Dev
-HistGradientBoosting,0.8372,0.0344
-SVM,0.8316,0.0249
-Random Forest,0.8092,0.0308

@@ -1,9 +1,0 @@
-mu,nfev,njev,status,file
-0,64240,2,0,/workspace/output/vdp_refs/vdp_ref_mu_0.csv
-1,163239,2,0,/workspace/output/vdp_refs/vdp_ref_mu_1.csv
-10,155063,4,0,/workspace/output/vdp_refs/vdp_ref_mu_10.csv
-100,193204,212,0,/workspace/output/vdp_refs/vdp_ref_mu_100.csv
-1000,213630,812,0,/workspace/output/vdp_refs/vdp_ref_mu_1000.csv
-10000,237800,1466,0,/workspace/output/vdp_refs/vdp_ref_mu_10000.csv
-100000,286002,2117,0,/workspace/output/vdp_refs/vdp_ref_mu_100000.csv
-1000000,153183,2442,-1,/workspace/output/vdp_refs/vdp_ref_mu_1000000.csv
