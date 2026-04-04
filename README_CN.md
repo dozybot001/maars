@@ -69,18 +69,14 @@ graph TD
 
 ### Research
 
-```
-Calibrate（定义原子任务粒度）
-    |
-Strategy（规划方法，设定评分方向）
-    |
-Decompose（分解为任务 DAG）
-    |
-Execute <-> Verify（Docker 并行执行，支持重试/重分解）
-    |
-Evaluate（评估结果，决定是否继续）
-    |
-有 strategy_update？──是──> 回到 Strategy
+```mermaid
+graph TD
+    Cal[Calibrate] --> Str[Strategy]
+    Str --> Dec[Decompose]
+    Dec --> Exec[Execute] <--> Ver[Verify]
+    Ver --> Eval[Evaluate]
+    Eval -->|strategy update| Str
+    Eval -->|done| Done((Done))
 ```
 
 所有代码在隔离的 Docker 容器中运行。任务通过 `asyncio.gather` 并行执行，并发数可配置。

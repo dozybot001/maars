@@ -69,18 +69,14 @@ Context size stays constant — only the latest draft and unresolved issues are 
 
 ### Research
 
-```
-Calibrate (define atomic task granularity)
-    ↓
-Strategy (plan approach, set scoring direction)
-    ↓
-Decompose (break into task DAG)
-    ↓
-Execute ⇄ Verify (parallel in Docker, with retry/redecompose)
-    ↓
-Evaluate (assess results, decide whether to iterate)
-    ↓
-strategy_update? ──yes──→ back to Strategy
+```mermaid
+graph TD
+    Cal[Calibrate] --> Str[Strategy]
+    Str --> Dec[Decompose]
+    Dec --> Exec[Execute] <--> Ver[Verify]
+    Ver --> Eval[Evaluate]
+    Eval -->|strategy update| Str
+    Eval -->|done| Done((Done))
 ```
 
 All code runs in isolated Docker containers. Tasks execute in parallel via `asyncio.gather` with configurable concurrency.
