@@ -51,7 +51,7 @@ bash start.sh
 
 <p align="center"><img src="docs/assets/tui.png" width="720" alt="MAARS 启动"></p>
 
-然后在输入框粘贴你的研究想法或 Kaggle 链接，点击 Start。
+然后在输入框粘贴你的研究想法或 Kaggle 链接，按 Enter 启动。
 
 <p align="center"><img src="docs/assets/ui.png" width="720" alt="MAARS 界面"></p>
 

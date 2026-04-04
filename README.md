@@ -51,7 +51,7 @@ On first run, `start.sh` will:
 
 <p align="center"><img src="docs/assets/tui.png" width="720" alt="MAARS startup"></p>
 
-Then paste your research idea or a Kaggle URL into the input box and hit Start.
+Then paste your research idea or a Kaggle URL into the input box and press Enter.
 
 <p align="center"><img src="docs/assets/ui.png" width="720" alt="MAARS UI"></p>
 
