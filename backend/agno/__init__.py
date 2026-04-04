@@ -23,7 +23,7 @@ def create_agno_stages(
     list_artifacts = docker_tools[1:] if len(docker_tools) > 1 else []
     research_tools = [ArxivTools(), WikipediaTools()]
     all_research_tools = db_tools + docker_tools + research_tools
-    writer_tools = db_tools + list_artifacts + research_tools
+    writer_tools = db_tools + list_artifacts
     reviewer_tools = db_tools + list_artifacts
 
     return {

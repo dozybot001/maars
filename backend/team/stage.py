@@ -11,10 +11,10 @@ log = logging.getLogger(__name__)
 
 
 @dataclass
-class ProposalState:
+class IterationState:
     """Compact state passed between iterations. Replaces share_member_interactions."""
 
-    proposal: str = ""
+    draft: str = ""
     issues: list[dict] = field(default_factory=list)
     iteration: int = 0
 
@@ -33,8 +33,8 @@ class ProposalState:
                 lines.append(f"  Suggestion: {suggestion}")
         return "\n".join(lines)
 
-    def update(self, new_proposal: str, feedback: dict):
-        self.proposal = new_proposal
+    def update(self, new_draft: str, feedback: dict):
+        self.draft = new_draft
         resolved_ids = set(feedback.get("resolved", []))
         remaining = [iss for iss in self.issues if iss.get("id") not in resolved_ids]
         remaining.extend(feedback.get("issues", []))
@@ -71,7 +71,7 @@ class TeamStage(Stage):
 
     async def _execute(self) -> str:
         input_text = self.load_input()
-        state = ProposalState()
+        state = IterationState()
         primary_instr, primary_tools, primary_label = self._primary_config()
         reviewer_instr, reviewer_tools, reviewer_label = self._reviewer_config()
 
@@ -82,16 +82,16 @@ class TeamStage(Stage):
             # 1. Primary agent produces/revises
             self._current_phase = self._primary_phase
             primary_user = self._build_primary_prompt(input_text, state)
-            proposal = await self._stream_llm(
+            draft = await self._stream_llm(
                 self._model, primary_tools, primary_instr, primary_user,
                 call_id=primary_label, content_level=3,
                 label=True, label_level=2,
             )
-            state.proposal = proposal
+            state.draft = draft
 
             # Persist primary output
             if self.db:
-                self._save_round_md(self._primary_dir, proposal, round_num + 1)
+                self._save_round_md(self._primary_dir, draft, round_num + 1)
             self._send()
 
             # Skip review on final allowed round
@@ -122,27 +122,27 @@ class TeamStage(Stage):
                 break
 
             # 4. Update state for next round
-            state.update(proposal, feedback)
+            state.update(draft, feedback)
 
         self._current_phase = ""
-        self.output = state.proposal
+        self.output = state.draft
         if not self.output:
             log.warning("%s: no content produced", self.name)
 
         return self._finalize()
 
-    def _build_primary_prompt(self, input_text: str, state: ProposalState) -> str:
+    def _build_primary_prompt(self, input_text: str, state: IterationState) -> str:
         if state.iteration == 0:
             return input_text
         parts = [input_text]
-        parts.append(f"\n## Current Draft (Revision {state.iteration})\n{state.proposal}")
+        parts.append(f"\n## Current Draft (Revision {state.iteration})\n{state.draft}")
         parts.append(f"\n## Issues to Address\n{state.format_issues()}")
         parts.append("\nRevise the draft to address all listed issues. Output the complete revised version.")
         return "\n".join(parts)
 
-    def _build_reviewer_prompt(self, input_text: str, state: ProposalState) -> str:
+    def _build_reviewer_prompt(self, input_text: str, state: IterationState) -> str:
         parts = [input_text]
-        parts.append(f"\n## Proposal to Review\n{state.proposal}")
+        parts.append(f"\n## Content to Review\n{state.draft}")
         if state.issues:
             parts.append(f"\n## Previously Identified Issues\n{state.format_issues()}")
         return "\n".join(parts)
