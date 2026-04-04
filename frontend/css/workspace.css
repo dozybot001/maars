@@ -283,7 +283,7 @@
   list-style: none;
   font-size: 12px;
   line-height: 1.4;
-  overflow-x: auto;
+  overflow: hidden;
 }
 
 .po-tree ul {
@@ -296,7 +296,7 @@
 /* Exec inside process panel */
 .po-exec {
   padding: 4px 0 8px;
-  overflow-x: auto;
+  overflow: hidden;
 }
 
 /* Evaluation row: score + report side by side, one row per round */
