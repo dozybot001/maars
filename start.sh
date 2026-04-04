@@ -220,10 +220,26 @@ printf '\n  %b\n' "${CYAN}${BOLD}Configuration${NC}"
 
 ACTIVE_LABEL="Google API Key"
 GOOGLE_KEY="$(read_env_value MAARS_GOOGLE_API_KEY 2>/dev/null || true)"
-if [ -n "$GOOGLE_KEY" ]; then
-    print_check "ok" "Google API Key" "Set"
-else
+GOOGLE_MODEL="$(read_env_value MAARS_GOOGLE_MODEL 2>/dev/null || echo 'gemini-3-flash-preview')"
+if [ -z "$GOOGLE_KEY" ]; then
     print_check "fail" "Google API Key" "MAARS_GOOGLE_API_KEY is empty in .env"
+elif API_OUT="$("$PYTHON" -c "
+import urllib.request, urllib.error, json, sys
+url = 'https://generativelanguage.googleapis.com/v1beta/models/${GOOGLE_MODEL}:generateContent?key=${GOOGLE_KEY}'
+req = urllib.request.Request(url, data=json.dumps({'contents':[{'parts':[{'text':'hi'}]}]}).encode(), headers={'Content-Type':'application/json'}, method='POST')
+try:
+    with urllib.request.urlopen(req, timeout=10) as r: print('ok')
+except urllib.error.HTTPError as e: print(f'fail\t{e.code} {e.reason}')
+except Exception as e: print(f'warn\t{e}')
+" 2>>"$LOG_FILE")"; then
+    IFS=$'\t' read -r KEY_STATUS KEY_HINT <<< "$API_OUT"
+    case "$KEY_STATUS" in
+        ok)   print_check "ok"   "Google API Key" "Verified ($GOOGLE_MODEL)" ;;
+        fail) print_check "fail" "Google API Key" "$KEY_HINT — check key or model name" ;;
+        *)    print_check "warn" "Google API Key" "Set but unreachable — $KEY_HINT" ;;
+    esac
+else
+    print_check "warn" "Google API Key" "Set but could not verify"
 fi
 
 ACTIVE_LABEL="Config Sanity"
