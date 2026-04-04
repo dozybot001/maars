@@ -153,6 +153,8 @@ class ResearchStage(Stage):
             raise asyncio.CancelledError()
 
     async def _execute(self) -> str:
+        await asyncio.to_thread(_preflight_docker)
+
         self.output = ""
         self._task_results = {}
         self._task_summaries = {}
@@ -188,8 +190,6 @@ class ResearchStage(Stage):
     # ------------------------------------------------------------------
 
     async def _run_loop(self, idea: str):
-        await asyncio.to_thread(_preflight_docker)
-
         iteration = self.db.get_iteration()
         evaluation = None  # None = first pass; has data = subsequent pass
 
