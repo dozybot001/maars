@@ -101,7 +101,7 @@ results/{session}/
 |----------|-------------|
 | [Architecture](docs/EN/architecture.md) | System overview, SSE protocol, storage layout |
 | [Refine & Write](docs/EN/refine-write.md) | IterationState pattern, dual-agent loop details |
-| [Research](docs/EN/research.md) | Agentic workflow, parallel execution, key decisions |
+| [Research](docs/EN/research.md) | Task decomposition, parallel execution, evaluation loop |
 
 ## Tech Stack
 

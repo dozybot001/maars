@@ -101,7 +101,7 @@ results/{session}/
 |------|------|
 | [架构概览](docs/CN/architecture.md) | 系统概览、SSE 协议、存储结构 |
 | [Refine & Write](docs/CN/refine-write.md) | IterationState 模式、双 Agent 循环详情 |
-| [Research](docs/CN/research.md) | Agentic workflow、并行执行、关键决策 |
+| [Research](docs/CN/research.md) | 任务分解、并行执行、评估循环 |
 
 ## 技术栈
 
