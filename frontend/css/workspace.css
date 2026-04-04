@@ -244,7 +244,10 @@
 /* Document cards row */
 .po-docs-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  overflow-x: auto;
   gap: 6px;
 }
 
