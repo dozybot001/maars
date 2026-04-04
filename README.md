@@ -51,37 +51,7 @@ On first run, `start.sh` will:
 
 Then paste your research idea or a Kaggle URL into the input box and hit Start.
 
-## How It Works
-
-### Refine & Write — Iterative Dual-Agent Loop
-
-Both stages use the same `IterationState` pattern:
-
-```mermaid
-graph TD
-    P[Primary Agent] -->|draft| R[Reviewer Agent]
-    R -->|"{pass, issues, resolved}"| Check{pass?}
-    Check -->|yes| Done((Done))
-    Check -->|no| Update[Update IterationState] --> P
-```
-
-Context size stays constant — only the latest draft and unresolved issues are passed each round, not the full history.
-
-### Research
-
-```mermaid
-graph TD
-    Cal[Calibrate] --> Str[Strategy]
-    Str --> Dec[Decompose]
-    Dec --> Exec[Execute] <--> Ver[Verify]
-    Ver --> Eval[Evaluate]
-    Eval -->|strategy update| Str
-    Eval -->|done| Done((Done))
-```
-
-All code runs in isolated Docker containers. Tasks execute in parallel via `asyncio.gather` with configurable concurrency.
-
-### Kaggle Mode
+## Kaggle Mode
 
 Paste a Kaggle competition URL — MAARS auto-extracts the competition ID, downloads data, and skips the Refine stage.
 

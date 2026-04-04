@@ -51,37 +51,7 @@ bash start.sh
 
 然后在输入框粘贴你的研究想法或 Kaggle 链接，点击 Start。
 
-## 工作原理
-
-### Refine 与 Write——迭代双 Agent 循环
-
-两个阶段使用相同的 `IterationState` 模式：
-
-```mermaid
-graph TD
-    P[Primary Agent] -->|draft| R[Reviewer Agent]
-    R -->|"{pass, issues, resolved}"| Check{pass?}
-    Check -->|yes| Done((Done))
-    Check -->|no| Update[Update IterationState] --> P
-```
-
-上下文大小恒定——每轮只传最新的 draft 和未解决的 issues，不是完整历史。
-
-### Research
-
-```mermaid
-graph TD
-    Cal[Calibrate] --> Str[Strategy]
-    Str --> Dec[Decompose]
-    Dec --> Exec[Execute] <--> Ver[Verify]
-    Ver --> Eval[Evaluate]
-    Eval -->|strategy update| Str
-    Eval -->|done| Done((Done))
-```
-
-所有代码在隔离的 Docker 容器中运行。任务通过 `asyncio.gather` 并行执行，并发数可配置。
-
-### Kaggle 模式
+## Kaggle 模式
 
 粘贴 Kaggle 比赛链接——MAARS 自动提取比赛 ID、下载数据、跳过 Refine 阶段。
 
