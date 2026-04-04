@@ -98,7 +98,6 @@ class ResearchStage(Stage):
             'list_tasks': 'List all completed tasks with IDs and sizes.',
             'read_refined_idea': 'Read the refined research idea.',
             'read_plan_tree': 'Read the full decomposition tree.',
-            'DuckDuckGoTools': 'Web search via DuckDuckGo.',
             'ArxivTools': 'Search academic papers on arXiv.',
             'WikipediaTools': 'Search Wikipedia articles.',
         }

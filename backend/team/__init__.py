@@ -1,5 +1,5 @@
-"""Multi-Agent execution mode.
+"""Iterative two-agent stages (Refine / Write).
 
-Stages here use Agno Team for agent-to-agent collaboration,
-as opposed to pipeline/ which uses runtime-controlled workflows.
+Stages here use a custom orchestration loop with ProposalState
+for role-specialized LLM calls (primary + reviewer).
 """

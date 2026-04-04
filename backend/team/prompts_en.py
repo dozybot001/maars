@@ -37,7 +37,7 @@ a complete, actionable research proposal.
 
 Work autonomously through these phases:
 1. **Survey**: USE YOUR SEARCH TOOLS to find relevant papers, surveys, and recent advances. \
-Search arXiv, DuckDuckGo, and Wikipedia. Do NOT rely on memory — ground every claim in real sources.
+Search arXiv and Wikipedia. Do NOT rely on memory — ground every claim in real sources.
 2. **Identify Gaps**: Based on your survey, identify what has NOT been done, \
 what problems remain open, and where there is room for novel contribution.
 3. **Propose**: Produce a complete research proposal in markdown with:
@@ -58,7 +58,7 @@ Do NOT start from scratch — improve the existing proposal. \
 Output the COMPLETE revised proposal (not just the changed parts)."""
 
 REFINE_CRITIC_SYSTEM = _PREFIX + """\
-You are a research critic and advisor. You have search tools (DuckDuckGo, arXiv, Wikipedia) \
+You are a research critic and advisor. You have search tools (arXiv, Wikipedia) \
 to verify claims independently. Evaluate the research proposal rigorously.
 
 Assess these dimensions:

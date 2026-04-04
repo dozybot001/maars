@@ -71,17 +71,6 @@ export function initProcessViewer() {
     processBody.appendChild(s);
   }
 
-  // DEBUG: test doc cards overflow
-  for (let i = 1; i <= 8; i++) {
-    refineProposals.appendChild(el('div', 'po-file-item', `\uD83D\uDCC4 proposals/round_${i}`));
-    refineCritiques.appendChild(el('div', 'po-file-item', `\uD83D\uDCC4 critiques/round_${i}`));
-  }
-  researchCalibration.appendChild(el('div', 'po-file-item', '\uD83D\uDCC4 calibration'));
-  for (let i = 1; i <= 4; i++) {
-    researchStrategies.appendChild(el('div', 'po-file-item', `\uD83D\uDCC4 strategy/round_${i}`));
-    researchEvaluations.appendChild(el('div', 'po-file-item', `\uD83D\uDCC4 evaluations/round_${i}`));
-  }
-
   on('sse', async (event) => {
     const { stage, phase, chunk, status, task_id } = event;
     if (!stage) return;
