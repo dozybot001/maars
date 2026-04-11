@@ -41,15 +41,21 @@
 
 ### 2.3 Model Provider
 
-**已定：Anthropic Claude** — 默认 `claude-sonnet-4-6`，可通过 `MAARS_CHAT_MODEL` 环境变量 override 到 `claude-opus-4-6` 等其它 Anthropic 模型。
+**多 provider 支持，默认 Google Gemini 3 Flash Preview** — 通过 `MAARS_CHAT_MODEL` 环境变量用 `provider:model` 格式切换：
 
-**选型理由**：
+- `google_genai:gemini-3-flash-preview`（默认）
+- `anthropic:claude-sonnet-4-6`（备选）
+- `openai:gpt-4.1` 等（理论可行，未实际验证）
 
-- Refine / Write 的对抗循环需要 Critic / Reviewer 愿意挑刺，Claude 在"对抗 + 判断"这个维度最强
-- Structured output 稳定（Critic 输出解析不出来会让整个迭代失败）
-- `langchain-anthropic` 生态成熟
+**实现**：使用 LangChain 官方的 `init_chat_model()` 工厂，根据 `provider:model` 前缀自动路由到对应的 `ChatXXX` 类，`src/maars/models.py` 不需要维护 provider 分支逻辑——符合"mature deps > 自建"原则。
 
-**策略**：全流程先统一用一个 provider，M4 Research 跑通后再决定要不要按阶段差异化（例如 Research Execute 用更便宜的模型）。
+**选型演变**：
+
+- **2026-04-11** 最初拍板 Claude，理由是对抗 + 判断最强、structured output 最稳定
+- **2026-04-12** 切换到 Gemini-default：Anthropic 账户余额为 0 成为 Step 2 blocker，手头有 Gemini 余额，改用 `gemini-3-flash-preview`
+- Claude 作为可选备选保留在依赖里（`langchain-anthropic`），将来若 Critic 的 Pydantic 解析在 Gemini 下抽风，可以单独把 Critic 切回 Claude——multi-provider 的意义正在于此
+
+**策略**：全流程先统一用 Gemini 跑通，M3 Research 跑通后再考虑按 node 差异化。
 
 ### 2.4 Checkpointer
 
