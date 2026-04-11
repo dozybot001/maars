@@ -22,7 +22,7 @@ def hello() -> None:
 
 @app.command()
 def sanity() -> None:
-    """Smoke-test the chat model by invoking it once."""
+    """(debug) Smoke-test the chat model by invoking it once."""
     from maars.config import CHAT_MODEL
     from maars.models import get_chat_model
 
@@ -45,7 +45,7 @@ def sanity() -> None:
 def critique(
     draft: str = typer.Argument(..., help="The research proposal draft to critique"),
 ) -> None:
-    """Run the Critic on a draft and print structured output."""
+    """(debug) Run the Critic on a draft and print structured output."""
     from maars.agents.critic import critique_draft
 
     result = critique_draft(draft)
@@ -67,7 +67,7 @@ def critique(
 def draft(
     raw_idea: str = typer.Argument(..., help="The raw research idea to expand into a draft"),
 ) -> None:
-    """Run the Explorer on a raw idea and print the draft proposal."""
+    """(debug) Run the Explorer on a raw idea and print the draft proposal."""
     from maars.agents.explorer import draft_proposal
 
     result = draft_proposal(raw_idea)
@@ -76,14 +76,36 @@ def draft(
 
 @app.command()
 def refine(
-    raw_idea: str = typer.Argument(..., help="The raw research idea to refine"),
-    thread_id: str = typer.Option("default", "--thread", help="Thread ID for checkpointing and resume"),
+    raw_idea: str = typer.Argument(
+        "", help="The raw research idea to refine (or use --from-file)"
+    ),
+    thread_id: str = typer.Option(
+        "default", "--thread", help="Thread ID for checkpointing and resume"
+    ),
     fresh: bool = typer.Option(
         False, "--fresh", help="Start a new thread instead of resuming existing checkpoint"
+    ),
+    from_file: Path = typer.Option(
+        None,
+        "--from-file",
+        "-f",
+        help="Read raw idea from a markdown file (alternative to positional argument)",
     ),
 ) -> None:
     """Run the full Refine graph with streaming events and checkpoint-based resume."""
     import asyncio
+
+    if from_file is not None:
+        if not from_file.exists():
+            typer.echo(f"Error: file not found: {from_file}", err=True)
+            raise typer.Exit(1)
+        raw_idea = from_file.read_text(encoding="utf-8")
+
+    if not raw_idea.strip():
+        typer.echo(
+            "Error: provide a raw idea (positional argument or --from-file)", err=True
+        )
+        raise typer.Exit(1)
 
     asyncio.run(_refine_async(raw_idea, thread_id, fresh))
 
@@ -97,7 +119,7 @@ async def _refine_async(raw_idea: str, thread_id: str, fresh: bool) -> None:
     from rich.panel import Panel
     from rich.rule import Rule
 
-    from maars.config import CHECKPOINT_DB
+    from maars.config import CHECKPOINT_DB, DATA_DIR
     from maars.graphs.refine import build_refine_graph
 
     console = Console()
@@ -198,7 +220,12 @@ async def _refine_async(raw_idea: str, thread_id: str, fresh: bool) -> None:
                     f"[dim]{issue.id}[/dim] {issue.summary}"
                 )
 
+        ideas_dir = DATA_DIR / "ideas"
+        ideas_dir.mkdir(parents=True, exist_ok=True)
+        idea_path = ideas_dir / f"{thread_id}.md"
+        idea_path.write_text(draft_text, encoding="utf-8")
         console.print("")
+        console.print(f"[bold green]Refined idea saved to:[/bold green] {idea_path}")
         console.print(f"[dim]Thread ID: {thread_id}[/dim]")
         console.print(
             f'[dim]Resume with: maars refine "..." --thread {thread_id}[/dim]'
@@ -233,7 +260,7 @@ async def _write_async(
     from rich.panel import Panel
     from rich.rule import Rule
 
-    from maars.config import CHECKPOINT_DB
+    from maars.config import CHECKPOINT_DB, DATA_DIR
     from maars.graphs.write import build_write_graph
 
     console = Console()
@@ -352,8 +379,6 @@ async def _write_async(
                     f"  [[{severity_color}]{issue.severity}[/{severity_color}]] "
                     f"[dim]{issue.id}[/dim] {issue.summary}"
                 )
-
-        from maars.config import DATA_DIR
 
         papers_dir = DATA_DIR / "papers"
         papers_dir.mkdir(parents=True, exist_ok=True)
