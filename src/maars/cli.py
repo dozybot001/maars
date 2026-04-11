@@ -75,32 +75,126 @@ def draft(
 @app.command()
 def refine(
     raw_idea: str = typer.Argument(..., help="The raw research idea to refine"),
-    thread_id: str = typer.Option("default", "--thread", help="Thread ID for checkpointing"),
+    thread_id: str = typer.Option("default", "--thread", help="Thread ID for checkpointing and resume"),
+    fresh: bool = typer.Option(
+        False, "--fresh", help="Start a new thread instead of resuming existing checkpoint"
+    ),
 ) -> None:
-    """Run the full Refine graph (Explorer <-> Critic loop)."""
+    """Run the full Refine graph with streaming events and checkpoint-based resume."""
+    import asyncio
+
+    asyncio.run(_refine_async(raw_idea, thread_id, fresh))
+
+
+async def _refine_async(raw_idea: str, thread_id: str, fresh: bool) -> None:
+    import uuid
+
+    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.rule import Rule
+
+    from maars.config import CHECKPOINT_DB
     from maars.graphs.refine import build_refine_graph
 
-    graph = build_refine_graph()
+    console = Console()
+    CHECKPOINT_DB.parent.mkdir(parents=True, exist_ok=True)
 
-    initial_state = {"raw_idea": raw_idea, "round": 0}
-    config = {"configurable": {"thread_id": thread_id}}
+    async with AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB)) as checkpointer:
+        graph = build_refine_graph(checkpointer)
 
-    result = graph.invoke(initial_state, config=config)
+        config: dict = {"configurable": {"thread_id": thread_id}}
+        existing = await graph.aget_state(config)
+        has_state = bool(existing and existing.values)
 
-    typer.echo(f"Rounds: {result.get('round')}")
-    typer.echo(f"Passed: {result.get('passed')}")
-    typer.echo("")
-    typer.echo("=== Final draft ===")
-    typer.echo(result.get("draft", "(no draft)"))
-    typer.echo("")
-    issues = result.get("issues") or []
-    typer.echo(f"=== Remaining issues ({len(issues)}) ===")
-    for issue in issues:
-        typer.echo(f"  [{issue.id}] ({issue.severity}) {issue.summary}")
-    resolved = result.get("resolved") or []
-    if resolved:
-        typer.echo("")
-        typer.echo(f"Resolved (accumulated): {', '.join(resolved)}")
+        if has_state and fresh:
+            new_thread = f"{thread_id}-{uuid.uuid4().hex[:6]}"
+            console.print(
+                f"[yellow]--fresh: starting new thread [bold]{new_thread}[/bold] "
+                f"(keeping [dim]{thread_id}[/dim] intact)[/yellow]"
+            )
+            thread_id = new_thread
+            config = {"configurable": {"thread_id": thread_id}}
+            has_state = False
+
+        if has_state:
+            cur_round = existing.values.get("round", 0)
+            console.print(
+                f"[yellow]Resuming thread [bold]{thread_id}[/bold] from round {cur_round}[/yellow]"
+            )
+            input_state = None
+        else:
+            console.print(f"[cyan]Starting thread [bold]{thread_id}[/bold][/cyan]")
+            input_state = {"raw_idea": raw_idea, "round": 0}
+
+        console.print(Rule(style="dim"))
+
+        async for event in graph.astream_events(input_state, config=config, version="v2"):
+            kind = event["event"]
+            name = event.get("name", "")
+
+            if name not in ("explorer", "critic"):
+                continue
+
+            if kind == "on_chain_start":
+                console.print(f"[cyan]->[/cyan] [bold]{name}[/bold] running...")
+            elif kind == "on_chain_end":
+                data = event.get("data", {}) or {}
+                output = data.get("output", {}) or {}
+
+                if name == "explorer":
+                    r = output.get("round", "?")
+                    draft_text = output.get("draft", "") or ""
+                    console.print(
+                        f"[green]ok[/green] [bold]explorer[/bold] round {r} "
+                        f"— draft generated ({len(draft_text)} chars)"
+                    )
+                elif name == "critic":
+                    passed = output.get("passed", False)
+                    issues_list = output.get("issues", []) or []
+                    resolved_list = output.get("resolved", []) or []
+                    status_color = "green" if passed else "yellow"
+                    suffix = f", resolved+{len(resolved_list)}" if resolved_list else ""
+                    console.print(
+                        f"[green]ok[/green] [bold]critic[/bold] "
+                        f"— {len(issues_list)} issues, "
+                        f"[{status_color}]passed={passed}[/{status_color}]{suffix}"
+                    )
+
+        console.print(Rule(style="dim"))
+
+        final = await graph.aget_state(config)
+        values = (final.values if final else {}) or {}
+
+        console.print(
+            f"[bold]Final:[/bold] rounds={values.get('round', '?')}, "
+            f"passed={values.get('passed', False)}"
+        )
+        console.print("")
+
+        draft_text = values.get("draft", "(no draft)")
+        console.print(Panel(draft_text, title="Final Draft", border_style="cyan"))
+
+        issues_list = values.get("issues") or []
+        if issues_list:
+            console.print("")
+            console.print(f"[bold]Remaining issues ({len(issues_list)}):[/bold]")
+            for issue in issues_list:
+                severity_color = {
+                    "blocker": "red",
+                    "major": "yellow",
+                    "minor": "dim",
+                }.get(issue.severity, "white")
+                console.print(
+                    f"  [[{severity_color}]{issue.severity}[/{severity_color}]] "
+                    f"[dim]{issue.id}[/dim] {issue.summary}"
+                )
+
+        console.print("")
+        console.print(f"[dim]Thread ID: {thread_id}[/dim]")
+        console.print(
+            f'[dim]Resume with: maars refine "..." --thread {thread_id}[/dim]'
+        )
 
 
 if __name__ == "__main__":

@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import sqlite3
-
-from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 
 from maars.agents.critic import critique_draft
 from maars.agents.explorer import draft_proposal
-from maars.config import CHECKPOINT_DB, REFINE_MAX_ROUND
+from maars.config import REFINE_MAX_ROUND
 from maars.state import RefineState
 
 
@@ -48,8 +45,12 @@ def should_continue(state: RefineState) -> str:
     return "explorer"
 
 
-def build_refine_graph():
-    """Build and compile the Refine StateGraph with a SQLite checkpointer."""
+def build_refine_graph(checkpointer):
+    """Build and compile the Refine StateGraph with the given checkpointer.
+
+    The caller owns the checkpointer lifetime (typically an async context
+    manager wrapping AsyncSqliteSaver for streaming via astream_events).
+    """
     workflow = StateGraph(RefineState)
     workflow.add_node("explorer", explorer_node)
     workflow.add_node("critic", critic_node)
@@ -57,9 +58,5 @@ def build_refine_graph():
     workflow.add_edge(START, "explorer")
     workflow.add_edge("explorer", "critic")
     workflow.add_conditional_edges("critic", should_continue)
-
-    CHECKPOINT_DB.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(CHECKPOINT_DB), check_same_thread=False)
-    checkpointer = SqliteSaver(conn)
 
     return workflow.compile(checkpointer=checkpointer)

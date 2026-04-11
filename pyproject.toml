@@ -10,6 +10,7 @@ authors = [{ name = "dozy" }]
 dependencies = [
     "langgraph>=0.2.50",
     "langgraph-checkpoint-sqlite>=1.0.0",
+    "aiosqlite>=0.20.0",
     "langchain-core>=0.3.0",
     "langchain-google-genai>=2.0.0",
     "pydantic>=2.9",
