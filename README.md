@@ -18,7 +18,7 @@ MAARS 的目标不变：接受一个模糊的研究想法（或 Kaggle 比赛链
 
 | 版本 | 状态 | 说明 |
 |---|---|---|
-| [`v13.4.0-agno`](../../releases/tag/v13.4.0-agno) | 冻结快照 | 基于 [Agno](https://github.com/agno-agi/agno) + 手写 `Stage` runtime 的最终版本，位于 `main` 分支 |
+| [`v13.4.6`](../../releases/tag/v13.4.6) | 冻结快照 | 基于 [Agno](https://github.com/agno-agi/agno) + 手写 `Stage` runtime 的最终版本，位于 `main` 分支 |
 | `langgraph`（当前） | 开发中 | 基于 LangGraph + LangChain 的重写版本，从零开始 |
 
 ## 文档
