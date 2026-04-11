@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -132,20 +134,70 @@ def _extract_usage_metadata(data: dict) -> dict | None:
     output_obj = data.get("output")
     if output_obj is None:
         return None
-    # Direct AIMessage
     usage = getattr(output_obj, "usage_metadata", None)
     if usage:
         return usage
-    # ChatGeneration wrapper
     message = getattr(output_obj, "message", None)
     if message is not None:
         usage = getattr(message, "usage_metadata", None)
         if usage:
             return usage
-    # Plain dict fallback
     if isinstance(output_obj, dict):
         return output_obj.get("usage_metadata")
     return None
+
+
+def _esc_listener_supported() -> bool:
+    """Whether the current environment supports the ESC-key listener."""
+    if sys.platform == "win32":
+        return False
+    try:
+        return sys.stdin.isatty()
+    except Exception:
+        return False
+
+
+async def _listen_for_esc(cancel_event: asyncio.Event) -> None:
+    """Listen for ESC key on stdin and set cancel_event on press.
+
+    Uses termios/tty to put stdin in cbreak mode and asyncio.add_reader
+    for non-blocking reads. Unix-only. On Windows, or when stdin is not
+    a TTY (e.g. piped input under a subprocess runner), it is a no-op
+    and Ctrl-C remains the only interrupt mechanism.
+    """
+    if not _esc_listener_supported():
+        # Park forever until the caller cancels us.
+        await cancel_event.wait()
+        return
+
+    import termios
+    import tty
+
+    loop = asyncio.get_running_loop()
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+
+    def _on_stdin() -> None:
+        try:
+            ch = sys.stdin.read(1)
+        except Exception:
+            return
+        if ch == "\x1b":  # ESC
+            cancel_event.set()
+
+    try:
+        tty.setcbreak(fd)
+        loop.add_reader(fd, _on_stdin)
+        await cancel_event.wait()
+    finally:
+        try:
+            loop.remove_reader(fd)
+        except Exception:
+            pass
+        try:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        except Exception:
+            pass
 
 
 def _save_refine_session(
@@ -156,6 +208,7 @@ def _save_refine_session(
     started_at: datetime,
     finished_at: datetime,
     usage_by_node: dict[str, dict[str, int]],
+    interrupted: bool,
 ) -> Path:
     """Save final session artifacts under data/refine/{sub}/.
 
@@ -163,7 +216,7 @@ def _save_refine_session(
         data/refine/{sub}/raw_idea.md   -- the original input
         data/refine/{sub}/draft.md      -- the final refined draft
         data/refine/{sub}/issues.json   -- remaining unresolved issues
-        data/refine/{sub}/meta.json     -- run metadata (incl. timing and usage)
+        data/refine/{sub}/meta.json     -- run metadata (timing + usage + interrupted flag)
     """
     from maars.config import CHAT_MODEL, REFINE_MAX_ROUND
 
@@ -205,6 +258,7 @@ def _save_refine_session(
         "max_round": REFINE_MAX_ROUND,
         "final_round": values.get("round", 0),
         "passed": values.get("passed", False),
+        "interrupted": interrupted,
         "total_resolved": len(values.get("resolved") or []),
         "remaining_issues": {
             "blocker": blockers,
@@ -244,8 +298,6 @@ def refine(
     ),
 ) -> None:
     """Run the full Refine graph with streaming events and checkpoint-based resume."""
-    import asyncio
-
     if from_file is not None:
         if not from_file.exists():
             typer.echo(f"Error: file not found: {from_file}", err=True)
@@ -306,17 +358,26 @@ async def _refine_async(raw_idea: str, thread_id: str) -> None:
             input_state = {"raw_idea": raw_idea, "round": 0}
 
         console.print(Rule(style="dim"))
+        if _esc_listener_supported():
+            console.print("[dim](press ESC or Ctrl-C to interrupt; partial state will be saved)[/dim]")
+            console.print()
 
+        cancel_event = asyncio.Event()
+        esc_task = asyncio.create_task(_listen_for_esc(cancel_event))
+        interrupted = False
         current_status = None
 
         try:
             async for event in graph.astream_events(input_state, config=config, version="v2"):
+                if cancel_event.is_set():
+                    interrupted = True
+                    break
+
                 kind = event["event"]
                 name = event.get("name", "")
                 metadata = event.get("metadata", {}) or {}
                 langgraph_node = metadata.get("langgraph_node", "")
 
-                # Token usage tracking from LLM end events
                 if kind == "on_chat_model_end" and langgraph_node in ("explorer", "critic"):
                     data = event.get("data", {}) or {}
                     usage_meta = _extract_usage_metadata(data)
@@ -362,9 +423,25 @@ async def _refine_async(raw_idea: str, thread_id: str) -> None:
                             f"— {len(issues_list)} issues, "
                             f"[{status_color}]passed={passed}[/{status_color}]{suffix}"
                         )
+        except asyncio.CancelledError:
+            interrupted = True
         finally:
             if current_status is not None:
                 current_status.stop()
+            # Tear down the ESC listener BEFORE running any UI logic below,
+            # so stdin is back in canonical mode and termios is restored.
+            cancel_event.set()
+            esc_task.cancel()
+            try:
+                await esc_task
+            except (asyncio.CancelledError, Exception):
+                pass
+
+        if interrupted:
+            console.print()
+            console.print(
+                "[yellow]⚠ Interrupted — saving partial state from last checkpoint...[/yellow]"
+            )
 
         console.print(Rule(style="dim"))
 
@@ -374,11 +451,14 @@ async def _refine_async(raw_idea: str, thread_id: str) -> None:
         finished_at = datetime.now(timezone.utc)
         total_tokens = sum(b["total_tokens"] for b in usage_by_node.values())
 
-        console.print(
-            f"[bold]Final:[/bold] rounds={values.get('round', '?')}, "
-            f"passed={values.get('passed', False)}, "
-            f"tokens={total_tokens:,}"
-        )
+        status_bits = [
+            f"rounds={values.get('round', '?')}",
+            f"passed={values.get('passed', False)}",
+            f"tokens={total_tokens:,}",
+        ]
+        if interrupted:
+            status_bits.append("[yellow]interrupted[/yellow]")
+        console.print(f"[bold]Final:[/bold] " + ", ".join(status_bits))
         console.print("")
 
         draft_text = values.get("draft", "(no draft)")
@@ -406,6 +486,7 @@ async def _refine_async(raw_idea: str, thread_id: str) -> None:
             started_at=started_at,
             finished_at=finished_at,
             usage_by_node=usage_by_node,
+            interrupted=interrupted,
         )
         console.print("")
         console.print(f"[bold green]Session saved to:[/bold green] {session_dir}")
