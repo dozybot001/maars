@@ -39,5 +39,27 @@ def sanity() -> None:
     typer.echo(f"Response: {text}")
 
 
+@app.command()
+def critique(
+    draft: str = typer.Argument(..., help="The research proposal draft to critique"),
+) -> None:
+    """Run the Critic on a draft and print structured output."""
+    from maars.agents.critic import critique_draft
+
+    result = critique_draft(draft)
+
+    passed_str = "YES" if result.passed else "NO"
+    typer.echo(f"Passed: {passed_str}")
+    typer.echo(f"Summary: {result.summary}")
+    typer.echo("")
+    typer.echo(f"Issues ({len(result.issues)}):")
+    for issue in result.issues:
+        typer.echo(f"  [{issue.id}] ({issue.severity}) {issue.summary}")
+        typer.echo(f"    -> {issue.detail}")
+    if result.resolved:
+        typer.echo("")
+        typer.echo(f"Resolved: {', '.join(result.resolved)}")
+
+
 if __name__ == "__main__":
     app()
