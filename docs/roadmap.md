@@ -19,7 +19,7 @@
 
 - [ ] 通读 `concept.md`——思想是否完整继承,有没有漏掉的原则
 - [ ] 通读 `architecture.md`——技术选型是否合理
-  - [ ] **拍板 Model provider**(Gemini / Claude / OpenAI)
+  - [x] **拍板 Model provider**:Anthropic Claude(`claude-sonnet-4-6`) — 2026-04-11
   - [ ] 拍板:三阶段衔接方案 A / B(或者明确"先 A 再看")
 - [ ] 通读 `graph.md`——State 和 Node 清单有没有缺漏
 - [ ] 生成一份最终的 `.env` 模板和依赖清单(`pyproject.toml` / `requirements.txt`)

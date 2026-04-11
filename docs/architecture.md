@@ -41,17 +41,15 @@
 
 ### 2.3 Model Provider
 
-**TBD**。候选：
-- Google Gemini（原 MAARS 在用，`gemini-2.5-pro` 带 search grounding）
-- Anthropic Claude（强推理 + 长上下文）
-- OpenAI GPT-4.1 / o 系列
+**已定：Anthropic Claude** — 默认 `claude-sonnet-4-6`，可通过 `MAARS_CHAT_MODEL` 环境变量 override 到 `claude-opus-4-6` 等其它 Anthropic 模型。
 
-决策点：
-- Refine / Write 需要强对抗能力 → Claude 或 Gemini
-- Research 的 Execute 需要代码 + tool use 能力 → 都行
-- Verify / Evaluate 需要可靠的判断力 → 强模型
+**选型理由**：
 
-**建议先用一个 provider 跑通全流程，再决定要不要按阶段差异化**。
+- Refine / Write 的对抗循环需要 Critic / Reviewer 愿意挑刺，Claude 在"对抗 + 判断"这个维度最强
+- Structured output 稳定（Critic 输出解析不出来会让整个迭代失败）
+- `langchain-anthropic` 生态成熟
+
+**策略**：全流程先统一用一个 provider，M4 Research 跑通后再决定要不要按阶段差异化（例如 Research Execute 用更便宜的模型）。
 
 ### 2.4 Checkpointer
 
@@ -127,12 +125,11 @@ maars/
 | 三阶段衔接方式 | (a) 顶层 orchestrator graph,状态一路传下去 / (b) 三个独立 graph,通过文件衔接 | 高,影响 state 设计 |
 | Research 的代码执行沙箱 | (a) 本地 subprocess / (b) Docker / (c) 外部服务 | 中,MVP 可以先本地 |
 | Checkpointer 存储位置 | (a) 单个 SQLite 文件 / (b) 按 session 一个文件 | 低 |
-| Model provider 选型 | Gemini / Claude / OpenAI | 高,跑通 Refine 之前必须定 |
+| Model provider 选型 | ✅ **已定:Claude** (`claude-sonnet-4-6`) | 2026-04-11 拍板 |
 | Research 并行度 | (a) 串行 / (b) `Send` 并行 | 中,MVP 可以先串行 |
 | Human-in-the-loop | 预留 `interrupt` 点 / 完全不做 | 低,MVP 不做 |
 
 ---
 
 <!-- TODO: §3 的模块划分等 graph.md 的 Refine 图定稿后再修正,现在是占位。 -->
-<!-- TODO: §2.3 Model provider 选型,需要用户拍板后删掉"TBD"。 -->
-<!-- TODO: §4 未决问题,每个都要有一条显式决策或默认选项。 -->
+<!-- TODO: §4 未决问题,每个都要有一条显式决策或默认选项(Model provider 已完成 2026-04-11)。 -->
