@@ -9,22 +9,18 @@
 - ✅ 分支创建完成(`langgraph`)
 - ✅ 代码清零完成,文档优先(doc-first)
 - ✅ 5 份设计文档骨架就位:`README` / `concept` / `architecture` / `graph` / `roadmap`
-- ⏳ **等待**:通读文档,对齐设计后再动手编码
+- ⏳ **M1 进行中**:Step 1-3 已完成,Step 4 正在做
 
 ## 1. 里程碑
 
-### M0 · 设计对齐(当前)
-
-**目标**:文档读完、有分歧的地方对齐。
+### M0 · 设计对齐(已完成大部分)
 
 - [ ] 通读 `concept.md`——思想是否完整继承,有没有漏掉的原则
 - [ ] 通读 `architecture.md`——技术选型是否合理
-  - [x] **拍板 Model provider**:Anthropic Claude(`claude-sonnet-4-6`) — 2026-04-11
+  - [x] **拍板 Model provider**:Gemini only(`gemini-3-flash-preview`) — 2026-04-12
   - [ ] 拍板:三阶段衔接方案 A / B(或者明确"先 A 再看")
 - [ ] 通读 `graph.md`——State 和 Node 清单有没有缺漏
-- [ ] 生成一份最终的 `.env` 模板和依赖清单(`pyproject.toml` / `requirements.txt`)
-
-**退出条件**:上面的 TODO 全部勾掉,且所有 doc 里的 `TBD` 都有答案。
+- [x] 生成 `.env` 模板和依赖清单(`.env.example` / `pyproject.toml`) — 2026-04-12
 
 ---
 
@@ -32,14 +28,14 @@
 
 **目标**:一个命令,输入一个 `raw_idea`,输出 `refined_idea`。Explorer ↔ Critic 对抗能跑通。
 
-**范围**:
-- [ ] 项目骨架(`pyproject.toml`、`maars/` 目录、`cli.py` 入口)
-- [ ] `RefineState` TypedDict 定义
-- [ ] `explorer` node(`create_react_agent` + web search tool)
-- [ ] `critic` node(纯 LLM judge,返回 structured issues)
-- [ ] Refine `StateGraph` 编译,接 `SqliteSaver` checkpointer
-- [ ] CLI 入口:`maars refine "我想研究 ..."`,流式打印 Explorer / Critic 的对话
-- [ ] Resume 测试:中途 Ctrl-C,`--resume <thread_id>` 能接着跑
+**范围**(分 6 Step):
+
+- [x] **Step 1** 项目骨架(`pyproject.toml`、`src/maars/` 目录、`cli.py` hello 命令)
+- [x] **Step 2** `RefineState` TypedDict + `Issue` Pydantic + `get_chat_model()` 工厂 + `sanity` 命令
+- [x] **Step 3** `critic` node(纯 LLM judge,`with_structured_output(CritiqueResult)`)+ `critique` 命令
+- [ ] **Step 4** `explorer` node(Gemini + 内置 `google_search` grounding,不走 ReAct loop) + `draft` 命令
+- [ ] **Step 5** Refine `StateGraph` 编译,接 `SqliteSaver` checkpointer
+- [ ] **Step 6** CLI `refine` 命令:`maars refine "我想研究 ..."`,流式打印 Explorer / Critic 的对话; Resume 测试(`--resume <thread_id>`)
 
 **验证**:
 - 至少跑通 3 个不同的 `raw_idea`,观察迭代是否收敛
@@ -120,7 +116,8 @@
 
 不是 MVP 必须,按需启用:
 - [ ] 前端(FastAPI / LangServe / LangGraph Studio 三选一)
-- [ ] 多 model provider 按阶段差异化
+- [ ] 多 provider 抽象层(当前是 Gemini only,若需要再加)
+- [ ] 外部 search tool(Tavily 等,当前用 Gemini 内置 grounding)
 - [ ] Human-in-the-loop interrupt 点
 - [ ] 英文文档和多语言 prompt
 - [ ] 发布和文档站
@@ -133,6 +130,9 @@
 |---|---|
 | **多语言文档**(中英双语) | 原 MAARS 的翻译维护成本很重,MVP 阶段只维护中文 |
 | **前端**(MVP 阶段) | 前端是原 MAARS 最重的包袱,LangGraph stream 在 CLI 下完全够观察 |
+| **多 provider 抽象层** | Step 3 验证 Gemini 3 structured output 稳定,单 provider 够用,砍掉 `init_chat_model` 抽象以维持最小开发面 |
+| **外部 search tool**(Tavily 等) | Explorer 用 Gemini 内置 `google_search` grounding,省掉外部 API key 和依赖 |
+| **`create_react_agent` / ReAct loop** | Explorer 一次 invoke + grounding 就够,不用显式 ReAct;M2+ 里要不要恢复看实际需要 |
 | **继承 `IterationState`、`Stage` 等原架构接口** | 换 LangGraph 的意义就是不用自建 runtime,继承这些会半途而废 |
 | **继承 SSE label level 2/3/4 协议** | LangGraph 的 event 自带层级信息,不需要手打 tag |
 | **继承 `round_N.md` 文件命名** | checkpoint 的 time-travel 提供天然的版本机制 |
@@ -158,4 +158,3 @@
 ---
 
 <!-- TODO: 每个 milestone 开始前,把对应章节的 checklist 拉出来建一个 issue 或 task list。 -->
-<!-- TODO: M0 的拍板项完成后,把"TBD"全部替换成明确决策。 -->

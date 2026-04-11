@@ -11,7 +11,7 @@
 | 层 | 原 MAARS (v13.4.0-agno) | LangGraph 版 |
 |---|---|---|
 | 编排层 | 手写 `Stage` / `TeamStage` 基类 + `IterationState` | LangGraph `StateGraph` + `Conditional Edge` |
-| Agent 层 | Agno 框架 | LangChain (`create_react_agent` + `@tool`) |
+| Agent 层 | Agno 框架 | LangChain Core + Gemini 内置能力 |
 | 状态持久化 | 文件型 session DB（自建） | LangGraph Checkpointer + 少量 file side effect |
 | Stream | 自定义 SSE (`_send` + label level 2/3/4) | `graph.astream_events(version="v2")` |
 | 入口 | FastAPI + 前端三面板 | **TBD**（先 CLI，稳定后再议） |
@@ -31,31 +31,42 @@
 
 每个阶段（Refine / Research / Write）是一个独立的 `StateGraph`。三个阶段之间通过顶层 orchestrator graph 串联，或通过文件衔接（TBD，见 §4）。
 
-### 2.2 Agent / Tool：LangChain
+### 2.2 Agent / Tool：LangChain Core + Gemini 内置能力
 
-- **Agent 构造器**：`langgraph.prebuilt.create_react_agent` — 开箱即用的 ReAct agent，返回一个可作为 subgraph node 嵌入的 runnable。
-- **Tool 定义**：`@tool` 装饰器，或继承 `BaseTool`。
-- **为什么不用 Agno**：要纯粹体验 LangGraph + LangChain 的心智模型。混用会让 "顺手感" 分不清是哪边带来的。
+- **基础 model 类**：直接用 `langchain_google_genai.ChatGoogleGenerativeAI`，不经过 `init_chat_model()` 的 provider 路由层。
+- **Explorer 的搜索能力**：用 Gemini 内置的 `google_search` grounding，通过 `model.bind_tools([{"google_search": {}}])` 开启。Explorer 不用 `create_react_agent`，而是直接 `.invoke()`——grounding 在 one-shot 调用里由模型自主决定要不要搜，不经过显式的 ReAct thought/action/observation 循环。
+- **Critic / Reviewer 的结构化输出**：`model.with_structured_output(PydanticSchema)`，在 Gemini 3 上已验证稳定（见 §2.3 的 Step 3 验证结论）。
 
-**例外**：如果某些功能 LangChain 生态缺失而 Agno 有，允许局部引入，但要在 [`graph.md`](graph.md) 里显式记录为"例外"。
+**刻意砍掉的东西**（维持最小开发面）：
+
+- ❌ `langchain` meta-package + `init_chat_model()` 抽象层——只有 Gemini，不需要 provider 路由
+- ❌ `langchain-anthropic`、`langchain-tavily`——不支持多 provider，不需要外部 search
+- ❌ `create_react_agent`——Explorer 一次 invoke + grounding 就够，不走 ReAct loop
+- ❌ 自定义 `@tool` / `BaseTool`——没有外部 tool
+
+**代价**：Explorer 和项目整体都绑定 Gemini provider。将来要切 Claude / OpenAI，Explorer 需要重新引入外部 search tool（比如 Tavily）+ `create_react_agent`。这是一个**有意识的 trade-off**——MVP 阶段选择简单性 > 通用性。
 
 ### 2.3 Model Provider
 
-**多 provider 支持，默认 Google Gemini 3 Flash Preview** — 通过 `MAARS_CHAT_MODEL` 环境变量用 `provider:model` 格式切换：
-
-- `google_genai:gemini-3-flash-preview`（默认）
-- `anthropic:claude-sonnet-4-6`（备选）
-- `openai:gpt-4.1` 等（理论可行，未实际验证）
-
-**实现**：使用 LangChain 官方的 `init_chat_model()` 工厂，根据 `provider:model` 前缀自动路由到对应的 `ChatXXX` 类，`src/maars/models.py` 不需要维护 provider 分支逻辑——符合"mature deps > 自建"原则。
+**Gemini only** — 默认 `gemini-3-flash-preview`，可通过 `MAARS_CHAT_MODEL` 环境变量 override 到其它 Gemini 模型（如 `gemini-3-pro`）。
 
 **选型演变**：
 
-- **2026-04-11** 最初拍板 Claude，理由是对抗 + 判断最强、structured output 最稳定
-- **2026-04-12** 切换到 Gemini-default：Anthropic 账户余额为 0 成为 Step 2 blocker，手头有 Gemini 余额，改用 `gemini-3-flash-preview`
-- Claude 作为可选备选保留在依赖里（`langchain-anthropic`），将来若 Critic 的 Pydantic 解析在 Gemini 下抽风，可以单独把 Critic 切回 Claude——multi-provider 的意义正在于此
+- **2026-04-11** 最初拍板 Anthropic Claude，理由是对抗 + 判断最强、structured output 最稳定
+- **2026-04-12 上午** 切换到 Gemini-default + multi-provider 抽象：Anthropic 账户余额为 0 成为 Step 2 blocker，手头有 Gemini 余额
+- **2026-04-12 下午** 砍掉 multi-provider 抽象，回到 Gemini-only：Step 3 验证证明 Gemini 3 的 structured output 足够稳定，且 Gemini 内置 `google_search` grounding 省掉 Tavily 依赖。**维持最小开发面 > 保留 provider 切换能力**
 
-**策略**：全流程先统一用 Gemini 跑通，M3 Research 跑通后再考虑按 node 差异化。
+**Step 3 在 Gemini 3 Flash Preview 下的 structured output 验证结论**：
+
+- 中文 prompt + Pydantic schema 完全稳定，无 JSON 格式漂移
+- Critic 的 issue id 规则严格遵守，severity 分层合理
+- `passed` 路径和 fail 路径都能正确触发
+- 方法论审查深度足够（观察到 2x2 因子实验的隐性自变量 insight）
+
+**将来重新引入 multi-provider 的条件**：
+
+- M3 Research 跑通后，若某个 node 在 Gemini 上表现明显差于其它 provider
+- 或 M5 之后，做 end-to-end 的 benchmark 比较
 
 ### 2.4 Checkpointer
 
@@ -96,33 +107,27 @@
 ## 3. 模块划分（初版草稿）
 
 ```
-maars/
-├── graphs/
-│   ├── refine.py         # Refine StateGraph + Explorer/Critic nodes
-│   ├── research.py       # Research StateGraph + Decompose/Execute/Verify/Evaluate
-│   ├── write.py          # Write StateGraph + Writer/Reviewer nodes
-│   └── orchestrator.py   # 顶层 graph,串联三阶段
-├── agents/
-│   ├── explorer.py       # create_react_agent 实例 + prompt
-│   ├── critic.py
-│   ├── writer.py
-│   ├── reviewer.py
-│   └── ...
-├── tools/
-│   ├── search.py         # web search tool
-│   ├── code_exec.py      # 代码执行 tool
-│   └── ...
-├── state/
-│   ├── refine_state.py   # TypedDict schemas
-│   ├── research_state.py
-│   └── write_state.py
+src/maars/
+├── config.py              # 环境变量、常量、路径
+├── state.py               # RefineState、Issue 等类型
+├── models.py              # get_chat_model / get_search_model 工厂
+├── cli.py                 # typer 入口
 ├── prompts/
-│   └── ...               # 纯中文 prompt,暂不做 i18n
-├── cli.py                # 入口
-└── config.py             # 模型、路径等配置
+│   ├── explorer.py        # Explorer system prompt
+│   ├── critic.py          # Critic system prompt
+│   └── ...                # 未来的 writer / reviewer / research 相关
+├── agents/
+│   ├── explorer.py        # draft_proposal() 函数
+│   ├── critic.py          # CritiqueResult + critique_draft() 函数
+│   └── ...
+└── graphs/                # （M1 Step 5 创建）
+    └── refine.py          # Refine StateGraph 编译
 ```
 
-**这个划分会随着 graph 设计变化**,不是最终结构。先放这里作为"心里有个大概"。
+**没有的目录**（相对早期草稿）：
+
+- `tools/` — 没有外部 tool，Gemini grounding 内置，所以不需要这个目录
+- `research/`、`write/` 先不建，M2 / M3 再加
 
 ## 4. 未决问题
 
@@ -131,11 +136,10 @@ maars/
 | 三阶段衔接方式 | (a) 顶层 orchestrator graph,状态一路传下去 / (b) 三个独立 graph,通过文件衔接 | 高,影响 state 设计 |
 | Research 的代码执行沙箱 | (a) 本地 subprocess / (b) Docker / (c) 外部服务 | 中,MVP 可以先本地 |
 | Checkpointer 存储位置 | (a) 单个 SQLite 文件 / (b) 按 session 一个文件 | 低 |
-| Model provider 选型 | ✅ **已定:Claude** (`claude-sonnet-4-6`) | 2026-04-11 拍板 |
+| Model provider 选型 | ✅ **已定:Gemini only** (`gemini-3-flash-preview`) | 2026-04-12 简化 |
 | Research 并行度 | (a) 串行 / (b) `Send` 并行 | 中,MVP 可以先串行 |
 | Human-in-the-loop | 预留 `interrupt` 点 / 完全不做 | 低,MVP 不做 |
 
 ---
 
-<!-- TODO: §3 的模块划分等 graph.md 的 Refine 图定稿后再修正,现在是占位。 -->
-<!-- TODO: §4 未决问题,每个都要有一条显式决策或默认选项(Model provider 已完成 2026-04-11)。 -->
+<!-- TODO: §3 的模块划分等 graph.md 的 Refine 图定稿后再修正 -->

@@ -73,8 +73,8 @@ class RefineState(TypedDict):
 
 | Node | 角色 | 输入 | 输出(写入 State) | Tool |
 |---|---|---|---|---|
-| `explorer` | 起草研究提案 | `raw_idea`, `draft`, `issues` | `draft`, `round += 1` | web search |
-| `critic` | 评审提案 | `draft` | `issues`, `resolved`, `passed` | 无(纯 LLM judge) |
+| `explorer` | 起草研究提案 | `raw_idea`, `prior_draft?`, `prior_issues?` | `draft`, `round += 1` | Gemini `google_search` grounding(内置,非 ReAct) |
+| `critic` | 评审提案 | `draft`, `prior_issues?` | `issues`, `resolved`, `passed` | 无(`with_structured_output(CritiqueResult)`) |
 
 ### 1.4 Edges
 
