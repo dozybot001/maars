@@ -461,23 +461,29 @@ async def _refine_async(raw_idea: str, thread_id: str) -> None:
         console.print(f"[bold]Final:[/bold] {', '.join(status_bits)}")
         console.print("")
 
-        draft_text = values.get("draft", "(no draft)")
-        console.print(Panel(draft_text, title="Final Draft", border_style="cyan"))
+        # Only show the full draft panel and remaining-issues list on a
+        # normal (non-interrupted) finish. On interrupt the "final" state
+        # is really just the last checkpoint — potentially mid-iteration —
+        # and showing it as "Final Draft" is misleading. The same content
+        # is still saved to data/refine/{id}/draft.md and issues.json.
+        if not interrupted:
+            draft_text = values.get("draft", "(no draft)")
+            console.print(Panel(draft_text, title="Final Draft", border_style="cyan"))
 
-        issues_list = values.get("issues") or []
-        if issues_list:
-            console.print("")
-            console.print(f"[bold]Remaining issues ({len(issues_list)}):[/bold]")
-            for issue in issues_list:
-                severity_color = {
-                    "blocker": "red",
-                    "major": "yellow",
-                    "minor": "dim",
-                }.get(issue.severity, "white")
-                console.print(
-                    f"  [[{severity_color}]{issue.severity}[/{severity_color}]] "
-                    f"[dim]{issue.id}[/dim] {issue.summary}"
-                )
+            issues_list = values.get("issues") or []
+            if issues_list:
+                console.print("")
+                console.print(f"[bold]Remaining issues ({len(issues_list)}):[/bold]")
+                for issue in issues_list:
+                    severity_color = {
+                        "blocker": "red",
+                        "major": "yellow",
+                        "minor": "dim",
+                    }.get(issue.severity, "white")
+                    console.print(
+                        f"  [[{severity_color}]{issue.severity}[/{severity_color}]] "
+                        f"[dim]{issue.id}[/dim] {issue.summary}"
+                    )
 
         session_dir = _save_refine_session(
             thread_id,
