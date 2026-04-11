@@ -72,5 +72,36 @@ def draft(
     typer.echo(result)
 
 
+@app.command()
+def refine(
+    raw_idea: str = typer.Argument(..., help="The raw research idea to refine"),
+    thread_id: str = typer.Option("default", "--thread", help="Thread ID for checkpointing"),
+) -> None:
+    """Run the full Refine graph (Explorer <-> Critic loop)."""
+    from maars.graphs.refine import build_refine_graph
+
+    graph = build_refine_graph()
+
+    initial_state = {"raw_idea": raw_idea, "round": 0}
+    config = {"configurable": {"thread_id": thread_id}}
+
+    result = graph.invoke(initial_state, config=config)
+
+    typer.echo(f"Rounds: {result.get('round')}")
+    typer.echo(f"Passed: {result.get('passed')}")
+    typer.echo("")
+    typer.echo("=== Final draft ===")
+    typer.echo(result.get("draft", "(no draft)"))
+    typer.echo("")
+    issues = result.get("issues") or []
+    typer.echo(f"=== Remaining issues ({len(issues)}) ===")
+    for issue in issues:
+        typer.echo(f"  [{issue.id}] ({issue.severity}) {issue.summary}")
+    resolved = result.get("resolved") or []
+    if resolved:
+        typer.echo("")
+        typer.echo(f"Resolved (accumulated): {', '.join(resolved)}")
+
+
 if __name__ == "__main__":
     app()

@@ -24,7 +24,7 @@ class RefineState(TypedDict, total=False):
 
     raw_idea: str
     draft: str
-    issues: Annotated[list[Issue], add]
+    issues: list[Issue]
     resolved: Annotated[list[str], add]
     round: int
     passed: bool
