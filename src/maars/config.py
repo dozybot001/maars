@@ -15,4 +15,3 @@ CHECKPOINT_DB = DATA_DIR / "checkpoints.db"
 
 CHAT_MODEL = os.environ.get("MAARS_CHAT_MODEL", "gemini-3-flash-preview")
 REFINE_MAX_ROUND = int(os.environ.get("MAARS_REFINE_MAX_ROUND", "5"))
-WRITE_MAX_ROUND = int(os.environ.get("MAARS_WRITE_MAX_ROUND", "5"))

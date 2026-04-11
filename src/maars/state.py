@@ -29,16 +29,3 @@ class RefineState(TypedDict, total=False):
     round: int
     passed: bool
     refined_idea: str
-
-
-class WriteState(TypedDict, total=False):
-    """State schema for the Write graph (Writer ↔ Reviewer)."""
-
-    refined_idea: str
-    artifacts_dir: str
-    draft: str
-    issues: list[Issue]
-    resolved: Annotated[list[str], add]
-    round: int
-    passed: bool
-    paper: str

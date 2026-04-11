@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import typer
@@ -17,7 +19,7 @@ def _root() -> None:
 @app.command()
 def hello() -> None:
     """Sanity check: prove the CLI wiring is alive."""
-    typer.echo("MAARS CLI ready. (Step 1 of M1)")
+    typer.echo("MAARS CLI ready.")
 
 
 @app.command()
@@ -45,33 +47,106 @@ def sanity() -> None:
 def critique(
     draft: str = typer.Argument(..., help="The research proposal draft to critique"),
 ) -> None:
-    """(debug) Run the Critic on a draft and print structured output."""
+    """(debug) Run the Critic on a draft once and print incremental feedback."""
     from maars.agents.critic import critique_draft
 
     result = critique_draft(draft)
 
-    passed_str = "YES" if result.passed else "NO"
-    typer.echo(f"Passed: {passed_str}")
     typer.echo(f"Summary: {result.summary}")
     typer.echo("")
-    typer.echo(f"Issues ({len(result.issues)}):")
-    for issue in result.issues:
+    typer.echo(f"New issues ({len(result.new_issues)}):")
+    for issue in result.new_issues:
         typer.echo(f"  [{issue.id}] ({issue.severity}) {issue.summary}")
         typer.echo(f"    -> {issue.detail}")
     if result.resolved:
         typer.echo("")
-        typer.echo(f"Resolved: {', '.join(result.resolved)}")
+        typer.echo(f"Resolved from prior: {', '.join(result.resolved)}")
 
 
 @app.command()
 def draft(
     raw_idea: str = typer.Argument(..., help="The raw research idea to expand into a draft"),
 ) -> None:
-    """(debug) Run the Explorer on a raw idea and print the draft proposal."""
+    """(debug) Run the Explorer on a raw idea once and print the draft proposal."""
     from maars.agents.explorer import draft_proposal
 
     result = draft_proposal(raw_idea)
     typer.echo(result)
+
+
+def _next_thread_id() -> str:
+    """Generate the next auto-incrementing thread id, e.g. 'refine-001'."""
+    from maars.config import DATA_DIR
+
+    refine_dir = DATA_DIR / "refine"
+    refine_dir.mkdir(parents=True, exist_ok=True)
+
+    existing_nums: list[int] = []
+    for p in refine_dir.iterdir():
+        if p.is_dir() and p.name.isdigit():
+            existing_nums.append(int(p.name))
+
+    next_num = max(existing_nums, default=0) + 1
+    return f"refine-{next_num:03d}"
+
+
+def _save_refine_session(
+    thread_id: str,
+    raw_idea: str,
+    values: dict,
+) -> Path:
+    """Save final session artifacts under data/refine/{num}/.
+
+    Writes:
+        data/refine/{num}/raw_idea.md   -- the original input
+        data/refine/{num}/draft.md      -- the final refined draft
+        data/refine/{num}/issues.json   -- remaining unresolved issues
+        data/refine/{num}/meta.json     -- run metadata
+    """
+    from maars.config import CHAT_MODEL, DATA_DIR, REFINE_MAX_ROUND
+
+    num_str = thread_id.split("-", 1)[-1]
+    session_dir = DATA_DIR / "refine" / num_str
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    (session_dir / "raw_idea.md").write_text(raw_idea, encoding="utf-8")
+
+    draft_text = values.get("draft", "") or ""
+    (session_dir / "draft.md").write_text(draft_text, encoding="utf-8")
+
+    issues = values.get("issues") or []
+    issues_data = [
+        i.model_dump() if hasattr(i, "model_dump") else dict(i) for i in issues
+    ]
+    (session_dir / "issues.json").write_text(
+        json.dumps(issues_data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    blockers = sum(1 for i in issues if i.severity == "blocker")
+    majors = sum(1 for i in issues if i.severity == "major")
+    minors = sum(1 for i in issues if i.severity == "minor")
+
+    meta = {
+        "thread_id": thread_id,
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+        "model": CHAT_MODEL,
+        "max_round": REFINE_MAX_ROUND,
+        "final_round": values.get("round", 0),
+        "passed": values.get("passed", False),
+        "total_resolved": len(values.get("resolved") or []),
+        "remaining_issues": {
+            "blocker": blockers,
+            "major": majors,
+            "minor": minors,
+        },
+    }
+    (session_dir / "meta.json").write_text(
+        json.dumps(meta, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    return session_dir
 
 
 @app.command()
@@ -80,16 +155,15 @@ def refine(
         "", help="The raw research idea to refine (or use --from-file)"
     ),
     thread_id: str = typer.Option(
-        "default", "--thread", help="Thread ID for checkpointing and resume"
-    ),
-    fresh: bool = typer.Option(
-        False, "--fresh", help="Start a new thread instead of resuming existing checkpoint"
+        None,
+        "--thread",
+        help="Thread ID for resume. Omit to auto-generate a new 'refine-NNN' thread.",
     ),
     from_file: Path = typer.Option(
         None,
         "--from-file",
         "-f",
-        help="Read raw idea from a markdown file (alternative to positional argument)",
+        help="Read raw idea from a markdown file",
     ),
 ) -> None:
     """Run the full Refine graph with streaming events and checkpoint-based resume."""
@@ -107,19 +181,20 @@ def refine(
         )
         raise typer.Exit(1)
 
-    asyncio.run(_refine_async(raw_idea, thread_id, fresh))
+    if thread_id is None:
+        thread_id = _next_thread_id()
+
+    asyncio.run(_refine_async(raw_idea, thread_id))
 
 
-async def _refine_async(raw_idea: str, thread_id: str, fresh: bool) -> None:
-    import uuid
-
+async def _refine_async(raw_idea: str, thread_id: str) -> None:
     from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
     from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
     from rich.console import Console
     from rich.panel import Panel
     from rich.rule import Rule
 
-    from maars.config import CHECKPOINT_DB, DATA_DIR
+    from maars.config import CHECKPOINT_DB
     from maars.graphs.refine import build_refine_graph
 
     console = Console()
@@ -136,16 +211,6 @@ async def _refine_async(raw_idea: str, thread_id: str, fresh: bool) -> None:
         config: dict = {"configurable": {"thread_id": thread_id}}
         existing = await graph.aget_state(config)
         has_state = bool(existing and existing.values)
-
-        if has_state and fresh:
-            new_thread = f"{thread_id}-{uuid.uuid4().hex[:6]}"
-            console.print(
-                f"[yellow]--fresh: starting new thread [bold]{new_thread}[/bold] "
-                f"(keeping [dim]{thread_id}[/dim] intact)[/yellow]"
-            )
-            thread_id = new_thread
-            config = {"configurable": {"thread_id": thread_id}}
-            has_state = False
 
         if has_state:
             cur_round = existing.values.get("round", 0)
@@ -220,176 +285,13 @@ async def _refine_async(raw_idea: str, thread_id: str, fresh: bool) -> None:
                     f"[dim]{issue.id}[/dim] {issue.summary}"
                 )
 
-        ideas_dir = DATA_DIR / "ideas"
-        ideas_dir.mkdir(parents=True, exist_ok=True)
-        idea_path = ideas_dir / f"{thread_id}.md"
-        idea_path.write_text(draft_text, encoding="utf-8")
+        session_dir = _save_refine_session(thread_id, raw_idea, values)
         console.print("")
-        console.print(f"[bold green]Refined idea saved to:[/bold green] {idea_path}")
+        console.print(f"[bold green]Session saved to:[/bold green] {session_dir}")
+        console.print("  raw_idea.md  draft.md  issues.json  meta.json")
+        console.print("")
         console.print(f"[dim]Thread ID: {thread_id}[/dim]")
-        console.print(
-            f'[dim]Resume with: maars refine "..." --thread {thread_id}[/dim]'
-        )
-
-
-@app.command()
-def write(
-    idea: Path = typer.Argument(..., help="Path to refined_idea markdown file"),
-    artifacts: Path = typer.Argument(..., help="Path to artifacts directory"),
-    thread_id: str = typer.Option(
-        "default-write", "--thread", help="Thread ID for checkpointing and resume"
-    ),
-    fresh: bool = typer.Option(
-        False, "--fresh", help="Start a new thread instead of resuming existing checkpoint"
-    ),
-) -> None:
-    """Run the full Write graph (Writer <-> Reviewer) with streaming and resume."""
-    import asyncio
-
-    asyncio.run(_write_async(idea, artifacts, thread_id, fresh))
-
-
-async def _write_async(
-    idea_path: Path, artifacts_dir: Path, thread_id: str, fresh: bool
-) -> None:
-    import uuid
-
-    from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-    from rich.console import Console
-    from rich.panel import Panel
-    from rich.rule import Rule
-
-    from maars.config import CHECKPOINT_DB, DATA_DIR
-    from maars.graphs.write import build_write_graph
-
-    console = Console()
-    CHECKPOINT_DB.parent.mkdir(parents=True, exist_ok=True)
-
-    if not idea_path.exists():
-        console.print(f"[red]Error:[/red] Refined idea file not found: {idea_path}")
-        raise typer.Exit(1)
-    if not artifacts_dir.exists() or not artifacts_dir.is_dir():
-        console.print(
-            f"[red]Error:[/red] Artifacts directory not found: {artifacts_dir}"
-        )
-        raise typer.Exit(1)
-    refined_idea = idea_path.read_text(encoding="utf-8")
-
-    serde = JsonPlusSerializer(
-        allowed_msgpack_modules=[("maars.state", "Issue")]
-    )
-
-    async with AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB)) as checkpointer:
-        checkpointer.serde = serde
-        graph = build_write_graph(checkpointer)
-
-        config: dict = {"configurable": {"thread_id": thread_id}}
-        existing = await graph.aget_state(config)
-        has_state = bool(existing and existing.values)
-
-        if has_state and fresh:
-            new_thread = f"{thread_id}-{uuid.uuid4().hex[:6]}"
-            console.print(
-                f"[yellow]--fresh: starting new thread [bold]{new_thread}[/bold] "
-                f"(keeping [dim]{thread_id}[/dim] intact)[/yellow]"
-            )
-            thread_id = new_thread
-            config = {"configurable": {"thread_id": thread_id}}
-            has_state = False
-
-        if has_state:
-            cur_round = existing.values.get("round", 0)
-            console.print(
-                f"[yellow]Resuming thread [bold]{thread_id}[/bold] from round {cur_round}[/yellow]"
-            )
-            input_state = None
-        else:
-            console.print(f"[cyan]Starting thread [bold]{thread_id}[/bold][/cyan]")
-            input_state = {
-                "refined_idea": refined_idea,
-                "artifacts_dir": str(artifacts_dir),
-                "round": 0,
-            }
-
-        console.print(Rule(style="dim"))
-
-        async for event in graph.astream_events(input_state, config=config, version="v2"):
-            kind = event["event"]
-            name = event.get("name", "")
-
-            if name not in ("writer", "reviewer"):
-                continue
-
-            if kind == "on_chain_start":
-                console.print(f"[cyan]->[/cyan] [bold]{name}[/bold] running...")
-            elif kind == "on_chain_end":
-                data = event.get("data", {}) or {}
-                output = data.get("output", {}) or {}
-
-                if name == "writer":
-                    r = output.get("round", "?")
-                    draft_text = output.get("draft", "") or ""
-                    console.print(
-                        f"[green]ok[/green] [bold]writer[/bold] round {r} "
-                        f"— paper draft generated ({len(draft_text)} chars)"
-                    )
-                elif name == "reviewer":
-                    passed = output.get("passed", False)
-                    issues_list = output.get("issues", []) or []
-                    resolved_list = output.get("resolved", []) or []
-                    status_color = "green" if passed else "yellow"
-                    suffix = f", resolved+{len(resolved_list)}" if resolved_list else ""
-                    console.print(
-                        f"[green]ok[/green] [bold]reviewer[/bold] "
-                        f"— {len(issues_list)} issues, "
-                        f"[{status_color}]passed={passed}[/{status_color}]{suffix}"
-                    )
-
-        console.print(Rule(style="dim"))
-
-        final = await graph.aget_state(config)
-        values = (final.values if final else {}) or {}
-
-        console.print(
-            f"[bold]Final:[/bold] rounds={values.get('round', '?')}, "
-            f"passed={values.get('passed', False)}"
-        )
-        console.print("")
-
-        draft_text = values.get("draft", "(no draft)")
-        preview = (
-            draft_text
-            if len(draft_text) < 1200
-            else draft_text[:1200] + "\n\n[...truncated for preview...]"
-        )
-        console.print(Panel(preview, title="Paper Draft (preview)", border_style="cyan"))
-
-        issues_list = values.get("issues") or []
-        if issues_list:
-            console.print("")
-            console.print(f"[bold]Remaining issues ({len(issues_list)}):[/bold]")
-            for issue in issues_list:
-                severity_color = {
-                    "blocker": "red",
-                    "major": "yellow",
-                    "minor": "dim",
-                }.get(issue.severity, "white")
-                console.print(
-                    f"  [[{severity_color}]{issue.severity}[/{severity_color}]] "
-                    f"[dim]{issue.id}[/dim] {issue.summary}"
-                )
-
-        papers_dir = DATA_DIR / "papers"
-        papers_dir.mkdir(parents=True, exist_ok=True)
-        paper_path = papers_dir / f"{thread_id}.md"
-        paper_path.write_text(draft_text, encoding="utf-8")
-        console.print("")
-        console.print(f"[bold green]Paper saved to:[/bold green] {paper_path}")
-        console.print(f"[dim]Thread ID: {thread_id}[/dim]")
-        console.print(
-            f"[dim]Resume with: maars write {idea_path} {artifacts_dir} --thread {thread_id}[/dim]"
-        )
+        console.print(f"[dim]Resume: uv run maars refine --thread {thread_id}[/dim]")
 
 
 if __name__ == "__main__":
