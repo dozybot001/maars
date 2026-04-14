@@ -78,6 +78,40 @@ bash start.sh
 | `MAARS_DOCKER_SANDBOX_MEMORY` | `4g` | 容器内存上限 |
 | `MAARS_DOCKER_SANDBOX_CPU` | `1.0` | 容器 CPU 配额 |
 | `MAARS_DOCKER_SANDBOX_NETWORK` | `true` | 沙箱内是否联网 |
+| `MAARS_DOCKER_SANDBOX_GPU` | `false` | GPU 透传（需安装 NVIDIA Container Toolkit） |
+
+## GPU 加速
+
+深度学习任务（PyTorch 训练等）可通过 GPU 大幅提速。启用步骤：
+
+**1. 安装 NVIDIA Container Toolkit**（仅需一次，Ubuntu）：
+
+```bash
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+```
+
+**2. 验证** Docker 能看到 GPU：
+
+```bash
+docker run --rm --gpus all nvidia/cuda:12.8.0-runtime-ubuntu24.04 nvidia-smi
+```
+
+**3. 在 `.env` 中启用**：
+
+```env
+MAARS_DOCKER_SANDBOX_GPU=true
+MAARS_DOCKER_SANDBOX_TIMEOUT=1800
+MAARS_DOCKER_SANDBOX_MEMORY=16g
+MAARS_DOCKER_SANDBOX_CPU=4.0
+```
+
+`start.sh` 启动时会自动检测 GPU 是否可用。
 
 ## 产出结构
 

@@ -28,7 +28,7 @@ def _get_docker_client():
 
 
 def _run_container(client, shell_cmd, volumes, timeout):
-    container = client.containers.run(
+    run_kwargs = dict(
         image=settings.docker_sandbox_image,
         command=["bash", "-c", shell_cmd],
         volumes=volumes,
@@ -37,6 +37,12 @@ def _run_container(client, shell_cmd, volumes, timeout):
         network_disabled=not settings.docker_sandbox_network,
         detach=True,
     )
+    if settings.docker_sandbox_gpu:
+        import docker
+        run_kwargs["device_requests"] = [
+            docker.types.DeviceRequest(count=-1, capabilities=[["gpu"]])
+        ]
+    container = client.containers.run(**run_kwargs)
     with _containers_lock:
         _active_containers.append(container)
 

@@ -289,6 +289,17 @@ else
     else
         print_check "warn" "Docker" "Image build failed (see log)"
     fi
+
+    GPU_ENABLED="$(read_env_value MAARS_DOCKER_SANDBOX_GPU 2>/dev/null || echo 'false')"
+    if [ "$GPU_ENABLED" = "true" ]; then
+        if docker run --rm --gpus all nvidia/cuda:12.8.0-runtime-ubuntu24.04 nvidia-smi >/dev/null 2>&1; then
+            print_check "ok" "GPU" "NVIDIA GPU available"
+        else
+            print_check "warn" "GPU" "GPU=true but nvidia-docker not working — will fall back to CPU"
+        fi
+    else
+        print_check "info" "GPU" "Disabled (set MAARS_DOCKER_SANDBOX_GPU=true to enable)"
+    fi
 fi
 
 printf '\n  %b\n' "${CYAN}${BOLD}Server${NC}"

@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     docker_sandbox_memory: str
     docker_sandbox_cpu: float
     docker_sandbox_network: bool
+    docker_sandbox_gpu: bool
 
     class Config:
         env_prefix = "MAARS_"
