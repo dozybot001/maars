@@ -373,6 +373,10 @@ elif [ -f "$PWD/.venv/bin/python" ]; then
 else
     fail_startup "Dependencies" "venv Python not found"
 fi
+# Python 3.14+ venvs may omit pip; bootstrap it if missing.
+if ! "$PYTHON" -m pip --version >/dev/null 2>&1; then
+    run_logged "$PYTHON" -m ensurepip --upgrade || true
+fi
 STAMP="$PWD/.venv/.maars_deps_installed"
 if [ ! -f "$STAMP" ] || [ requirements.txt -nt "$STAMP" ]; then
     if run_logged "$PYTHON" -m pip install -r requirements.txt -q; then
