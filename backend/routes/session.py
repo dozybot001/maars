@@ -55,6 +55,7 @@ async def get_meta(request: Request):
 @router.get("/documents/list/{prefix}")
 async def list_documents(prefix: str, request: Request):
     db = _get_db(request)
+    _resolve_relative_path(db.session_dir, prefix)
     return db.list_documents(prefix)
 
 
@@ -70,6 +71,7 @@ async def get_task_output(task_id: str, request: Request):
 @router.get("/documents/{name:path}")
 async def get_document(name: str, request: Request):
     db = _get_db(request)
+    _resolve_relative_path(db.session_dir, f"{name}.md")
     content = db.get_document(name)
     if not content:
         raise HTTPException(status_code=404, detail=f"Document '{name}' not found")

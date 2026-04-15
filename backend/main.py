@@ -17,10 +17,25 @@ from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app):
+    from backend.agno import create_agno_stages
+
+    orchestrator = PipelineOrchestrator()
+    stages = create_agno_stages(
+        model_id=settings.google_model,
+        refine_model_id=settings.model_for_stage("refine"),
+        research_model_id=settings.model_for_stage("research"),
+        write_model_id=settings.model_for_stage("write"),
+        api_key=settings.google_api_key,
+        db=orchestrator.db,
+        max_iterations=settings.research_max_iterations,
+        max_delegations=settings.team_max_delegations,
+    )
+    orchestrator.stages.update(stages)
+    orchestrator._wire_broadcast()
+    app.state.orchestrator = orchestrator
+
     yield
-    orch = getattr(app.state, "orchestrator", None)
-    if orch:
-        await orch.shutdown()
+    await orchestrator.shutdown()
 
 
 class NoCacheStaticMiddleware(BaseHTTPMiddleware):
@@ -35,25 +50,6 @@ class NoCacheStaticMiddleware(BaseHTTPMiddleware):
 
 app = FastAPI(title="MAARS", version="0.1.0", lifespan=lifespan)
 app.add_middleware(NoCacheStaticMiddleware)
-
-orchestrator = PipelineOrchestrator()
-
-from backend.agno import create_agno_stages
-stages = create_agno_stages(
-    model_id=settings.google_model,
-    refine_model_id=settings.model_for_stage("refine"),
-    research_model_id=settings.model_for_stage("research"),
-    write_model_id=settings.model_for_stage("write"),
-    api_key=settings.google_api_key,
-    db=orchestrator.db,
-    max_iterations=settings.research_max_iterations,
-    max_delegations=settings.team_max_delegations,
-)
-
-orchestrator.stages.update(stages)
-orchestrator._wire_broadcast()
-
-app.state.orchestrator = orchestrator
 
 app.include_router(pipeline_routes.router)
 app.include_router(event_routes.router)

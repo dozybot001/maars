@@ -190,15 +190,17 @@ function wireCopyButton(btnId, sourceEl) {
   if (!btn || !sourceEl) return;
   btn.addEventListener('click', () => {
     const text = sourceEl.innerText;
-    try {
-      const textarea = document.createElement('textarea');
-      textarea.value = text; textarea.style.cssText = 'position:fixed;opacity:0';
-      document.body.appendChild(textarea); textarea.select();
-      document.execCommand('copy'); document.body.removeChild(textarea);
-      btn.textContent = 'Copied!';
-    } catch {
-      navigator.clipboard.writeText(text).then(() => { btn.textContent = 'Copied!'; }).catch(() => { btn.textContent = 'Failed'; });
+    const onDone = (ok) => { btn.textContent = ok ? 'Copied!' : 'Failed'; setTimeout(() => { btn.textContent = 'Copy'; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => onDone(true)).catch(() => onDone(false));
+    } else {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text; textarea.style.cssText = 'position:fixed;opacity:0';
+        document.body.appendChild(textarea); textarea.select();
+        document.execCommand('copy'); document.body.removeChild(textarea);
+        onDone(true);
+      } catch { onDone(false); }
     }
-    setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
   });
 }

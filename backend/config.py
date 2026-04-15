@@ -53,6 +53,9 @@ class Settings(BaseSettings):
             return self.agent_session_timeout
         return 2 * self.docker_sandbox_timeout
 
+    def is_chinese(self) -> bool:
+        return self.output_language.lower().startswith("ch")
+
     def model_for_stage(self, stage: str) -> str:
         override = getattr(self, f"{stage}_model", None)
         return override or self.google_model

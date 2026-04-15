@@ -11,6 +11,7 @@ class PipelineOrchestrator:
     """Manages the research pipeline: Refine → Research → Write."""
 
     def __init__(self):
+        from backend.config import settings
         self.research_input = ""
         self.db = ResearchDB()
         self._subscribers: set[asyncio.Queue] = set()
@@ -19,6 +20,7 @@ class PipelineOrchestrator:
         }
         self._pipeline_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
+        self._api_semaphore = asyncio.Semaphore(settings.api_concurrency)
 
     def subscribe(self) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=1024)
@@ -80,6 +82,8 @@ class PipelineOrchestrator:
             self.research_input = self.db.get_idea() or self.db.get_refined_idea()
             self._reset_stage_runtime()
 
+            # Full subclass retry for the target stage (clears in-memory state)
+            self.stages[stage_name].retry()
             if clear_outputs:
                 self.db.clear_stage_outputs(stage_name)
 
@@ -170,7 +174,9 @@ class PipelineOrchestrator:
                 raise
             except Exception:
                 self._kill_containers()
-                break
+                return
+        # All requested stages finished — release sandbox container
+        self._kill_containers()
 
     def _broadcast(self, event: dict):
         for q in list(self._subscribers):
@@ -182,6 +188,7 @@ class PipelineOrchestrator:
     def _wire_broadcast(self):
         for stage in self.stages.values():
             stage._broadcast = self._broadcast
+            stage._api_semaphore = self._api_semaphore
 
     def get_status(self) -> dict:
         return {

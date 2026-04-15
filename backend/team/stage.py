@@ -1,7 +1,6 @@
 """TeamStage -- base for iterative two-agent stages (primary + reviewer)."""
 
 import asyncio
-import json
 import logging
 from dataclasses import dataclass, field
 
@@ -13,8 +12,7 @@ log = logging.getLogger(__name__)
 
 def _is_zh() -> bool:
     from backend.config import settings
-    lang = settings.output_language.lower()
-    return lang.startswith("ch") or lang == "chinese"
+    return settings.is_chinese()
 
 
 @dataclass
@@ -175,33 +173,15 @@ class TeamStage(Stage):
     def _load_round_md(self, dirname: str, iteration: int) -> str:
         if not self.db:
             return ""
-        self.db._ensure_root()
-        path = self.db._root / dirname / f"round_{iteration}.md"
-        if path.exists():
-            return path.read_text(encoding="utf-8")
-        return ""
+        return self.db.load_round_md(dirname, iteration)
 
     def _load_round_json(self, dirname: str, iteration: int) -> dict | None:
         if not self.db:
             return None
-        self.db._ensure_root()
-        path = self.db._root / dirname / f"round_{iteration}.json"
-        if not path.exists():
-            return None
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, ValueError):
-            return None
+        return self.db.load_round_json(dirname, iteration)
 
     def _save_round_md(self, dirname: str, text: str, iteration: int):
-        self.db._ensure_root()
-        d = self.db._root / dirname
-        d.mkdir(exist_ok=True)
-        (d / f"round_{iteration}.md").write_text(text, encoding="utf-8")
+        self.db.save_round_md(dirname, text, iteration)
 
     def _save_round_json(self, dirname: str, data: dict, iteration: int):
-        from backend.db import _write_json
-        self.db._ensure_root()
-        d = self.db._root / dirname
-        d.mkdir(exist_ok=True)
-        _write_json(d / f"round_{iteration}.json", data)
+        self.db.save_round_json(dirname, data, iteration)

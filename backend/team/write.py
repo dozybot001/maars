@@ -44,7 +44,7 @@ class WriteStage(TeamStage):
             summary = self.db.get_results_summary_json()
             if summary:
                 summary_text = json.dumps(summary, indent=2, ensure_ascii=False)
-        if settings.output_language.lower().startswith("ch") or settings.output_language == "Chinese":
+        if settings.is_chinese():
             parts = [
                 "以下 JSON 是研究阶段生成的确定性实验摘要，也是论文写作的唯一事实锚点。",
                 "你写出的论文题目、任务、模型、数据集、结果、图表与结论，必须与这份 JSON 一致；如果不一致，就是错误草稿。",

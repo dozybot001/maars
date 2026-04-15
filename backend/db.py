@@ -77,6 +77,11 @@ class ResearchDB:
         if not self._root:
             raise RuntimeError("No active research session. Call create_session() first.")
 
+    @property
+    def session_dir(self) -> Path:
+        self._ensure_root()
+        return self._root
+
     # --- Write ---
 
     def save_idea(self, text: str):
@@ -343,18 +348,6 @@ class ResearchDB:
                 count += 1
         return count
 
-    def get_latest_score(self) -> float | None:
-        self._ensure_root()
-        eval_dir = self._root / "evaluations"
-        if not eval_dir.exists():
-            return None
-        files = sorted(eval_dir.glob("round_*.json"))
-        if not files:
-            return None
-        data = _read_json(files[-1])
-        score = data.get("score")
-        return float(score) if score is not None else None
-
     def load_evaluations(self) -> list[dict]:
         """Load all previous evaluation JSONs, sorted by iteration."""
         self._ensure_root()
@@ -367,14 +360,6 @@ class ResearchDB:
             if data:
                 results.append(data)
         return results
-
-    def list_completed_tasks(self) -> list[dict]:
-        self._ensure_root()
-        tasks_dir = self._root / "tasks"
-        if not tasks_dir.exists():
-            return []
-        return [{"id": f.stem, "size_bytes": f.stat().st_size}
-                for f in sorted(tasks_dir.glob("*.md"))]
 
     def get_tasks_dir(self) -> Path:
         self._ensure_root()
@@ -391,65 +376,74 @@ class ResearchDB:
             return task_dir
         return artifacts
 
-    def clear_tasks(self):
-        self._ensure_root()
-        tasks_dir = self._root / "tasks"
-        if tasks_dir.exists():
-            for f in tasks_dir.glob("*.md"):
-                f.unlink()
+    # --- Round-based read/write (used by TeamStage iterations) ---
 
-    def clear_plan(self):
+    def load_round_md(self, dirname: str, iteration: int) -> str:
         self._ensure_root()
-        for name in ("plan_list.json", "plan_tree.json"):
-            path = self._root / name
-            if path.exists():
-                path.unlink()
-        for subdir in ("evaluations", "strategy"):
-            d = self._root / subdir
-            if d.exists():
-                for f in d.iterdir():
-                    if f.is_file():
-                        f.unlink()
+        path = self._root / dirname / f"round_{iteration}.md"
+        return path.read_text(encoding="utf-8") if path.exists() else ""
+
+    def load_round_json(self, dirname: str, iteration: int) -> dict | None:
+        self._ensure_root()
+        path = self._root / dirname / f"round_{iteration}.json"
+        if not path.exists():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, ValueError):
+            return None
+
+    def save_round_md(self, dirname: str, text: str, iteration: int):
+        self._ensure_root()
+        d = self._root / dirname
+        d.mkdir(exist_ok=True)
+        (d / f"round_{iteration}.md").write_text(text, encoding="utf-8")
+
+    def save_round_json(self, dirname: str, data: dict, iteration: int):
+        self._ensure_root()
+        d = self._root / dirname
+        d.mkdir(exist_ok=True)
+        _write_json(d / f"round_{iteration}.json", data)
 
     def clear_stage_outputs(self, stage_name: str):
+        import shutil
         self._ensure_root()
         stage_dirs = {
             "refine": ("proposals", "critiques"),
+            "research": ("tasks", "evaluations", "strategy", "artifacts", "reproduce"),
             "write": ("drafts", "reviews"),
         }
         stage_files = {
             "refine": ("refined_idea.md",),
+            "research": (
+                "calibration.md", "plan_tree.json", "plan_list.json",
+                "results_summary.json", "results_summary.md", "execution_log.jsonl",
+            ),
             "write": ("paper.md",),
         }
         for dirname in stage_dirs.get(stage_name, ()):
             path = self._root / dirname
             if path.exists():
-                for child in path.iterdir():
-                    if child.is_file():
-                        child.unlink()
-                try:
-                    path.rmdir()
-                except OSError:
-                    pass
+                shutil.rmtree(path)
         for filename in stage_files.get(stage_name, ()):
             path = self._root / filename
             if path.exists():
                 path.unlink()
-        if stage_name in {"refine", "research", "write"}:
-            log_path = self._root / "log.jsonl"
-            if log_path.exists():
-                kept_lines = []
-                for line in log_path.read_text(encoding="utf-8").splitlines():
-                    try:
-                        entry = json.loads(line)
-                    except json.JSONDecodeError:
-                        kept_lines.append(line)
-                        continue
-                    if entry.get("stage") == stage_name:
-                        continue
+        # Clear stage-specific log entries
+        log_path = self._root / "log.jsonl"
+        if log_path.exists():
+            kept_lines = []
+            for line in log_path.read_text(encoding="utf-8").splitlines():
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
                     kept_lines.append(line)
-                text = ("\n".join(kept_lines) + "\n") if kept_lines else ""
-                log_path.write_text(text, encoding="utf-8")
+                    continue
+                if entry.get("stage") == stage_name:
+                    continue
+                kept_lines.append(line)
+            text = ("\n".join(kept_lines) + "\n") if kept_lines else ""
+            log_path.write_text(text, encoding="utf-8")
 
     def promote_best_score(self):
         if not self.current_task_id:

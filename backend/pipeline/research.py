@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from pathlib import Path
@@ -147,7 +148,6 @@ class ResearchStage(Stage):
 
     def _describe_dataset(self) -> str:
         """Describe dataset files if available."""
-        from pathlib import Path
         if not settings.dataset_dir:
             return ""
         dataset_path = Path(settings.dataset_dir)
@@ -176,10 +176,6 @@ class ResearchStage(Stage):
         await asyncio.to_thread(_preflight_docker)
 
         self.output = ""
-        self._task_results = {}
-        self._task_summaries = {}
-        self._prev_score = self._load_prev_score()
-        self._load_checkpoint()
         idea = self.db.get_refined_idea()
 
         await self._calibrate_once(idea)
@@ -464,8 +460,7 @@ class ResearchStage(Stage):
 
         call_id = f"Exec {task_id}"
 
-        from backend.pipeline.stage import _get_api_semaphore
-        async with _get_api_semaphore():
+        async with (self._api_semaphore or contextlib.nullcontext()):
             self._current_task_id = task_id
             self.db.current_task_id = task_id
             self._send(status="running", task_id=task_id, description=task["description"])
@@ -483,37 +478,23 @@ class ResearchStage(Stage):
         }
         instruction, user_text = build_execute_prompt(task, prior_attempt, dep_summaries)
         result = await self._llm(instruction, user_text, call_id, content_level=4, label=True, label_level=3, _skip_semaphore=True)
+        self._update_summary(task_id, result)
 
-        # Summary comes from execute, not verify
-        summary = self._extract_summary(result)
-        if summary:
-            self._task_summaries[task_id] = summary
-
-        self._send(status="verifying", task_id=task_id)
-        vi, vt = build_verify_prompt(task, result)
-        verify_response = await self._llm(vi, vt, call_id, content_level=4, _skip_semaphore=True, tools=[])
-        passed, review, redecompose = self._parse_verification(verify_response)
-
+        passed, review, redecompose = await self._verify_task(task, result, task_id, call_id)
         if passed:
             self._save_task(task_id, result)
             return (False, task, result, "")
         if redecompose:
             return (True, task, result, review)
 
+        # Retry once
         self._send(status="retrying", task_id=task_id)
         ri, rt = build_retry_prompt(task, result, review, dep_summaries,
                                      prior_attempt=prior_attempt)
         result = await self._llm(ri, rt, call_id, content_level=4, _skip_semaphore=True)
+        self._update_summary(task_id, result)
 
-        retry_summary = self._extract_summary(result)
-        if retry_summary:
-            self._task_summaries[task_id] = retry_summary
-
-        self._send(status="verifying", task_id=task_id)
-        vi, vt = build_verify_prompt(task, result)
-        verify_response = await self._llm(vi, vt, call_id, content_level=4, _skip_semaphore=True, tools=[])
-        passed, review, redecompose = self._parse_verification(verify_response)
-
+        passed, review, redecompose = await self._verify_task(task, result, task_id, call_id)
         if passed:
             self._save_task(task_id, result)
             return (False, task, result, "")
@@ -521,6 +502,17 @@ class ResearchStage(Stage):
             return (True, task, result, review)
 
         raise RuntimeError(f"Task {task_id} failed verification after retry: {review}")
+
+    async def _verify_task(self, task, result, task_id, call_id) -> tuple[bool, str, bool]:
+        self._send(status="verifying", task_id=task_id)
+        vi, vt = build_verify_prompt(task, result)
+        response = await self._llm(vi, vt, call_id, content_level=4, _skip_semaphore=True, tools=[])
+        return self._parse_verification(response)
+
+    def _update_summary(self, task_id: str, result: str):
+        summary = self._extract_summary(result)
+        if summary:
+            self._task_summaries[task_id] = summary
 
     def _save_task(self, task_id: str, result: str):
         summary = self._task_summaries.get(task_id, "")
@@ -531,7 +523,8 @@ class ResearchStage(Stage):
             self.db.save_task_output(task_id, result)
             self.db.update_task_status(task_id, "completed", summary)
         self._task_results[task_id] = result
-        self.db.promote_best_score()
+        if self.db:
+            self.db.promote_best_score()
         self._send(task_id=task_id)  # done: task output saved
 
     @staticmethod
@@ -554,12 +547,6 @@ class ResearchStage(Stage):
     # ------------------------------------------------------------------
     # Evaluate & Strategy
     # ------------------------------------------------------------------
-
-    def _load_prev_score(self) -> float | None:
-        try:
-            return self.db.get_latest_score()
-        except RuntimeError:
-            return None
 
     async def _research_strategy(self, idea: str) -> str:
         call_id = "Strategy"
@@ -703,7 +690,7 @@ class ResearchStage(Stage):
         self._send(status="decomposing", task_id=task_id)
         self._partial_outputs[task_id] = result
 
-        if settings.output_language.lower().startswith("ch"):
+        if settings.is_chinese():
             enriched_desc = (
                 f"{task['description']}\n\n"
                 f"--- 此任务曾尝试执行但验证未通过 ---\n"
@@ -960,23 +947,6 @@ class ResearchStage(Stage):
             parts.append(f"## Task [{task_id}]\n\n{self._task_results[task_id]}")
         return "\n\n---\n\n".join(parts)
 
-    def _load_checkpoint(self):
-        if not self.db:
-            return
-        plan_ids = {t["id"] for t in self.db.get_plan_list()} or None
-        for info in self.db.list_completed_tasks():
-            task_id = info["id"]
-            if plan_ids is not None and task_id not in plan_ids:
-                continue
-            output = self.db.get_task_output(task_id)
-            if output:
-                self._task_results[task_id] = output
-        for task in self.db.get_plan_list():
-            tid = task.get("id", "")
-            summary = task.get("summary", "")
-            if tid and summary and tid in self._task_results:
-                self._task_summaries[tid] = summary
-
     def retry(self):
         super().retry()
         self._task_results.clear()
@@ -986,6 +956,3 @@ class ResearchStage(Stage):
         self._strategy = ""
         self._prev_score = None
         self._partial_outputs.clear()
-        if self.db:
-            self.db.clear_tasks()
-            self.db.clear_plan()

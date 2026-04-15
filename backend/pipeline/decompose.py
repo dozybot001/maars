@@ -114,11 +114,13 @@ def _depth(task_id: str, root_id: str) -> int:
     """Compute depth relative to root."""
     if task_id == root_id:
         return 0
-    # Count segments after root prefix
     if root_id == "0":
         return len(task_id.split("_"))
-    suffix = task_id[len(root_id):]  # e.g. "6_1_2" with root "6" → "_1_2"
-    return len(suffix.split("_")) - 1
+    # Verify task_id is actually a descendant (must start with root_id + "_")
+    prefix = root_id + "_"
+    if not task_id.startswith(prefix):
+        return 0
+    return len(task_id[len(root_id):].split("_")) - 1
 
 
 def _get_siblings(task_id: str, tasks: dict[str, Task], root_id: str = "0") -> list[dict]:
