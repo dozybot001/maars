@@ -1,5 +1,5 @@
 import { connectSSE } from './api.js';
-import { initPipelineUI } from './pipeline-ui.js';
+import { initPipelineUI, syncFromAPI } from './pipeline-ui.js';
 import { initLogViewer } from './log-viewer.js';
 import { initProcessViewer } from './process-viewer.js';
 import { initModal } from './modal.js';
@@ -11,7 +11,6 @@ initProcessViewer();
 initModal();
 
 connectSSE();
-import { syncFromAPI } from './pipeline-ui.js';
 syncFromAPI();
 
 async function checkDocker() {

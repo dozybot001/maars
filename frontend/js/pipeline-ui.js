@@ -56,6 +56,14 @@ export function initPipelineUI() {
     }
   });
   syncButtons();
+
+  // Fallback: poll status every 3s to keep buttons in sync
+  // in case SSE events are missed (reconnection gaps, etc.)
+  setInterval(() => {
+    const anyActive = NODE_ORDER.some((n) => nodeStates[n] === 'active');
+    const anyPaused = NODE_ORDER.some((n) => nodeStates[n] === 'paused');
+    if (!anyActive && !anyPaused) syncFromAPI();
+  }, 3000);
 }
 
 export async function syncFromAPI() {
