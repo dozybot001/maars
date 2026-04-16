@@ -37,6 +37,19 @@ export function initPipelineUI() {
 
     const node = (stage === 'research' && phase) ? phase : stage;
     if (!NODE_SET.has(node)) return;
+
+    // Research iteration: if a phase we've already seen becomes active again,
+    // reset it and all subsequent research phases (loop is re-running)
+    if (seenNodes.has(node) && RESEARCH_PHASES.has(node)) {
+      const idx = NODE_ORDER.indexOf(node);
+      for (let i = idx; i < NODE_ORDER.length; i++) {
+        const n = NODE_ORDER[i];
+        if (!RESEARCH_PHASES.has(n)) break;
+        seenNodes.delete(n);
+        updateNode(n, 'idle');
+      }
+    }
+
     if (seenNodes.has(node)) return;
     seenNodes.add(node);
     for (const n of NODE_ORDER) {
