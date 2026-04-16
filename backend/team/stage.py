@@ -93,7 +93,7 @@ class TeamStage(Stage):
 
             # 1. Primary agent produces/revises — skip if already on disk
             self._current_phase = self._primary_phase
-            draft = self._load_round_md(self._primary_dir, round_num + 1)
+            draft = self._load_round_md(self._primary_dir, round_num)
             if not draft:
                 primary_user = self._build_primary_prompt(input_text, state)
                 draft = await self._stream_llm(
@@ -102,7 +102,7 @@ class TeamStage(Stage):
                     label=True, label_level=2,
                 )
                 if self.db:
-                    self._save_round_md(self._primary_dir, draft, round_num + 1)
+                    self._save_round_md(self._primary_dir, draft, round_num)
             state.draft = draft
             self._send()
 
@@ -111,7 +111,7 @@ class TeamStage(Stage):
 
             # 2. Reviewer critiques — skip if already on disk
             self._current_phase = self._reviewer_phase
-            feedback = self._load_round_json(self._reviewer_dir, round_num + 1)
+            feedback = self._load_round_json(self._reviewer_dir, round_num)
             if feedback is None:
                 reviewer_user = self._build_reviewer_prompt(input_text, state)
                 for _parse_attempt in range(2):
@@ -127,8 +127,8 @@ class TeamStage(Stage):
                     log.warning("%s: reviewer JSON parse failed after retry", self.name)
                     feedback = {"issues": []}
                 if self.db:
-                    self._save_round_md(self._reviewer_dir, review_raw, round_num + 1)
-                    self._save_round_json(self._reviewer_dir, feedback, round_num + 1)
+                    self._save_round_md(self._reviewer_dir, review_raw, round_num)
+                    self._save_round_json(self._reviewer_dir, feedback, round_num)
             self._send()
 
             # System decides: empty issues list = pass
