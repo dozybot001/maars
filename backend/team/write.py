@@ -89,36 +89,3 @@ class WriteStage(TeamStage):
         if self.db:
             self.db.save_paper(result)
         return result
-
-    # ------------------------------------------------------------------
-    # Override _execute: Writer/Reviewer loop → Polish → Metadata
-    # ------------------------------------------------------------------
-
-    async def _execute(self) -> str:
-        # 1. Writer/Reviewer iterative loop → paper.md
-        paper = await super()._execute()
-
-        # 2. Polish pass (LLM single-shot) → stage='write', phase='polish'
-        self._current_phase = "polish"
-        from backend.team.prompts import POLISH_SYSTEM
-        from backend.team.polish import build_polish_input, build_metadata_appendix
-
-        polished = await self._stream_llm(
-            self._model, [], POLISH_SYSTEM,
-            build_polish_input(paper, self.db),
-            call_id="Polish", content_level=3,
-            label=True, label_level=2,
-        )
-
-        # 3. Deterministic metadata appendix
-        self._current_phase = "metadata"
-        appendix = build_metadata_appendix(self.db)
-        self._send(chunk={"text": appendix, "call_id": "Metadata", "level": 3})
-
-        final = polished.rstrip() + "\n\n" + appendix
-        if self.db:
-            self.db.save_paper_final(final)
-
-        # Reset phase so the done signal from Stage.run() has no phase
-        self._current_phase = ""
-        return final

@@ -4,7 +4,7 @@ import logging
 from backend.db import ResearchDB
 from backend.pipeline.stage import Stage, StageState
 
-STAGE_ORDER = ["refine", "research", "write"]
+STAGE_ORDER = ["refine", "research", "write", "polish"]
 
 
 class PipelineOrchestrator:
@@ -157,6 +157,8 @@ class PipelineOrchestrator:
             output = "\n".join(t.get("summary", "") for t in plan if t.get("summary"))
         elif stage_name == "write":
             output = self.db.get_document("paper")
+        elif stage_name == "polish":
+            output = self.db.get_document("paper_final")
         else:
             output = ""
         stage.mark_completed(output)

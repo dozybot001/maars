@@ -8,6 +8,7 @@ from backend.agno.models import create_model
 from backend.pipeline.research import ResearchStage
 from backend.team.refine import RefineStage
 from backend.team.write import WriteStage
+from backend.team.polish import PolishStage
 
 
 def create_agno_stages(
@@ -15,6 +16,7 @@ def create_agno_stages(
     refine_model_id: str | None = None,
     research_model_id: str | None = None,
     write_model_id: str | None = None,
+    polish_model_id: str | None = None,
     api_key: str = "",
     db=None,
     max_iterations: int = 1,
@@ -31,6 +33,7 @@ def create_agno_stages(
     refine_model = get_model(refine_model_id)
     research_model = get_model(research_model_id)
     write_model = get_model(write_model_id)
+    polish_model = get_model(polish_model_id or write_model_id)
     db_tools = create_db_tools(db) if db else []
     docker_tools = create_docker_tools(db) if db else []
     list_artifacts = docker_tools[1:] if len(docker_tools) > 1 else []
@@ -49,4 +52,5 @@ def create_agno_stages(
         "write": WriteStage(model=write_model, writer_tools=writer_tools,
                             reviewer_tools=reviewer_tools, db=db,
                             max_delegations=max_delegations),
+        "polish": PolishStage(model=polish_model, db=db),
     }

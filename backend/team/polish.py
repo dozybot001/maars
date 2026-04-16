@@ -1,13 +1,47 @@
-"""Polish utilities: input builder and deterministic metadata appendix.
+"""Polish stage: single-pass paper refinement + deterministic metadata appendix."""
 
-These are called by WriteStage after the writer/reviewer loop completes.
-Not a Stage subclass — polish is a phase within Write, not a separate stage.
-"""
+from backend.config import settings
+from backend.pipeline.stage import Stage
 
 
-def build_polish_input(paper: str, db) -> str:
-    """Build the user prompt for the polish LLM call."""
-    from backend.config import settings
+class PolishStage(Stage):
+
+    def __init__(self, name: str = "polish", model=None, db=None):
+        super().__init__(name=name, db=db)
+        self._model = model
+
+    async def _execute(self) -> str:
+        paper = self.db.get_document("paper") if self.db else ""
+        if not paper:
+            raise RuntimeError("No paper.md found — run the Write stage first.")
+
+        # 1. LLM polish
+        self._current_phase = "polish"
+        from backend.team.prompts import POLISH_SYSTEM
+        polished = await self._stream_llm(
+            self._model, [], POLISH_SYSTEM,
+            _build_input(paper, self.db),
+            call_id="Polish", content_level=3,
+            label=True, label_level=2,
+        )
+
+        # 2. Deterministic metadata appendix
+        self._current_phase = "metadata"
+        appendix = build_metadata_appendix(self.db)
+        self._send(chunk={"text": appendix, "call_id": "Metadata", "level": 3})
+
+        final = polished.rstrip() + "\n\n" + appendix
+        if self.db:
+            self.db.save_paper_final(final)
+        self._current_phase = ""
+        return final
+
+
+# ------------------------------------------------------------------
+# Input builder
+# ------------------------------------------------------------------
+
+def _build_input(paper: str, db) -> str:
     zh = settings.is_chinese()
     parts: list[str] = []
 
@@ -28,11 +62,12 @@ def build_polish_input(paper: str, db) -> str:
     return "\n".join(parts)
 
 
-def build_metadata_appendix(db) -> str:
-    """Generate the execution report appendix deterministically from DB + settings."""
-    from backend.config import settings
-    zh = settings.is_chinese()
+# ------------------------------------------------------------------
+# Deterministic metadata appendix
+# ------------------------------------------------------------------
 
+def build_metadata_appendix(db) -> str:
+    zh = settings.is_chinese()
     meta = db.get_meta() if db else {}
     research_id = db.research_id if db else "unknown"
 
@@ -52,27 +87,18 @@ def build_metadata_appendix(db) -> str:
     refine_model = settings.refine_model or main_model
     research_model = settings.research_model or main_model
     write_model = settings.write_model or main_model
+    polish_model = settings.model_for_stage("polish")
 
     renderer = _render_zh if zh else _render_en
     return renderer(
-        research_id=research_id,
-        duration=duration_str,
-        task_count=task_count,
-        artifact_count=artifact_count,
-        tokens_in=tokens_in,
-        tokens_out=tokens_out,
-        tokens_total=tokens_total,
-        main_model=main_model,
-        refine_model=refine_model,
-        research_model=research_model,
-        write_model=write_model,
-        settings=settings,
+        research_id=research_id, duration=duration_str,
+        task_count=task_count, artifact_count=artifact_count,
+        tokens_in=tokens_in, tokens_out=tokens_out, tokens_total=tokens_total,
+        main_model=main_model, refine_model=refine_model,
+        research_model=research_model, write_model=write_model,
+        polish_model=polish_model, settings=settings,
     )
 
-
-# ------------------------------------------------------------------
-# Internal helpers
-# ------------------------------------------------------------------
 
 def _calc_duration(db) -> str:
     if not db:
@@ -84,8 +110,7 @@ def _calc_duration(db) -> str:
     last_ts = log_entries[-1].get("ts", 0)
     if not first_ts or not last_ts:
         return "N/A"
-    minutes = (last_ts - first_ts) / 60
-    return f"{minutes:.1f} min"
+    return f"{(last_ts - first_ts) / 60:.1f} min"
 
 
 def _count_artifacts(db) -> int:
@@ -104,7 +129,7 @@ def _count_artifacts(db) -> int:
 def _render_zh(*, research_id, duration, task_count, artifact_count,
                tokens_in, tokens_out, tokens_total,
                main_model, refine_model, research_model, write_model,
-               settings) -> str:
+               polish_model, settings) -> str:
     return f"""---
 
 ## 附录：MAARS 执行报告
@@ -119,6 +144,7 @@ def _render_zh(*, research_id, duration, task_count, artifact_count,
 | Refine 模型 | `{refine_model}` |
 | Research 模型 | `{research_model}` |
 | Write 模型 | `{write_model}` |
+| Polish 模型 | `{polish_model}` |
 | 输出语言 | `{settings.output_language}` |
 | API 并发 | `{settings.api_concurrency}` |
 | 研究迭代上限 | `{settings.research_max_iterations}` |
@@ -163,7 +189,7 @@ def _render_zh(*, research_id, duration, task_count, artifact_count,
 def _render_en(*, research_id, duration, task_count, artifact_count,
                tokens_in, tokens_out, tokens_total,
                main_model, refine_model, research_model, write_model,
-               settings) -> str:
+               polish_model, settings) -> str:
     return f"""---
 
 ## Appendix: MAARS Execution Report
@@ -178,6 +204,7 @@ def _render_en(*, research_id, duration, task_count, artifact_count,
 | Refine model | `{refine_model}` |
 | Research model | `{research_model}` |
 | Write model | `{write_model}` |
+| Polish model | `{polish_model}` |
 | Output language | `{settings.output_language}` |
 | API concurrency | `{settings.api_concurrency}` |
 | Research iteration limit | `{settings.research_max_iterations}` |

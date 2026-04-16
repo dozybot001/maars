@@ -2,7 +2,7 @@ import { on } from './events.js';
 import { startPipeline, pipelineAction, fetchStatus } from './api.js';
 import { pauseTimers, resumeTimers } from './log-viewer.js';
 
-const NODE_ORDER = ['refine', 'calibrate', 'strategy', 'decompose', 'execute', 'evaluate', 'write'];
+const NODE_ORDER = ['refine', 'calibrate', 'strategy', 'decompose', 'execute', 'evaluate', 'write', 'polish'];
 const NODE_SET = new Set(NODE_ORDER);
 const RESEARCH_PHASES = new Set(['calibrate', 'strategy', 'decompose', 'execute', 'evaluate']);
 const nodeStates = {};
@@ -27,7 +27,7 @@ export function initPipelineUI() {
         syncButtons();
         return;
       }
-      if ((stage === 'refine' || stage === 'write') && !phase) {
+      if ((stage === 'refine' || stage === 'write' || stage === 'polish') && !phase) {
         updateNode(stage, 'done');
         seenNodes.add(stage);
         syncButtons();
@@ -74,9 +74,11 @@ export async function syncFromAPI() {
       if (st.name === 'refine') { updateNode('refine', 'done'); seenNodes.add('refine'); }
       else if (st.name === 'research') { RESEARCH_PHASES.forEach((n) => { updateNode(n, 'done'); seenNodes.add(n); }); }
       else if (st.name === 'write') { updateNode('write', 'done'); seenNodes.add('write'); }
+      else if (st.name === 'polish') { updateNode('polish', 'done'); seenNodes.add('polish'); }
     } else if (st.state === 'running') {
       if (st.name === 'refine') { updateNode('refine', 'active'); seenNodes.add('refine'); }
       else if (st.name === 'write') { updateNode('write', 'active'); seenNodes.add('write'); }
+      else if (st.name === 'polish') { updateNode('polish', 'active'); seenNodes.add('polish'); }
       else if (st.name === 'research' && st.phase) {
         for (const n of ['calibrate', 'strategy', 'decompose', 'execute', 'evaluate']) {
           seenNodes.add(n);

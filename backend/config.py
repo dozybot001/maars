@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     refine_model: str | None = None
     research_model: str | None = None
     write_model: str | None = None
+    polish_model: str | None = None
 
     # --- Research ---
     research_max_iterations: int
@@ -59,7 +60,12 @@ class Settings(BaseSettings):
 
     def model_for_stage(self, stage: str) -> str:
         override = getattr(self, f"{stage}_model", None)
-        return override or self.google_model
+        if override:
+            return override
+        # polish falls back to write_model before google_model
+        if stage == "polish" and self.write_model:
+            return self.write_model
+        return self.google_model
 
 
 settings = Settings()

@@ -25,6 +25,7 @@ async def lifespan(app):
         refine_model_id=settings.model_for_stage("refine"),
         research_model_id=settings.model_for_stage("research"),
         write_model_id=settings.model_for_stage("write"),
+        polish_model_id=settings.model_for_stage("polish"),
         api_key=settings.google_api_key,
         db=orchestrator.db,
         max_iterations=settings.research_max_iterations,

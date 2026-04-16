@@ -135,7 +135,7 @@ async def stop_pipeline(request: Request):
     orch = _get_orchestrator(request)
     await orch.stop()
     from backend.pipeline.stage import StageState
-    running = next((n for n in ["refine", "research", "write"]
+    running = next((n for n in ["refine", "research", "write", "polish"]
                      if orch.stages[n].state == StageState.PAUSED), "")
     return ActionResponse(stage=running, state="paused", message="Pipeline paused")
 
@@ -145,6 +145,6 @@ async def resume_pipeline(request: Request):
     orch = _get_orchestrator(request)
     await orch.resume()
     from backend.pipeline.stage import StageState
-    resumed = next((n for n in ["refine", "research", "write"]
+    resumed = next((n for n in ["refine", "research", "write", "polish"]
                      if orch.stages[n].state == StageState.RUNNING), "")
     return ActionResponse(stage=resumed, state="running", message="Pipeline resumed")
