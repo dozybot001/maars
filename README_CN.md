@@ -9,9 +9,13 @@
 
 ---
 
-MAARS 接受一个模糊的研究想法（或 Kaggle 比赛链接），通过三阶段流水线 **Refine -> Research -> Write** 产出结构化研究产物和完整的 `paper.md`。
+MAARS 接受一个模糊的研究想法（或 Kaggle 比赛链接），通过四阶段流水线 **Refine → Research → Write → Polish** 产出结构化研究产物和打磨后的论文。
 
 每个阶段由 Python runtime 编排，LLM Agent 执行开放性工作——文献调研、代码实验、论文撰写、同行评审——全程自主运行，迭代自我改进。
+
+<p align="center">
+  <video src="https://github.com/dozybot001/MAARS/raw/main/showcase/20260416-230413-lorenz-4-scipyintegratesolveivp-rk45-lorenz/demo.mp4" width="720" controls></video>
+</p>
 
 ## 流水线
 
@@ -27,12 +31,16 @@ graph LR
     subgraph Write
         W[Writer] <--> R[Reviewer]
     end
-    Refine -->|refined_idea| Research -->|artifacts| Write -->|paper.md| Final((Done))
+    subgraph Polish
+        P[Polish LLM] --> M[Metadata]
+    end
+    Refine -->|refined_idea| Research -->|artifacts| Write -->|paper.md| Polish -->|paper_polished.md| Final((Done))
 ```
 
-- **Refine**：Explorer 调研文献并起草提案；Critic 评审并推动更强的表述。迭代直到 Critic 满意。
-- **Research**：将提案分解为原子任务，在 Docker 沙箱中并行执行，验证产出，评估结果——通过策略更新进行多轮迭代。
-- **Write**：Writer 读取所有研究产出撰写完整论文；Reviewer 评审并驱动修订。
+- **Refine**：Explorer 调研文献并起草提案；Critic 在声明范围内评审。迭代直到零 issue。
+- **Research**：将提案分解为原子任务，在 Docker 沙箱中并行执行，验证产出，评估结果——存在关键空白时通过策略更新迭代。
+- **Write**：Writer 读取所有研究产出撰写完整论文；Reviewer 评审并驱动修订，直到零 issue。
+- **Polish**：单次 LLM 打磨提升文风质量，附加确定性执行元数据附录。
 
 ## 快速开始
 
@@ -72,7 +80,9 @@ bash start.sh
 | `MAARS_REFINE_MODEL` | — | 可选：`refine` 阶段模型覆盖 |
 | `MAARS_RESEARCH_MODEL` | — | 可选：`research` 阶段模型覆盖 |
 | `MAARS_WRITE_MODEL` | — | 可选：`write` 阶段模型覆盖 |
+| `MAARS_POLISH_MODEL` | — | 可选：`polish` 阶段模型覆盖（默认回退到 write 模型） |
 | `MAARS_API_CONCURRENCY` | `1` | LLM 最大并发数 |
+| `MAARS_API_REQUEST_INTERVAL` | `0` | LLM 请求最小间隔秒数（免费 tier 建议 1-2） |
 | `MAARS_OUTPUT_LANGUAGE` | `Chinese` | 提示词/输出语言（`Chinese` 或 `English`） |
 | `MAARS_RESEARCH_MAX_ITERATIONS` | `3` | Research 最大评估轮数 |
 | `MAARS_TEAM_MAX_DELEGATIONS` | `5` | Refine/Write 最大迭代轮数 |
@@ -149,6 +159,7 @@ results/{session}/
 │   ├── round_N.md
 │   └── round_N.json
 ├── paper.md                    # Write 最终产出
+├── paper_polished.md           # Polish 最终产出（含元数据附录）
 ├── meta.json                   # 元信息（tokens、score）
 ├── log.jsonl                   # 流式 chunk 日志
 ├── execution_log.jsonl         # Docker 执行记录

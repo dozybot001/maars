@@ -9,9 +9,13 @@
 
 ---
 
-MAARS takes a vague research idea (or a Kaggle competition URL) and produces structured research artifacts and a complete `paper.md` through a three-stage pipeline: **Refine → Research → Write**.
+MAARS takes a vague research idea (or a Kaggle competition URL) and produces structured research artifacts and a polished paper through a four-stage pipeline: **Refine → Research → Write → Polish**.
 
 Each stage is orchestrated by Python runtime with LLM agents executing the open-ended work — literature surveys, code experiments, paper writing, and peer review — all running autonomously with iterative self-improvement.
+
+<p align="center">
+  <video src="https://github.com/dozybot001/MAARS/raw/main/showcase/20260416-230413-lorenz-4-scipyintegratesolveivp-rk45-lorenz/demo.mp4" width="720" controls></video>
+</p>
 
 ## Pipeline
 
@@ -27,12 +31,16 @@ graph LR
     subgraph Write
         W[Writer] <--> R[Reviewer]
     end
-    Refine -->|refined_idea| Research -->|artifacts| Write -->|paper.md| Final((Done))
+    subgraph Polish
+        P[Polish LLM] --> M[Metadata]
+    end
+    Refine -->|refined_idea| Research -->|artifacts| Write -->|paper.md| Polish -->|paper_polished.md| Final((Done))
 ```
 
-- **Refine**: Explorer surveys literature and drafts a proposal; Critic reviews and pushes for stronger formulations. Iterates until the Critic is satisfied.
-- **Research**: Decomposes the proposal into atomic tasks, executes them in Docker sandboxes with parallel scheduling, verifies outputs, and evaluates results — looping with strategy updates.
-- **Write**: Writer reads all research outputs and produces a complete paper; Reviewer critiques and drives revisions.
+- **Refine**: Explorer surveys literature and drafts a proposal; Critic reviews within declared scope. Iterates until zero issues remain.
+- **Research**: Decomposes the proposal into atomic tasks, executes them in Docker sandboxes with parallel scheduling, verifies outputs, and evaluates results — looping with strategy updates when critical gaps exist.
+- **Write**: Writer reads all research outputs and produces a complete paper; Reviewer critiques and drives revisions until zero issues remain.
+- **Polish**: Single-pass LLM refinement for prose quality, plus a deterministic execution metadata appendix.
 
 ## Quick Start
 
@@ -72,7 +80,9 @@ All variables use the `MAARS_` prefix in `.env`:
 | `MAARS_REFINE_MODEL` | — | Optional override for the `refine` stage model |
 | `MAARS_RESEARCH_MODEL` | — | Optional override for the `research` stage model |
 | `MAARS_WRITE_MODEL` | — | Optional override for the `write` stage model |
+| `MAARS_POLISH_MODEL` | — | Optional override for the `polish` stage (falls back to write model) |
 | `MAARS_API_CONCURRENCY` | `1` | Max concurrent LLM requests |
+| `MAARS_API_REQUEST_INTERVAL` | `0` | Min seconds between LLM calls (set 1-2 for free-tier rate limits) |
 | `MAARS_OUTPUT_LANGUAGE` | `Chinese` | Prompt/output language (`Chinese` or `English`) |
 | `MAARS_RESEARCH_MAX_ITERATIONS` | `3` | Max research evaluation rounds |
 | `MAARS_TEAM_MAX_DELEGATIONS` | `5` | Max Refine/Write iteration rounds |
@@ -149,6 +159,7 @@ results/{session}/
 │   ├── round_N.md
 │   └── round_N.json
 ├── paper.md                    # Write final output
+├── paper_polished.md           # Polish final output (with metadata appendix)
 ├── meta.json                   # Metadata (tokens, score)
 ├── log.jsonl                   # Streaming chunk log
 ├── execution_log.jsonl         # Docker execution log
