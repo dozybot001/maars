@@ -1,6 +1,12 @@
+import socket
 from pathlib import Path
 
 from fastapi import FastAPI
+
+# Agno calls search tools (wikipedia, arxiv) synchronously with no timeout.
+# A hanging HTTP request blocks the entire event loop. Global socket timeout
+# ensures all network calls fail after 30s rather than hanging forever.
+socket.setdefaulttimeout(30)
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
