@@ -222,7 +222,7 @@ class ResearchStage(Stage):
                 return
 
         while True:
-            round_label = f"round {iteration + 1}"
+            round_label = f"round {iteration}"
             is_final = iteration >= self._max_iterations - 1
 
             # Strategy — load from disk or generate
@@ -258,12 +258,12 @@ class ResearchStage(Stage):
             if not self._all_tasks:
                 await self._decompose_fresh(idea)
             elif not has_pending and iteration > 0:
-                round_id = f"r{iteration + 1}"
+                round_id = f"r{iteration}"
                 if not self._tree or not any(
                     c.get("id") == round_id
                     for c in self._tree.get("children", [])
                 ):
-                    await self._decompose_round(idea, iteration + 1)
+                    await self._decompose_round(idea, iteration)
             self._send()
             self._check_stop()
 
