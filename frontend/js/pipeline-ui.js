@@ -48,7 +48,13 @@ export function initPipelineUI() {
 
   pauseBtn.addEventListener('click', handlePause);
   resumeBtn.addEventListener('click', handleResume);
-  inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleStart(); });
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleStart();
+    if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+      e.preventDefault();
+      inputEl.value = 'showcase/example_idea.md';
+    }
+  });
   syncButtons();
 }
 
