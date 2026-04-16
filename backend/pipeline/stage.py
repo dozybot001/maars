@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from enum import Enum
 
 from agno.agent import Agent, RunEvent
@@ -29,6 +30,10 @@ class Stage:
       - Without chunk: done signal, right panel fetches DB
       - With status: task intermediate state (running/verifying/retrying)
     """
+
+    # Class-level rate limiter: ensures minimum gap between consecutive LLM calls
+    _rate_gate: asyncio.Lock | None = None
+    _rate_last_ts: float = 0
 
     def __init__(self, name: str, db=None, broadcast=None):
         self.name = name
@@ -119,6 +124,19 @@ class Stage:
     # LLM streaming
     # ------------------------------------------------------------------
 
+    async def _rate_limit(self):
+        """Ensure minimum gap between consecutive LLM calls (class-wide)."""
+        interval = settings.api_request_interval
+        if interval <= 0:
+            return
+        if Stage._rate_gate is None:
+            Stage._rate_gate = asyncio.Lock()
+        async with Stage._rate_gate:
+            wait = Stage._rate_last_ts + interval - time.monotonic()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            Stage._rate_last_ts = time.monotonic()
+
     async def _stream_llm(self, model, tools, instruction: str, user_text: str,
                           call_id: str, content_level: int = 2,
                           timeout: float | None = None, max_retries: int = 3,
@@ -127,6 +145,7 @@ class Stage:
         if timeout is None:
             timeout = float(settings.agent_session_timeout_seconds())
         extra = {"task_id": task_id} if task_id else {}
+        await self._rate_limit()
         sem = contextlib.nullcontext() if (_skip_semaphore or not self._api_semaphore) else self._api_semaphore
         async with sem:
             if label:

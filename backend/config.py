@@ -22,6 +22,7 @@ class Settings(BaseSettings):
 
     # --- API ---
     api_concurrency: int
+    api_request_interval: float = 0  # min seconds between consecutive LLM calls
     output_language: str
 
     # --- Docker Sandbox ---
