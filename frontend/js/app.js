@@ -11,6 +11,8 @@ initProcessViewer();
 initModal();
 
 connectSSE();
+import { syncFromAPI } from './pipeline-ui.js';
+syncFromAPI();
 
 async function checkDocker() {
   const el = document.getElementById('system-status');
