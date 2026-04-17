@@ -19,7 +19,6 @@ In Refine, Explorer surveys the literature and drafts a proposal; Critic reviews
 
 Research is the core engine — where agents actually run experiments and produce results. `·`\
 Calibrate defines what an atomic task looks like; Strategy drafts the plan; Decompose splits it into a dependency DAG, executed in parallel topological batches. `·`\
-Key design: one persistent Docker container stays alive for the whole session — packages survive across tasks, eliminating roughly 190 seconds of overhead per task. `·`\
 Verify reviews each result — pass, retry, or redecompose — forwarding partial outputs. Evaluate is biased toward stopping, only looping back when it finds a critical gap. `· ↓ highlight Write`
 
 ---
