@@ -362,18 +362,22 @@
     </div>
     <div class="md:col-span-3">
       <pre class="glass rounded-xl p-5 text-xs overflow-x-auto leading-relaxed"><code><span class="text-slate-500">results/{session}/</span>
-<span class="text-violet-300">├── idea.md</span>                  <span class="text-slate-500"># <span data-i18n="tree.c1">user input</span></span>
-<span class="text-violet-300">├── refined_idea.md</span>          <span class="text-slate-500"># <span data-i18n="tree.c2">Refine output</span></span>
-├── proposals/ critiques/    <span class="text-slate-500"># <span data-i18n="tree.c3">Refine rounds</span></span>
-<span class="text-cyan-300">├── calibration.md</span>          <span class="text-slate-500"># <span data-i18n="tree.c4">Research calibration</span></span>
-├── strategy/ plan_tree.json <span class="text-slate-500"># <span data-i18n="tree.c5">Research plan</span></span>
-├── tasks/ artifacts/        <span class="text-slate-500"># <span data-i18n="tree.c6">code · figures · data</span></span>
-├── evaluations/             <span class="text-slate-500"># <span data-i18n="tree.c7">Research rounds</span></span>
-<span class="text-pink-300">├── drafts/ reviews/</span>         <span class="text-slate-500"># <span data-i18n="tree.c8">Write rounds</span></span>
-<span class="text-pink-300">├── paper.md</span>                 <span class="text-slate-500"># <span data-i18n="tree.c9">Write output</span></span>
-<span class="text-amber-300">├── paper_polished.md</span>        <span class="text-slate-500"># <span data-i18n="tree.c10">Polish output</span></span>
-├── meta.json log.jsonl      <span class="text-slate-500"># <span data-i18n="tree.c11">metadata · SSE log</span></span>
-└── reproduce/               <span class="text-slate-500"># <span data-i18n="tree.c12">Dockerfile · run.sh</span></span></code></pre>
+<span class="text-slate-300">├── idea.md</span>                     <span class="text-slate-500"># <span data-i18n="tree.c1">user input</span></span>
+<span class="text-violet-300">├── proposals/ critiques/</span>       <span class="text-slate-500"># <span data-i18n="tree.c2">Refine: rounds</span></span>
+<span class="text-violet-300">├── refined_idea.md</span>             <span class="text-slate-500"># <span data-i18n="tree.c3">Refine: final</span></span>
+<span class="text-cyan-300">├── calibration.md</span>              <span class="text-slate-500"># <span data-i18n="tree.c4">Research: calibration</span></span>
+<span class="text-cyan-300">├── strategy/ plan_tree.json</span>    <span class="text-slate-500"># <span data-i18n="tree.c5">Research: strategy · plan</span></span>
+<span class="text-cyan-300">├── plan_list.json</span>              <span class="text-slate-500"># <span data-i18n="tree.c6">Research: flat task list</span></span>
+<span class="text-cyan-300">├── tasks/ artifacts/</span>           <span class="text-slate-500"># <span data-i18n="tree.c7">code · figures · data</span></span>
+<span class="text-cyan-300">├── evaluations/</span>                <span class="text-slate-500"># <span data-i18n="tree.c8">Research: eval rounds</span></span>
+<span class="text-cyan-300">├── results_summary.{json,md}</span>   <span class="text-slate-500"># <span data-i18n="tree.c9">Research: summary</span></span>
+<span class="text-pink-300">├── drafts/ reviews/</span>            <span class="text-slate-500"># <span data-i18n="tree.c10">Write: rounds</span></span>
+<span class="text-pink-300">├── paper.md</span>                    <span class="text-slate-500"># <span data-i18n="tree.c11">Write: draft</span></span>
+<span class="text-pink-300">├── paper_polished.md</span>           <span class="text-slate-500"># <span data-i18n="tree.c12">Write: polished (sub-step)</span></span>
+├── meta.json                   <span class="text-slate-500"># <span data-i18n="tree.c13">metadata (tokens, score)</span></span>
+├── log.jsonl                   <span class="text-slate-500"># <span data-i18n="tree.c14">SSE stream log</span></span>
+├── execution_log.jsonl         <span class="text-slate-500"># <span data-i18n="tree.c15">Docker exec log</span></span>
+└── reproduce/                  <span class="text-slate-500"># <span data-i18n="tree.c16">Dockerfile · run.sh</span></span></code></pre>
     </div>
   </div>
 </section>
@@ -707,10 +711,22 @@ bash start.sh</code></pre>
       "arch.l1_chip": "persistent",
       "arch.db_title": "Every run is a directory.",
       "arch.db_body": "State is just files. No hidden database, no vector store. You can <span class=\"kbd\">cd</span> into any session and read exactly what each agent said — drafts, critiques, plan trees, execution logs, polished paper. Reproducible by construction.",
-      "tree.c1": "user input", "tree.c2": "Refine output", "tree.c3": "Refine rounds",
-      "tree.c4": "Research calibration", "tree.c5": "Research plan", "tree.c6": "code · figures · data",
-      "tree.c7": "Research rounds", "tree.c8": "Write rounds", "tree.c9": "Write output",
-      "tree.c10": "Polish output", "tree.c11": "metadata · SSE log", "tree.c12": "Dockerfile · run.sh",
+      "tree.c1": "user input",
+      "tree.c2": "Refine: rounds",
+      "tree.c3": "Refine: final",
+      "tree.c4": "Research: calibration",
+      "tree.c5": "Research: strategy · plan",
+      "tree.c6": "Research: flat task list",
+      "tree.c7": "code · figures · data",
+      "tree.c8": "Research: eval rounds",
+      "tree.c9": "Research: summary",
+      "tree.c10": "Write: rounds",
+      "tree.c11": "Write: draft",
+      "tree.c12": "Write: polished (sub-step)",
+      "tree.c13": "metadata (tokens, score)",
+      "tree.c14": "SSE stream log",
+      "tree.c15": "Docker exec log",
+      "tree.c16": "Dockerfile · run.sh",
 
       "stack.label": "/ stack",
       "stack.title": "Boring where it counts.<br/><span class=\"gradient-text\">Interesting where it matters.</span>",
@@ -853,10 +869,22 @@ bash start.sh</code></pre>
       "arch.l1_chip": "持久化",
       "arch.db_title": "每一次运行就是一个目录。",
       "arch.db_body": "状态就是文件。没有隐藏数据库,也没有向量库。你可以 <span class=\"kbd\">cd</span> 进任何一次会话,完整阅读每个智能体说过的话——草稿、评审、计划树、执行日志、润色论文。天生可复现。",
-      "tree.c1": "用户输入", "tree.c2": "Refine 最终输出", "tree.c3": "Refine 各轮",
-      "tree.c4": "Research 校准", "tree.c5": "Research 计划", "tree.c6": "代码 · 图 · 数据",
-      "tree.c7": "Research 各轮", "tree.c8": "Write 各轮", "tree.c9": "Write 最终输出",
-      "tree.c10": "Polish 最终输出", "tree.c11": "元数据 · SSE 日志", "tree.c12": "Dockerfile · run.sh",
+      "tree.c1": "用户输入",
+      "tree.c2": "Refine:各轮",
+      "tree.c3": "Refine:最终输出",
+      "tree.c4": "Research:校准",
+      "tree.c5": "Research:策略 · 计划树",
+      "tree.c6": "Research:扁平任务表",
+      "tree.c7": "代码 · 图 · 数据",
+      "tree.c8": "Research:评估各轮",
+      "tree.c9": "Research:规范化摘要",
+      "tree.c10": "Write:各轮",
+      "tree.c11": "Write:初稿",
+      "tree.c12": "Write:Polish 子阶段输出",
+      "tree.c13": "元数据(token、分数)",
+      "tree.c14": "SSE 流日志",
+      "tree.c15": "Docker 执行日志",
+      "tree.c16": "Dockerfile · run.sh",
 
       "stack.label": "/ 技术栈",
       "stack.title": "该稳的地方务实。<br/><span class=\"gradient-text\">该巧的地方精巧。</span>",
