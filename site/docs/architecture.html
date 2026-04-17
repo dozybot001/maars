@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Architecture — MAARS Docs</title>
+<meta name="description" content="MAARS system architecture: three-stage Multi-Agent pipeline, runtime vs agent split, SSE protocol, file-based session DB." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="docs.css" />
+</head>
+
+<body>
+<div class="grain"></div>
+
+<!-- ============ NAV ============ -->
+<header class="nav">
+  <div class="nav-inner">
+    <a href="../index.html" class="brand">
+      <span class="brand-dot"></span>
+      <span>MAARS</span>
+      <span style="color:#64748b;font-size:.8rem;margin-left:.3rem" data-i18n="nav.docs">/ docs</span>
+    </a>
+    <nav class="doc-nav">
+      <a href="architecture.html" class="current" data-i18n="nav.architecture">Architecture</a>
+      <a href="refine-write.html" data-i18n="nav.refine_write">Refine &amp; Write</a>
+      <a href="research.html" data-i18n="nav.research">Research</a>
+    </nav>
+    <div class="nav-right">
+      <div class="lang-toggle">
+        <button type="button" data-lang-btn="zh">中</button>
+        <button type="button" data-lang-btn="en" class="active">EN</button>
+      </div>
+      <a href="../index.html" class="btn-ghost" data-i18n="nav.home">← Home</a>
+    </div>
+  </div>
+</header>
+
+<!-- ============ DOC ============ -->
+<div class="doc-layout">
+
+  <!-- sidebar TOC -->
+  <aside class="sidebar">
+    <div class="sidebar-title" data-i18n="toc.label">On this page</div>
+    <ul class="toc">
+      <li><a href="#overview" data-i18n="toc.overview">Overview</a></li>
+      <li><a href="#split" data-i18n="toc.split">Runtime vs Agent</a></li>
+      <li><a href="#layers" data-i18n="toc.layers">Five layers</a></li>
+      <li><a href="#inheritance" data-i18n="toc.inheritance">Stage inheritance</a></li>
+      <li><a href="#flow" data-i18n="toc.flow">End-to-end flow</a></li>
+      <li><a href="#sse" data-i18n="toc.sse">SSE model</a></li>
+      <li><a href="#frontend" data-i18n="toc.frontend">Frontend</a></li>
+      <li><a href="#storage" data-i18n="toc.storage">Session storage</a></li>
+      <li><a href="#code" data-i18n="toc.code">Code layout</a></li>
+    </ul>
+  </aside>
+
+  <!-- prose -->
+  <main class="prose">
+
+    <div class="doc-eyebrow" data-i18n="doc.eyebrow">/ docs · architecture</div>
+    <h1 data-i18n="doc.title">Architecture</h1>
+    <p class="lede" data-i18n="doc.lede">
+      MAARS runs an end-to-end research loop as three Multi-Agent stages glued by a file-based session DB.
+      Python runtime owns control flow; agents do open-ended work.
+    </p>
+
+    <!-- ===== Overview ===== -->
+    <section id="overview">
+      <h2><span class="num">01</span><span data-i18n="ov.title">Goal &amp; shape</span></h2>
+      <p data-i18n="ov.body">
+        The goal is end-to-end: from a raw idea to a finished paper, with every step persisted and recoverable.
+        The shape is uniform: three stages, each Multi-Agent. Agents emit artifacts to disk; runtime orchestrates;
+        the next agent reconstructs context from the persisted files. Complexity differs per stage, but the core is the same — Python owns the flow, agents execute open-ended work, state lives on disk.
+      </p>
+    </section>
+
+    <!-- ===== Runtime vs Agent ===== -->
+    <section id="split">
+      <h2><span class="num">02</span><span data-i18n="sp.title">Runtime vs Agent</span></h2>
+      <p class="sub" data-i18n="sp.sub">A hard line between what Python does deterministically and what an LLM does open-endedly.</p>
+
+      <div class="split">
+        <div class="half">
+          <div class="label" data-i18n="sp.runtime_l">Runtime · Python</div>
+          <h4 data-i18n="sp.runtime_t">Control flow &amp; state</h4>
+          <p data-i18n="sp.runtime_b"><code>if / for / while</code>, scheduling, retries, termination, checkpoint &amp; resume, rate limiting, session DB I/O, SSE broadcast.</p>
+        </div>
+        <div class="half">
+          <div class="label" data-i18n="sp.agent_l">Agent · LLM</div>
+          <h4 data-i18n="sp.agent_t">Open-ended work</h4>
+          <p data-i18n="sp.agent_b">Literature search, proposal drafting, code authoring &amp; execution, review &amp; critique, synthesis into prose.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Five layers ===== -->
+    <section id="layers">
+      <h2><span class="num">03</span><span data-i18n="ly.title">Five layers</span></h2>
+      <p class="sub" data-i18n="ly.sub">Each layer has a stable interface; the boundary between them is where you can swap implementations.</p>
+
+      <div class="layer-stack">
+        <div class="layer">
+          <div class="layer-tag">L5</div>
+          <div>
+            <div class="layer-title" data-i18n="ly.l5_t">Entry layer</div>
+            <div class="layer-desc" data-i18n="ly.l5_b">FastAPI server + vanilla-JS frontend · SSE streaming · marked.js renderer</div>
+          </div>
+          <span class="chip">HTTP · SSE</span>
+        </div>
+        <div class="layer">
+          <div class="layer-tag">L4</div>
+          <div>
+            <div class="layer-title" data-i18n="ly.l4_t">Orchestration layer</div>
+            <div class="layer-desc" data-i18n="ly.l4_b">Sequences the three stages · lifecycle · session recovery · termination</div>
+          </div>
+          <span class="chip">orchestrator.py</span>
+        </div>
+        <div class="layer">
+          <div class="layer-tag">L3</div>
+          <div>
+            <div class="layer-title" data-i18n="ly.l3_t">Stage layer</div>
+            <div class="layer-desc" data-i18n="ly.l3_b">Stable I/O boundary per stage · connected only via the session DB</div>
+          </div>
+          <span class="chip" data-i18n="ly.l3_chip">stable I/O</span>
+        </div>
+        <div class="layer">
+          <div class="layer-tag">L2</div>
+          <div>
+            <div class="layer-title" data-i18n="ly.l2_t">Execution layer</div>
+            <div class="layer-desc" data-i18n="ly.l2_b">Multi-agent in every stage · Agno framework · Gemini with native Google Search</div>
+          </div>
+          <span class="chip">Agno · Gemini</span>
+        </div>
+        <div class="layer">
+          <div class="layer-tag">L1</div>
+          <div>
+            <div class="layer-title" data-i18n="ly.l1_t">Tools &amp; state layer</div>
+            <div class="layer-desc" data-i18n="ly.l1_b">ArXiv · Wikipedia · DDGS · Kaggle · PyPDF · Docker sandbox · file-based session DB</div>
+          </div>
+          <span class="chip" data-i18n="ly.l1_chip">persistent</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Stage inheritance ===== -->
+    <section id="inheritance">
+      <h2><span class="num">04</span><span data-i18n="in.title">Stage inheritance</span></h2>
+      <p class="sub" data-i18n="in.sub">One base class for lifecycle and SSE; two branches for the two fundamentally different execution shapes.</p>
+
+      <div class="class-tree">
+<span class="stage-name">Stage</span>                          <span class="stage-note" data-i18n="in.n1"># lifecycle + SSE (_send) + LLM streaming (_stream_llm)</span>
+<span class="connector">├──</span> <span class="stage-name">ResearchStage</span>              <span class="stage-note" data-i18n="in.n2"># Multi-Agent (decompose · parallel execute · evaluate loop)</span>
+<span class="connector">└──</span> <span class="stage-name">TeamStage</span>                  <span class="stage-note" data-i18n="in.n3"># IterationState + primary / reviewer loop</span>
+    <span class="connector">├──</span> <span class="stage-name">RefineStage</span>
+    <span class="connector">└──</span> <span class="stage-name">WriteStage</span>             <span class="stage-note" data-i18n="in.n4"># overrides _execute(): loop then polish + metadata sub-steps</span>
+      </div>
+    </section>
+
+    <!-- ===== End-to-end flow ===== -->
+    <section id="flow">
+      <h2><span class="num">05</span><span data-i18n="fl.title">End-to-end flow</span></h2>
+      <p class="sub" data-i18n="fl.sub">Three stages connected only by files on disk. Each arrow is a filesystem artifact, not an in-memory message.</p>
+
+      <div class="pipe-viz">
+        <div class="pipe-stage">
+          <div class="tag" data-i18n="fl.r1_tag">stage 01</div>
+          <h4 data-i18n="fl.r1_name">Refine</h4>
+          <div class="agents" data-i18n="fl.r1_agents">Explorer ↔ Critic</div>
+          <p style="font-size:.85rem;color:#94a3b8;margin:0 0 .5rem" data-i18n="fl.r1_body">
+            Explorer drafts a proposal from the raw idea. Critic reviews, produces <code>{issues, resolved}</code>. They iterate through an <code>IterationState</code> until <code>issues</code> is empty.
+          </p>
+          <div class="io">
+            <div><span class="arrow">in →</span> <span class="kbd">idea.md</span></div>
+            <div><span class="arrow">out →</span> <span class="kbd">refined_idea.md</span></div>
+          </div>
+        </div>
+
+        <div class="pipe-arrow">→</div>
+
+        <div class="pipe-stage">
+          <div class="tag" data-i18n="fl.r2_tag">stage 02 · engine</div>
+          <h4 data-i18n="fl.r2_name">Research</h4>
+          <div class="agents" data-i18n="fl.r2_agents">Calibrate · Strategy · Decompose · Execute ↔ Verify · Evaluate</div>
+          <p style="font-size:.85rem;color:#94a3b8;margin:0 0 .5rem" data-i18n="fl.r2_body">
+            The core engine. Calibrate defines atomicity; Strategy proposes approach; Decompose produces a DAG of atomic tasks; each task runs in a Docker sandbox, verified, then the whole batch is evaluated — looping with a <code>strategy_update</code> when critical gaps exist.
+          </p>
+          <div class="io">
+            <div><span class="arrow">in →</span> <span class="kbd">refined_idea.md</span></div>
+            <div><span class="arrow">out →</span> <span class="kbd">artifacts/</span> · <span class="kbd">tasks/</span> · <span class="kbd">evaluations/</span></div>
+          </div>
+        </div>
+
+        <div class="pipe-arrow">→</div>
+
+        <div class="pipe-stage">
+          <div class="tag" data-i18n="fl.r3_tag">stage 03</div>
+          <h4 data-i18n="fl.r3_name">Write</h4>
+          <div class="agents" data-i18n="fl.r3_agents">Writer ↔ Reviewer → Polish · Metadata</div>
+          <p style="font-size:.85rem;color:#94a3b8;margin:0 0 .5rem" data-i18n="fl.r3_body">
+            Writer reads the research artifacts and drafts the paper; Reviewer critiques; they iterate. After the loop converges, a <strong>Polish</strong> sub-step does a single-pass LLM refinement and a deterministic <strong>Metadata</strong> appendix is attached.
+          </p>
+          <div class="io">
+            <div><span class="arrow">in →</span> <span class="kbd">artifacts/</span></div>
+            <div><span class="arrow">out →</span> <span class="kbd">paper.md</span> → <span class="kbd">paper_polished.md</span></div>
+          </div>
+        </div>
+      </div>
+
+      <h3 data-i18n="fl.resp_t">Stage responsibilities</h3>
+      <table>
+        <thead>
+          <tr>
+            <th data-i18n="fl.th_stage">Stage</th>
+            <th data-i18n="fl.th_pattern">Pattern</th>
+            <th data-i18n="fl.th_role">Role</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Refine</strong></td>
+            <td data-i18n="fl.pat_refine">Multi-Agent (Explorer + Critic)</td>
+            <td data-i18n="fl.role_refine">Intent → actionable research goal</td>
+          </tr>
+          <tr>
+            <td><strong>Research</strong></td>
+            <td data-i18n="fl.pat_research">Multi-Agent (Decompose + Execute + Evaluate)</td>
+            <td data-i18n="fl.role_research">Decompose → Execute ↔ Verify → Evaluate</td>
+          </tr>
+          <tr>
+            <td><strong>Write</strong></td>
+            <td data-i18n="fl.pat_write">Multi-Agent (Writer + Reviewer) + polish / metadata</td>
+            <td data-i18n="fl.role_write">Synthesize artifacts into a polished paper</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ===== SSE ===== -->
+    <section id="sse">
+      <h2><span class="num">06</span><span data-i18n="ss.title">SSE event model</span></h2>
+      <p class="sub" data-i18n="ss.sub">The frontend gets streaming notifications, but canonical state always comes from the session DB.</p>
+
+      <h3 data-i18n="ss.rules_t">Conventions</h3>
+      <ul>
+        <li data-i18n="ss.rule1"><strong>Unified event shape</strong>: <code>&#123;stage, phase?, chunk?, status?, task_id?, error?&#125;</code></li>
+        <li data-i18n="ss.rule2"><strong>With <code>chunk</code></strong> — in progress, streaming text, left panel renders token-by-token.</li>
+        <li data-i18n="ss.rule3"><strong>Without <code>chunk</code></strong> — done signal; DB is already written, right panel refetches from DB.</li>
+        <li data-i18n="ss.rule4"><strong>With <code>status</code></strong> — intermediate task state (running / verifying / retrying).</li>
+        <li data-i18n="ss.rule5"><strong>DB is the single source of truth</strong> — SSE is notification only.</li>
+      </ul>
+
+      <h3 data-i18n="ss.code_t">Broadcast skeleton</h3>
+      <div class="copy-card" data-copy-target="sse-code" role="button" tabindex="0" aria-label="Copy">
+<pre><code id="sse-code"><span class="k">def</span> <span class="n">_send</span>(<span class="n">self</span>, <span class="n">chunk</span>=<span class="k">None</span>, **<span class="n">extra</span>):
+    <span class="n">event</span> = <span class="p">{</span><span class="s">"stage"</span><span class="p">:</span> <span class="n">self</span>.<span class="n">name</span><span class="p">}</span>
+    <span class="k">if</span> <span class="n">self</span>.<span class="n">_current_phase</span>:
+        <span class="n">event</span><span class="p">[</span><span class="s">"phase"</span><span class="p">]</span> = <span class="n">self</span>.<span class="n">_current_phase</span>
+    <span class="k">if</span> <span class="n">chunk</span>:
+        <span class="n">event</span><span class="p">[</span><span class="s">"chunk"</span><span class="p">]</span> = <span class="n">chunk</span>
+        <span class="n">self</span>.<span class="n">db</span>.<span class="n">append_log</span>(...)
+    <span class="n">event</span>.<span class="n">update</span>(<span class="n">extra</span>)
+    <span class="n">self</span>.<span class="n">_broadcast</span>(<span class="n">event</span>)</code></pre>
+        <span class="copy-toast" data-i18n="doc.copied">Copied ✓</span>
+      </div>
+
+      <h3 data-i18n="ss.levels_t">Label hierarchy</h3>
+      <table>
+        <thead><tr>
+          <th data-i18n="ss.th_level">Level</th>
+          <th data-i18n="ss.th_purpose">Purpose</th>
+          <th data-i18n="ss.th_source">Source</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>2</td><td data-i18n="ss.l2_p">Stage / phase label</td><td><code>_run_loop</code> / <code>_stream_llm(label_level=2)</code></td></tr>
+          <tr><td>3</td><td data-i18n="ss.l3_p">Agent / member content</td><td><code>_stream_llm(content_level=3)</code></td></tr>
+          <tr><td>4</td><td data-i18n="ss.l4_p">Task execution content</td><td><code>_execute_task</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ===== Frontend ===== -->
+    <section id="frontend">
+      <h2><span class="num">07</span><span data-i18n="fe.title">Frontend components</span></h2>
+      <p class="sub" data-i18n="fe.sub">Three components, each with a clear consumption pattern — nothing shares state directly, they all read from DB or the SSE stream.</p>
+
+      <table>
+        <thead><tr>
+          <th data-i18n="fe.th_comp">Component</th>
+          <th data-i18n="fe.th_role">Role</th>
+          <th data-i18n="fe.th_consume">Consumes</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td><code>pipeline-ui</code></td>
+            <td data-i18n="fe.p1_r">Top progress bar</td>
+            <td data-i18n="fe.p1_c">First appearance of a new stage/phase → lights up</td>
+          </tr>
+          <tr>
+            <td><code>log-viewer</code></td>
+            <td data-i18n="fe.p2_r">Left panel, streaming log</td>
+            <td data-i18n="fe.p2_c"><code>chunk</code> → grouped by <code>call_id</code>; label chunk → create fold</td>
+          </tr>
+          <tr>
+            <td><code>process-viewer</code></td>
+            <td data-i18n="fe.p3_r">Right panel, state dashboard</td>
+            <td data-i18n="fe.p3_c">Done signal → fetch from DB → update containers</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 data-i18n="fe.panel_t">Right panel layout</h3>
+<pre><code><span class="c">REFINE      </span>Proposals  [round_0] [round_1] ...
+            Critiques  [round_0] [round_1] ...
+            Final      [refined_idea]
+
+<span class="c">RESEARCH    </span>Calibration [calibration]
+            Strategies  [round_0] [round_1] ...
+            Evaluations [round_0] [round_1] ...
+            Score       0.82 → 0.79
+
+<span class="c">DECOMPOSE   </span>(tree)
+
+<span class="c">TASKS       </span>(execution list)
+
+<span class="c">WRITE       </span>Drafts     [round_0] [round_1] ...
+            Reviews    [round_0] [round_1] ...
+            Draft      [paper]
+            Polished   [paper_polished]</code></pre>
+    </section>
+
+    <!-- ===== Session storage ===== -->
+    <section id="storage">
+      <h2><span class="num">08</span><span data-i18n="st.title">Session storage</span></h2>
+      <p class="sub" data-i18n="st.sub">One run, one directory. Every agent output is a file — <code>grep</code>-friendly, diffable, reproducible.</p>
+
+      <div class="dir-tree">
+<span class="comment">results/{session}/</span>
+├── idea.md                     <span class="comment"># <span data-i18n="st.c1">user input</span></span>
+<span class="dir-refine">├── proposals/ critiques/</span>       <span class="comment"># <span data-i18n="st.c2">Refine: rounds</span></span>
+<span class="dir-refine">├── refined_idea.md</span>             <span class="comment"># <span data-i18n="st.c3">Refine: final</span></span>
+<span class="dir-research">├── calibration.md</span>              <span class="comment"># <span data-i18n="st.c4">Research: calibration</span></span>
+<span class="dir-research">├── strategy/ plan_tree.json</span>    <span class="comment"># <span data-i18n="st.c5">Research: strategy · plan</span></span>
+<span class="dir-research">├── plan_list.json</span>              <span class="comment"># <span data-i18n="st.c6">Research: flat task list</span></span>
+<span class="dir-research">├── tasks/ artifacts/</span>           <span class="comment"># <span data-i18n="st.c7">code · figures · data</span></span>
+<span class="dir-research">├── evaluations/</span>                <span class="comment"># <span data-i18n="st.c8">Research: eval rounds</span></span>
+<span class="dir-research">├── results_summary.{json,md}</span>   <span class="comment"># <span data-i18n="st.c9">Research: summary</span></span>
+<span class="dir-write">├── drafts/ reviews/</span>            <span class="comment"># <span data-i18n="st.c10">Write: rounds</span></span>
+<span class="dir-write">├── paper.md</span>                    <span class="comment"># <span data-i18n="st.c11">Write: draft</span></span>
+<span class="dir-write">├── paper_polished.md</span>           <span class="comment"># <span data-i18n="st.c12">Write: polished (sub-step)</span></span>
+├── meta.json                   <span class="comment"># <span data-i18n="st.c13">metadata (tokens, score)</span></span>
+├── log.jsonl                   <span class="comment"># <span data-i18n="st.c14">SSE stream log</span></span>
+├── execution_log.jsonl         <span class="comment"># <span data-i18n="st.c15">Docker exec log</span></span>
+└── reproduce/                  <span class="comment"># <span data-i18n="st.c16">Dockerfile · run.sh</span></span>
+      </div>
+    </section>
+
+    <!-- ===== Code ===== -->
+    <section id="code">
+      <h2><span class="num">09</span><span data-i18n="cd.title">Code layout</span></h2>
+      <p class="sub" data-i18n="cd.sub">Runtime and agent concerns live in separate modules; tools go through a thin adapter layer.</p>
+
+      <div class="dir-tree">
+<span class="comment">backend/</span>
+├── pipeline/
+│   ├── orchestrator.py          <span class="comment"># <span data-i18n="cd.c1">three-stage sequencing</span></span>
+│   ├── stage.py                 <span class="comment"># <span data-i18n="cd.c2">Stage base — lifecycle + SSE + _stream_llm</span></span>
+│   ├── research.py              <span class="comment"># <span data-i18n="cd.c3">ResearchStage — multi-agent engine</span></span>
+│   ├── decompose.py             <span class="comment"># <span data-i18n="cd.c4">recursive decomposition engine</span></span>
+│   └── prompts_zh.py / _en.py   <span class="comment"># <span data-i18n="cd.c5">Research prompts + builder fns</span></span>
+├── team/
+│   ├── stage.py                 <span class="comment"># <span data-i18n="cd.c6">TeamStage — IterationState + loop</span></span>
+│   ├── refine.py                <span class="comment"># <span data-i18n="cd.c7">RefineStage — Explorer + Critic</span></span>
+│   ├── write.py                 <span class="comment"># <span data-i18n="cd.c8">WriteStage — Writer + Reviewer + polish/metadata</span></span>
+│   └── polish.py                <span class="comment"># <span data-i18n="cd.c9">build_polish_input · build_metadata_appendix</span></span>
+├── agno/
+│   ├── __init__.py              <span class="comment"># <span data-i18n="cd.c10">Stage factory + tool assembly</span></span>
+│   ├── models.py                <span class="comment"># <span data-i18n="cd.c11">model factory (Gemini search=True)</span></span>
+│   └── tools/                   <span class="comment"># <span data-i18n="cd.c12">agent tools (DB, Docker)</span></span>
+├── main.py                      <span class="comment"># <span data-i18n="cd.c13">FastAPI entry</span></span>
+├── config.py                    <span class="comment"># <span data-i18n="cd.c14">env config</span></span>
+└── db.py                        <span class="comment"># <span data-i18n="cd.c15">file-based session DB</span></span>
+      </div>
+    </section>
+
+    <!-- next doc -->
+    <div style="margin-top:5rem;display:flex;justify-content:space-between;gap:1rem;padding-top:1.5rem;border-top:1px solid rgba(255,255,255,.06)">
+      <a href="../index.html" class="btn-ghost" data-i18n="nav.back">← Back to site</a>
+      <a href="refine-write.html" class="btn-ghost">
+        <span data-i18n="nav.next_rw">Refine &amp; Write</span> →
+      </a>
+    </div>
+
+  </main>
+</div>
+
+<!-- ============ i18n + behavior ============ -->
+<script src="docs.js"></script>
+<script>
+const T = {
+  en: {
+    "nav.docs": "/ docs",
+    "nav.architecture": "Architecture",
+    "nav.refine_write": "Refine & Write",
+    "nav.research": "Research",
+    "nav.home": "← Home",
+    "nav.back": "← Back to site",
+    "nav.next_rw": "Refine & Write",
+
+    "toc.label": "On this page",
+    "toc.overview": "Overview",
+    "toc.split": "Runtime vs Agent",
+    "toc.layers": "Five layers",
+    "toc.inheritance": "Stage inheritance",
+    "toc.flow": "End-to-end flow",
+    "toc.sse": "SSE model",
+    "toc.frontend": "Frontend",
+    "toc.storage": "Session storage",
+    "toc.code": "Code layout",
+
+    "doc.eyebrow": "/ docs · architecture",
+    "doc.title": "Architecture",
+    "doc.lede": "MAARS runs an end-to-end research loop as three Multi-Agent stages glued by a file-based session DB. Python runtime owns control flow; agents do open-ended work.",
+    "doc.copied": "Copied ✓",
+
+    "ov.title": "Goal & shape",
+    "ov.body": "The goal is end-to-end: from a raw idea to a finished paper, with every step persisted and recoverable. The shape is uniform: three stages, each Multi-Agent. Agents emit artifacts to disk; runtime orchestrates; the next agent reconstructs context from the persisted files. Complexity differs per stage, but the core is the same — Python owns the flow, agents execute open-ended work, state lives on disk.",
+
+    "sp.title": "Runtime vs Agent",
+    "sp.sub": "A hard line between what Python does deterministically and what an LLM does open-endedly.",
+    "sp.runtime_l": "Runtime · Python",
+    "sp.runtime_t": "Control flow & state",
+    "sp.runtime_b": "<code>if / for / while</code>, scheduling, retries, termination, checkpoint & resume, rate limiting, session DB I/O, SSE broadcast.",
+    "sp.agent_l": "Agent · LLM",
+    "sp.agent_t": "Open-ended work",
+    "sp.agent_b": "Literature search, proposal drafting, code authoring & execution, review & critique, synthesis into prose.",
+
+    "ly.title": "Five layers",
+    "ly.sub": "Each layer has a stable interface; the boundary between them is where you can swap implementations.",
+    "ly.l5_t": "Entry layer",
+    "ly.l5_b": "FastAPI server + vanilla-JS frontend · SSE streaming · marked.js renderer",
+    "ly.l4_t": "Orchestration layer",
+    "ly.l4_b": "Sequences the three stages · lifecycle · session recovery · termination",
+    "ly.l3_t": "Stage layer",
+    "ly.l3_b": "Stable I/O boundary per stage · connected only via the session DB",
+    "ly.l3_chip": "stable I/O",
+    "ly.l2_t": "Execution layer",
+    "ly.l2_b": "Multi-agent in every stage · Agno framework · Gemini with native Google Search",
+    "ly.l1_t": "Tools & state layer",
+    "ly.l1_b": "ArXiv · Wikipedia · DDGS · Kaggle · PyPDF · Docker sandbox · file-based session DB",
+    "ly.l1_chip": "persistent",
+
+    "in.title": "Stage inheritance",
+    "in.sub": "One base class for lifecycle and SSE; two branches for the two fundamentally different execution shapes.",
+    "in.n1": "# lifecycle + SSE (_send) + LLM streaming (_stream_llm)",
+    "in.n2": "# Multi-Agent (decompose · parallel execute · evaluate loop)",
+    "in.n3": "# IterationState + primary / reviewer loop",
+    "in.n4": "# overrides _execute(): loop then polish + metadata sub-steps",
+
+    "fl.title": "End-to-end flow",
+    "fl.sub": "Three stages connected only by files on disk. Each arrow is a filesystem artifact, not an in-memory message.",
+    "fl.r1_tag": "stage 01",
+    "fl.r1_name": "Refine",
+    "fl.r1_agents": "Explorer ↔ Critic",
+    "fl.r1_body": "Explorer drafts a proposal from the raw idea. Critic reviews, produces <code>{issues, resolved}</code>. They iterate through an <code>IterationState</code> until <code>issues</code> is empty.",
+    "fl.r2_tag": "stage 02 · engine",
+    "fl.r2_name": "Research",
+    "fl.r2_agents": "Calibrate · Strategy · Decompose · Execute ↔ Verify · Evaluate",
+    "fl.r2_body": "The core engine. Calibrate defines atomicity; Strategy proposes approach; Decompose produces a DAG of atomic tasks; each task runs in a Docker sandbox, verified, then the whole batch is evaluated — looping with a <code>strategy_update</code> when critical gaps exist.",
+    "fl.r3_tag": "stage 03",
+    "fl.r3_name": "Write",
+    "fl.r3_agents": "Writer ↔ Reviewer → Polish · Metadata",
+    "fl.r3_body": "Writer reads the research artifacts and drafts the paper; Reviewer critiques; they iterate. After the loop converges, a <strong>Polish</strong> sub-step does a single-pass LLM refinement and a deterministic <strong>Metadata</strong> appendix is attached.",
+    "fl.resp_t": "Stage responsibilities",
+    "fl.th_stage": "Stage",
+    "fl.th_pattern": "Pattern",
+    "fl.th_role": "Role",
+    "fl.pat_refine": "Multi-Agent (Explorer + Critic)",
+    "fl.role_refine": "Intent → actionable research goal",
+    "fl.pat_research": "Multi-Agent (Decompose + Execute + Evaluate)",
+    "fl.role_research": "Decompose → Execute ↔ Verify → Evaluate",
+    "fl.pat_write": "Multi-Agent (Writer + Reviewer) + polish / metadata",
+    "fl.role_write": "Synthesize artifacts into a polished paper",
+
+    "ss.title": "SSE event model",
+    "ss.sub": "The frontend gets streaming notifications, but canonical state always comes from the session DB.",
+    "ss.rules_t": "Conventions",
+    "ss.rule1": "<strong>Unified event shape</strong>: <code>&#123;stage, phase?, chunk?, status?, task_id?, error?&#125;</code>",
+    "ss.rule2": "<strong>With <code>chunk</code></strong> — in progress, streaming text, left panel renders token-by-token.",
+    "ss.rule3": "<strong>Without <code>chunk</code></strong> — done signal; DB is already written, right panel refetches from DB.",
+    "ss.rule4": "<strong>With <code>status</code></strong> — intermediate task state (running / verifying / retrying).",
+    "ss.rule5": "<strong>DB is the single source of truth</strong> — SSE is notification only.",
+    "ss.code_t": "Broadcast skeleton",
+    "ss.levels_t": "Label hierarchy",
+    "ss.th_level": "Level",
+    "ss.th_purpose": "Purpose",
+    "ss.th_source": "Source",
+    "ss.l2_p": "Stage / phase label",
+    "ss.l3_p": "Agent / member content",
+    "ss.l4_p": "Task execution content",
+
+    "fe.title": "Frontend components",
+    "fe.sub": "Three components, each with a clear consumption pattern — nothing shares state directly, they all read from DB or the SSE stream.",
+    "fe.th_comp": "Component",
+    "fe.th_role": "Role",
+    "fe.th_consume": "Consumes",
+    "fe.p1_r": "Top progress bar",
+    "fe.p1_c": "First appearance of a new stage/phase → lights up",
+    "fe.p2_r": "Left panel, streaming log",
+    "fe.p2_c": "<code>chunk</code> → grouped by <code>call_id</code>; label chunk → create fold",
+    "fe.p3_r": "Right panel, state dashboard",
+    "fe.p3_c": "Done signal → fetch from DB → update containers",
+    "fe.panel_t": "Right panel layout",
+
+    "st.title": "Session storage",
+    "st.sub": "One run, one directory. Every agent output is a file — <code>grep</code>-friendly, diffable, reproducible.",
+    "st.c1": "user input", "st.c2": "Refine: rounds", "st.c3": "Refine: final",
+    "st.c4": "Research: calibration", "st.c5": "Research: strategy · plan", "st.c6": "Research: flat task list",
+    "st.c7": "code · figures · data", "st.c8": "Research: eval rounds", "st.c9": "Research: summary",
+    "st.c10": "Write: rounds", "st.c11": "Write: draft", "st.c12": "Write: polished (sub-step)",
+    "st.c13": "metadata (tokens, score)", "st.c14": "SSE stream log", "st.c15": "Docker exec log", "st.c16": "Dockerfile · run.sh",
+
+    "cd.title": "Code layout",
+    "cd.sub": "Runtime and agent concerns live in separate modules; tools go through a thin adapter layer.",
+    "cd.c1": "three-stage sequencing", "cd.c2": "Stage base — lifecycle + SSE + _stream_llm",
+    "cd.c3": "ResearchStage — multi-agent engine", "cd.c4": "recursive decomposition engine",
+    "cd.c5": "Research prompts + builder fns", "cd.c6": "TeamStage — IterationState + loop",
+    "cd.c7": "RefineStage — Explorer + Critic", "cd.c8": "WriteStage — Writer + Reviewer + polish/metadata",
+    "cd.c9": "build_polish_input · build_metadata_appendix", "cd.c10": "Stage factory + tool assembly",
+    "cd.c11": "model factory (Gemini search=True)", "cd.c12": "agent tools (DB, Docker)",
+    "cd.c13": "FastAPI entry", "cd.c14": "env config", "cd.c15": "file-based session DB",
+  },
+
+  zh: {
+    "nav.docs": "/ 文档",
+    "nav.architecture": "架构",
+    "nav.refine_write": "Refine & Write",
+    "nav.research": "Research",
+    "nav.home": "← 首页",
+    "nav.back": "← 返回站点",
+    "nav.next_rw": "Refine & Write",
+
+    "toc.label": "本页目录",
+    "toc.overview": "总览",
+    "toc.split": "Runtime 与 Agent",
+    "toc.layers": "五层架构",
+    "toc.inheritance": "阶段继承",
+    "toc.flow": "端到端工作流",
+    "toc.sse": "SSE 事件模型",
+    "toc.frontend": "前端组件",
+    "toc.storage": "会话存储",
+    "toc.code": "代码组织",
+
+    "doc.eyebrow": "/ 文档 · 架构",
+    "doc.title": "架构",
+    "doc.lede": "MAARS 以三个 Multi-Agent 阶段跑通一条端到端的研究闭环,各阶段通过文件型 session DB 衔接。Python 运行时负责控制流,Agent 负责开放式的工作。",
+    "doc.copied": "已复制 ✓",
+
+    "ov.title": "目标与形态",
+    "ov.body": "目标是端到端:从一个原始想法到一篇完整论文,每一步都持久化、可恢复。形态是统一的:三个阶段都是 Multi-Agent。Agent 把产物写到磁盘,runtime 编排,下一个 Agent 从落盘文件重建上下文。各阶段复杂度不同,核心一致——Python 控制流程,Agent 执行开放性工作,状态存于磁盘。",
+
+    "sp.title": "Runtime 与 Agent",
+    "sp.sub": "在「Python 确定性执行」与「LLM 开放式生成」之间,画一条清晰的硬边界。",
+    "sp.runtime_l": "Runtime · Python",
+    "sp.runtime_t": "控制流与状态",
+    "sp.runtime_b": "<code>if / for / while</code>、调度、重试、终止、checkpoint 与 resume、限流、session DB 读写、SSE 广播。",
+    "sp.agent_l": "Agent · LLM",
+    "sp.agent_t": "开放式工作",
+    "sp.agent_b": "文献检索、提案起草、代码编写与执行、评审与批评、综合成文。",
+
+    "ly.title": "五层架构",
+    "ly.sub": "每一层都有稳定接口;层与层之间的边界,就是实现可替换的位置。",
+    "ly.l5_t": "入口层",
+    "ly.l5_b": "FastAPI 服务端 + 原生 JS 前端 · SSE 流式 · marked.js 渲染",
+    "ly.l4_t": "编排层",
+    "ly.l4_b": "顺序调度三阶段 · 生命周期 · 会话恢复 · 终止",
+    "ly.l3_t": "阶段层",
+    "ly.l3_b": "每个阶段都有稳定的 I/O 边界,仅通过 session DB 相连",
+    "ly.l3_chip": "稳定接口",
+    "ly.l2_t": "执行层",
+    "ly.l2_b": "所有阶段都是多智能体 · Agno 框架 · Gemini 原生 Google 搜索",
+    "ly.l1_t": "工具与状态层",
+    "ly.l1_b": "ArXiv · Wikipedia · DDGS · Kaggle · PyPDF · Docker 沙箱 · 文件型 session DB",
+    "ly.l1_chip": "持久化",
+
+    "in.title": "阶段继承",
+    "in.sub": "一个基类负责生命周期与 SSE;两条派生,对应两种本质不同的执行形态。",
+    "in.n1": "# 生命周期 + SSE(_send) + LLM 流式(_stream_llm)",
+    "in.n2": "# Multi-Agent(分解 · 并行执行 · 评估循环)",
+    "in.n3": "# IterationState + primary / reviewer 循环",
+    "in.n4": "# 覆写 _execute():循环之后追加 polish + metadata 子阶段",
+
+    "fl.title": "端到端工作流",
+    "fl.sub": "三阶段只通过磁盘上的文件相连。每一个箭头都是一个文件系统产物,而不是内存中的消息。",
+    "fl.r1_tag": "阶段 01",
+    "fl.r1_name": "Refine",
+    "fl.r1_agents": "Explorer ↔ Critic",
+    "fl.r1_body": "Explorer 根据用户原始想法起草提案,Critic 评审并输出 <code>{issues, resolved}</code>,两者在 <code>IterationState</code> 中迭代,直到 <code>issues</code> 列表为空。",
+    "fl.r2_tag": "阶段 02 · 核心引擎",
+    "fl.r2_name": "Research",
+    "fl.r2_agents": "Calibrate · Strategy · Decompose · Execute ↔ Verify · Evaluate",
+    "fl.r2_body": "核心引擎。Calibrate 定义原子性,Strategy 给出思路,Decompose 产出任务 DAG;每个原子任务在 Docker 沙箱中执行并验证,整批完成后统一评估——当存在关键缺口时,通过 <code>strategy_update</code> 进入下一轮。",
+    "fl.r3_tag": "阶段 03",
+    "fl.r3_name": "Write",
+    "fl.r3_agents": "Writer ↔ Reviewer → Polish · Metadata",
+    "fl.r3_body": "Writer 阅读研究产物起草论文,Reviewer 点评,双方迭代。循环收敛后,<strong>Polish</strong> 子阶段做一次 LLM 润色,随后 <strong>Metadata</strong> 子阶段追加确定性的元数据附录。",
+    "fl.resp_t": "阶段职责",
+    "fl.th_stage": "阶段",
+    "fl.th_pattern": "模式",
+    "fl.th_role": "职责",
+    "fl.pat_refine": "Multi-Agent(Explorer + Critic)",
+    "fl.role_refine": "意图 → 可执行的研究目标",
+    "fl.pat_research": "Multi-Agent(Decompose + Execute + Evaluate)",
+    "fl.role_research": "分解 → 执行 ↔ 验证 → 评估",
+    "fl.pat_write": "Multi-Agent(Writer + Reviewer)+ polish / metadata",
+    "fl.role_write": "将研究产物综合为润色后的论文",
+
+    "ss.title": "SSE 事件模型",
+    "ss.sub": "前端通过 SSE 接收流式通知,但权威状态永远来自 session DB。",
+    "ss.rules_t": "约定",
+    "ss.rule1": "<strong>统一事件结构</strong>:<code>&#123;stage, phase?, chunk?, status?, task_id?, error?&#125;</code>",
+    "ss.rule2": "<strong>带 <code>chunk</code></strong>——进行中,流式文本,左侧面板按 token 渲染。",
+    "ss.rule3": "<strong>不带 <code>chunk</code></strong>——done 信号;DB 已写入,右侧面板从 DB 重新读取。",
+    "ss.rule4": "<strong>带 <code>status</code></strong>——任务中间状态(running / verifying / retrying)。",
+    "ss.rule5": "<strong>DB 是唯一真源</strong>——SSE 只做通知。",
+    "ss.code_t": "广播代码骨架",
+    "ss.levels_t": "标签层级",
+    "ss.th_level": "层级",
+    "ss.th_purpose": "用途",
+    "ss.th_source": "来源",
+    "ss.l2_p": "stage / phase 标签",
+    "ss.l3_p": "agent / member 内容",
+    "ss.l4_p": "task 执行内容",
+
+    "fe.title": "前端组件",
+    "fe.sub": "三个组件,各有明确的消费方式——组件之间不共享状态,全部从 DB 或 SSE 流读取。",
+    "fe.th_comp": "组件",
+    "fe.th_role": "职责",
+    "fe.th_consume": "消费方式",
+    "fe.p1_r": "顶部进度条",
+    "fe.p1_c": "新 stage/phase 首次出现 → 点亮",
+    "fe.p2_r": "左侧面板 · 流式日志",
+    "fe.p2_c": "<code>chunk</code> → 按 <code>call_id</code> 分组渲染;label chunk → 生成折叠",
+    "fe.p3_r": "右侧面板 · 状态仪表盘",
+    "fe.p3_c": "done 信号 → 从 DB 获取 → 更新固定容器",
+    "fe.panel_t": "右侧面板布局",
+
+    "st.title": "会话存储",
+    "st.sub": "一次运行,一个目录。每个 Agent 产物都是文件——<code>grep</code> 友好、可 diff、可复现。",
+    "st.c1": "用户输入", "st.c2": "Refine:各轮", "st.c3": "Refine:最终",
+    "st.c4": "Research:校准", "st.c5": "Research:策略 · 计划", "st.c6": "Research:扁平任务表",
+    "st.c7": "代码 · 图 · 数据", "st.c8": "Research:评估各轮", "st.c9": "Research:规范化摘要",
+    "st.c10": "Write:各轮", "st.c11": "Write:初稿", "st.c12": "Write:Polish 子阶段产出",
+    "st.c13": "元数据(token、分数)", "st.c14": "SSE 流日志", "st.c15": "Docker 执行日志", "st.c16": "Dockerfile · run.sh",
+
+    "cd.title": "代码组织",
+    "cd.sub": "Runtime 与 Agent 的关注点分属不同模块;工具通过一层薄适配器接入。",
+    "cd.c1": "三阶段顺序编排", "cd.c2": "Stage 基类——生命周期 + SSE + _stream_llm",
+    "cd.c3": "ResearchStage——多智能体引擎", "cd.c4": "递归分解引擎",
+    "cd.c5": "Research prompts 与 builder 函数", "cd.c6": "TeamStage——IterationState + 循环",
+    "cd.c7": "RefineStage——Explorer + Critic", "cd.c8": "WriteStage——Writer + Reviewer + polish/metadata",
+    "cd.c9": "build_polish_input · build_metadata_appendix", "cd.c10": "Stage 工厂 + 工具装配",
+    "cd.c11": "模型工厂(Gemini search=True)", "cd.c12": "Agent 工具(DB · Docker)",
+    "cd.c13": "FastAPI 入口", "cd.c14": "环境配置", "cd.c15": "文件型 session DB",
+  }
+};
+initLang(T);
+</script>
+</body>
+</html>
