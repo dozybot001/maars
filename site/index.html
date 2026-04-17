@@ -68,10 +68,13 @@
     -webkit-background-clip:text; background-clip:text; color:transparent;
   }
   .kbd {
+    display:inline-block; white-space:nowrap; vertical-align:middle;
     font-family:'JetBrains Mono',monospace; font-size:.78rem;
     background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12);
     border-radius:6px; padding:2px 7px;
   }
+  .io-row { line-height: 2.1; }
+  .io-row > div { word-break: break-word; overflow-wrap: anywhere; }
   .card-hover { transition: transform .25s ease, border-color .25s ease; }
   .card-hover:hover { transform: translateY(-2px); }
   pre, code { font-family:'JetBrains Mono',monospace; }
@@ -252,7 +255,7 @@
         <div class="stage-badge font-bold tracking-tight text-xl" data-i18n="stage.refine">Refine</div>
       </div>
       <p class="text-slate-300 leading-relaxed mb-5" data-i18n="pipe.refine_body"><b>Explorer</b> drafts a proposal from the user's raw idea. <b>Critic</b> reviews it within a declared scope, surfacing gaps and ambiguities. They iterate until zero issues remain.</p>
-      <div class="text-xs font-mono text-slate-500 space-y-1.5">
+      <div class="text-xs font-mono text-slate-500 space-y-1.5 io-row">
         <div><span class="text-slate-400" data-i18n="pipe.in">in</span>  &nbsp;→&nbsp; <span class="kbd">idea.md</span></div>
         <div><span class="text-slate-400" data-i18n="pipe.out">out</span> →&nbsp; <span class="kbd">refined_idea.md</span></div>
       </div>
@@ -265,7 +268,7 @@
         <div class="stage-badge font-bold tracking-tight text-xl" data-i18n="stage.research">Research</div>
       </div>
       <p class="text-slate-300 leading-relaxed mb-5" data-i18n="pipe.research_body">The core engine. A <b>strategy</b> decomposes the proposal into atomic tasks, which execute in <b>Docker sandboxes</b> with parallel scheduling. Outputs are verified, then evaluated — loops with strategy updates when gaps exist.</p>
-      <div class="text-xs font-mono text-slate-500 space-y-1.5">
+      <div class="text-xs font-mono text-slate-500 space-y-1.5 io-row">
         <div><span class="text-slate-400" data-i18n="pipe.in">in</span>  &nbsp;→&nbsp; <span class="kbd">refined_idea.md</span></div>
         <div><span class="text-slate-400" data-i18n="pipe.out">out</span> →&nbsp; <span class="kbd">artifacts/</span> · <span class="kbd">tasks/</span> · <span class="kbd">evaluations/</span></div>
       </div>
@@ -278,7 +281,7 @@
         <div class="stage-badge font-bold tracking-tight text-xl" data-i18n="stage.write">Write</div>
       </div>
       <p class="text-slate-300 leading-relaxed mb-5" data-i18n="pipe.write_body"><b>Writer</b> reads all research outputs and drafts a complete paper. <b>Reviewer</b> critiques and drives revisions — same IterationState pattern as Refine. A final <b>Polish</b> sub-step runs a single-pass LLM refinement and appends a deterministic metadata appendix (tokens, timings, scores).</p>
-      <div class="text-xs font-mono text-slate-500 space-y-1.5">
+      <div class="text-xs font-mono text-slate-500 space-y-1.5 io-row">
         <div><span class="text-slate-400" data-i18n="pipe.in">in</span>  &nbsp;→&nbsp; <span class="kbd">artifacts/</span> · <span class="kbd">refined_idea.md</span></div>
         <div><span class="text-slate-400" data-i18n="pipe.out">out</span> →&nbsp; <span class="kbd">paper.md</span> → <span class="kbd">paper_polished.md</span></div>
       </div>
