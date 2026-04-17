@@ -75,6 +75,19 @@
   .io-row { line-height: 2.1; }
   .io-row > div { word-break: break-word; overflow-wrap: anywhere; }
 
+  /* copy-to-clipboard button on code blocks */
+  .copy-btn {
+    position:absolute; top:.6rem; right:.6rem;
+    padding:4px 10px; border-radius:6px;
+    background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.10);
+    color:#cbd5e1; font-family:'JetBrains Mono',monospace; font-size:.7rem;
+    opacity:.6; cursor:pointer;
+    transition: opacity .2s ease, background .2s ease, color .2s ease, border-color .2s ease;
+  }
+  .group:hover .copy-btn { opacity:1; }
+  .copy-btn:hover { background:rgba(99,102,241,.18); color:#fff; border-color:rgba(129,140,248,.45); }
+  .copy-btn.copied { color:#a5b4fc; border-color:rgba(129,140,248,.55); opacity:1; }
+
   /* matplotlib charts on dark bg — just darken the white canvas */
   .chart-img {
     filter: brightness(.55) contrast(1.1) saturate(.75);
@@ -556,10 +569,13 @@
 
   <div class="grid md:grid-cols-2 gap-6">
     <div>
-      <pre class="glass rounded-xl p-6 text-sm overflow-x-auto leading-relaxed shine"><code><span class="text-slate-500"># <span data-i18n="qs.code_c">clone &amp; run</span></span>
+      <div class="relative group">
+        <pre class="glass rounded-xl p-6 text-sm overflow-x-auto leading-relaxed shine"><code id="qs-code"><span class="text-slate-500"># <span data-i18n="qs.code_c">clone &amp; run</span></span>
 git clone https://github.com/dozybot001/MAARS.git
 cd MAARS
 bash start.sh</code></pre>
+        <button type="button" data-copy-target="qs-code" data-i18n="qs.copy" class="copy-btn" aria-label="Copy">Copy</button>
+      </div>
 
       <p class="text-sm text-slate-500 mt-4 leading-relaxed" data-i18n="qs.post">On first boot <span class="kbd">start.sh</span> creates a venv, installs deps, scaffolds <span class="kbd">.env</span> from the example, builds the sandbox image, and serves on <span class="kbd">localhost:8000</span>. GPU is auto-detected.</p>
     </div>
@@ -783,6 +799,8 @@ bash start.sh</code></pre>
       "qs.title": "<span class=\"gradient-text\">One command.</span>",
       "qs.sub": "Requirements: Python 3.10+, Docker running, a <a href=\"https://aistudio.google.com/apikey\" class=\"underline decoration-white/20 hover:decoration-white/60\">Gemini API key</a>.",
       "qs.code_c": "clone & run",
+      "qs.copy": "Copy",
+      "qs.copied": "Copied ✓",
       "qs.post": "On first boot <span class=\"kbd\">start.sh</span> creates a venv, installs deps, scaffolds <span class=\"kbd\">.env</span> from the example, builds the sandbox image, and serves on <span class=\"kbd\">localhost:8000</span>. GPU is auto-detected.",
       "qs.a_t": "Drop in an idea",
       "qs.a_b": "Paste a research idea, a path to a UTF-8 text/markdown file, or a Kaggle competition URL. Kaggle mode auto-extracts the competition ID, downloads data, and skips Refine.",
@@ -941,6 +959,8 @@ bash start.sh</code></pre>
       "qs.title": "<span class=\"gradient-text\">一条命令。</span>",
       "qs.sub": "依赖:Python 3.10+、Docker 已启动、一枚 <a href=\"https://aistudio.google.com/apikey\" class=\"underline decoration-white/20 hover:decoration-white/60\">Gemini API key</a>。",
       "qs.code_c": "克隆并运行",
+      "qs.copy": "复制",
+      "qs.copied": "已复制 ✓",
       "qs.post": "首次启动时,<span class=\"kbd\">start.sh</span> 会创建虚拟环境、安装依赖、从示例生成 <span class=\"kbd\">.env</span>、构建沙箱镜像,并在 <span class=\"kbd\">localhost:8000</span> 提供服务。GPU 会自动检测。",
       "qs.a_t": "投进一个想法",
       "qs.a_b": "粘贴一个研究想法、一个 UTF-8 文本/markdown 文件路径,或一个 Kaggle 竞赛 URL。Kaggle 模式会自动提取比赛 ID、下载数据并跳过 Refine。",
@@ -1007,6 +1027,33 @@ bash start.sh</code></pre>
   });
 
   applyLang(initialLang());
+
+  // click-to-copy code blocks
+  document.querySelectorAll('[data-copy-target]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const el = document.getElementById(btn.getAttribute('data-copy-target'));
+      if (!el) return;
+      const text = el.innerText
+        .split('\n')
+        .filter(line => !line.trim().startsWith('#') && line.trim() !== '')
+        .join('\n');
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (e) {
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta);
+        ta.select(); document.execCommand('copy'); ta.remove();
+      }
+      const lang = document.documentElement.lang || 'en';
+      btn.textContent = (T[lang] && T[lang]['qs.copied']) || 'Copied ✓';
+      btn.classList.add('copied');
+      clearTimeout(btn._resetTimer);
+      btn._resetTimer = setTimeout(() => {
+        btn.classList.remove('copied');
+        btn.textContent = (T[lang] && T[lang]['qs.copy']) || 'Copy';
+      }, 1600);
+    });
+  });
 
   // reveal on scroll
   const io = new IntersectionObserver((entries) => {
