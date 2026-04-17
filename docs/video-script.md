@@ -55,7 +55,7 @@ Three hours. 2.47 million tokens. `· ↓ 停留原地`
 
 Here is a live screen recording of a complete MAARS run. `·`
 I'll scrub through to give you a sense of how the system works in real time. `·`
-*[scrub the video — press **O** to open it]* `· ↓ scroll → Docs`
+*[拖动进度条展示]* `· ↓ scroll → Docs`
 
 ---
 

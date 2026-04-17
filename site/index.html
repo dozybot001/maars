@@ -215,7 +215,7 @@
 </section>
 
 <!-- ============ DEMO VIDEO ============ -->
-<section class="max-w-6xl mx-auto px-6 pb-24">
+<section id="demo-video" class="max-w-6xl mx-auto px-6 pb-24">
   <div class="relative rounded-3xl overflow-hidden border border-white/10">
     <video controls poster="assets/demo-cover.png" class="w-full bg-black" preload="metadata">
       <source src="https://github.com/user-attachments/assets/f0d8ef94-c98e-4666-8dec-85e1332dc2df" type="video/mp4" />
@@ -1140,11 +1140,10 @@ bash start.sh</code></pre>
       ],
     },
     {
-      scrollTo: null, openUrl: VIDEO_URL,
+      scrollTo: '#demo-video',
       lines: [
         "Here is a live screen recording of a complete MAARS run.",
         "I'll scrub through to give you a sense of how the system works in real time.",
-        '[ O — open recording ]',
       ],
     },
     {
