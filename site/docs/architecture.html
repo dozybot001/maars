@@ -150,8 +150,7 @@
       <h2><span class="num">04</span><span data-i18n="in.title">Stage inheritance</span></h2>
       <p class="sub" data-i18n="in.sub">One base class for lifecycle and SSE; two branches for the two fundamentally different execution shapes.</p>
 
-      <div class="class-tree">
-<span class="stage-name">Stage</span>                          <span class="stage-note" data-i18n="in.n1"># lifecycle + SSE (_send) + LLM streaming (_stream_llm)</span>
+      <div class="class-tree"><span class="stage-name">Stage</span>                          <span class="stage-note" data-i18n="in.n1"># lifecycle + SSE (_send) + LLM streaming (_stream_llm)</span>
 <span class="connector">├──</span> <span class="stage-name">ResearchStage</span>              <span class="stage-note" data-i18n="in.n2"># Multi-Agent (decompose · parallel execute · evaluate loop)</span>
 <span class="connector">└──</span> <span class="stage-name">TeamStage</span>                  <span class="stage-note" data-i18n="in.n3"># IterationState + primary / reviewer loop</span>
     <span class="connector">├──</span> <span class="stage-name">RefineStage</span>
@@ -336,8 +335,7 @@
       <h2><span class="num">08</span><span data-i18n="st.title">Session storage</span></h2>
       <p class="sub" data-i18n="st.sub">One run, one directory. Every agent output is a file — <code>grep</code>-friendly, diffable, reproducible.</p>
 
-      <div class="dir-tree">
-<span class="comment">results/{session}/</span>
+      <div class="dir-tree"><span class="comment">results/{session}/</span>
 ├── idea.md                     <span class="comment"># <span data-i18n="st.c1">user input</span></span>
 <span class="dir-refine">├── proposals/ critiques/</span>       <span class="comment"># <span data-i18n="st.c2">Refine: rounds</span></span>
 <span class="dir-refine">├── refined_idea.md</span>             <span class="comment"># <span data-i18n="st.c3">Refine: final</span></span>
@@ -362,8 +360,7 @@
       <h2><span class="num">09</span><span data-i18n="cd.title">Code layout</span></h2>
       <p class="sub" data-i18n="cd.sub">Runtime and agent concerns live in separate modules; tools go through a thin adapter layer.</p>
 
-      <div class="dir-tree">
-<span class="comment">backend/</span>
+      <div class="dir-tree"><span class="comment">backend/</span>
 ├── pipeline/
 │   ├── orchestrator.py          <span class="comment"># <span data-i18n="cd.c1">three-stage sequencing</span></span>
 │   ├── stage.py                 <span class="comment"># <span data-i18n="cd.c2">Stage base — lifecycle + SSE + _stream_llm</span></span>
