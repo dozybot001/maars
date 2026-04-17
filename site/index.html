@@ -75,13 +75,12 @@
   .io-row { line-height: 2.1; }
   .io-row > div { word-break: break-word; overflow-wrap: anywhere; }
 
-  /* matplotlib charts on dark bg — invert white canvas to near-black,
-     hue-rotate brings colored lines roughly back to their original hue */
+  /* matplotlib charts on dark bg — just darken the white canvas */
   .chart-img {
-    filter: invert(.92) hue-rotate(180deg) contrast(.92) saturate(.85);
+    filter: brightness(.55) contrast(1.1) saturate(.75);
     transition: filter .3s ease;
   }
-  figure:hover .chart-img { filter: none; }
+  figure:hover .chart-img { filter: brightness(.78) contrast(1.05) saturate(.85); }
   .card-hover { transition: transform .25s ease, border-color .25s ease; }
   .card-hover:hover { transform: translateY(-2px); }
   pre, code { font-family:'JetBrains Mono',monospace; }
