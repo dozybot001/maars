@@ -9,7 +9,7 @@
 
 ---
 
-MAARS 接受一个模糊的研究想法（或 Kaggle 比赛链接），通过四阶段流水线 **Refine → Research → Write → Polish** 产出结构化研究产物和打磨后的论文。
+MAARS 接受一个模糊的研究想法（或 Kaggle 比赛链接），通过三阶段流水线 **Refine → Research → Write** 产出结构化研究产物和打磨后的论文。
 
 每个阶段由 Python runtime 编排，LLM Agent 执行开放性工作——文献调研、代码实验、论文撰写、同行评审——全程自主运行，迭代自我改进。
 
@@ -29,18 +29,14 @@ graph LR
         Eval -.->|strategy update| Str
     end
     subgraph Write
-        W[Writer] <--> R[Reviewer]
+        W[Writer] <--> R[Reviewer] --> P[Polish + Metadata]
     end
-    subgraph Polish
-        P[Polish LLM] --> M[Metadata]
-    end
-    Refine -->|refined_idea| Research -->|artifacts| Write -->|paper.md| Polish -->|paper_polished.md| Final((Done))
+    Refine -->|refined_idea| Research -->|artifacts| Write -->|paper_polished.md| Final((Done))
 ```
 
 - **Refine**：Explorer 调研文献并起草提案；Critic 在声明范围内评审。迭代直到零 issue。
 - **Research**：将提案分解为原子任务，在 Docker 沙箱中并行执行，验证产出，评估结果——存在关键空白时通过策略更新迭代。
-- **Write**：Writer 读取所有研究产出撰写完整论文；Reviewer 评审并驱动修订，直到零 issue。
-- **Polish**：单次 LLM 打磨提升文风质量，附加确定性执行元数据附录。
+- **Write**：Writer 读取研究产出撰写初稿，Reviewer 评审并驱动修订直到零 issue；最后 Polish 子阶段单次 LLM 打磨 + 附加确定性元数据附录。
 
 ## 快速开始
 

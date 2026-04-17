@@ -13,11 +13,13 @@ class WriteStage(TeamStage):
     _primary_phase = "draft"
     _reviewer_phase = "review"
 
-    def __init__(self, name: str = "write", model=None, writer_tools=None,
-                 reviewer_tools=None, db=None, max_delegations: int = 10):
+    def __init__(self, name: str = "write", model=None, polish_model=None,
+                 writer_tools=None, reviewer_tools=None, db=None,
+                 max_delegations: int = 10):
         super().__init__(name=name, model=model, db=db, max_delegations=max_delegations)
         self._writer_tools = writer_tools or []
         self._reviewer_tools = reviewer_tools or []
+        self._polish_model = polish_model or model
 
     @staticmethod
     def _rewrite_artifact_paths(text: str, prefix: str) -> str:
@@ -89,3 +91,36 @@ class WriteStage(TeamStage):
         if self.db:
             self.db.save_paper(result)
         return result
+
+    # ------------------------------------------------------------------
+    # Override _execute: Writer/Reviewer loop → Polish → Metadata
+    # ------------------------------------------------------------------
+
+    async def _execute(self) -> str:
+        # 1. Writer/Reviewer iterative loop → paper.md
+        paper = await super()._execute()
+
+        # 2. Polish pass (single LLM call, no iteration)
+        self._current_phase = "polish"
+        from backend.team.prompts import POLISH_SYSTEM
+        from backend.team.polish import build_polish_input, build_metadata_appendix
+
+        polished = await self._stream_llm(
+            self._polish_model, [], POLISH_SYSTEM,
+            build_polish_input(paper, self.db),
+            call_id="Polish", content_level=3,
+            label=True, label_level=2,
+        )
+
+        # 3. Deterministic metadata appendix
+        self._current_phase = "metadata"
+        appendix = build_metadata_appendix(self.db)
+        self._send(chunk={"text": appendix, "call_id": "Metadata", "level": 3})
+
+        final = polished.rstrip() + "\n\n" + appendix
+        if self.db:
+            self.db.save_paper_polished(final)
+
+        # Reset phase so the done signal has no phase
+        self._current_phase = ""
+        return final

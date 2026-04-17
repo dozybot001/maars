@@ -122,7 +122,7 @@ for batch in batches:
 
 额外配置项：
 - `MAARS_API_REQUEST_INTERVAL`：连续 LLM 调用之间的最小间隔秒数（限流）。由 `_stream_llm` 内部的 `_rate_limit()` 执行。
-- `MAARS_POLISH_MODEL`：Polish 阶段的可选模型覆盖。设置后，Polish 使用此模型而非默认模型。
+- `MAARS_POLISH_MODEL`：Write 内 polish 子阶段的可选模型覆盖。作为 `polish_model` 参数传入 `WriteStage`，仅用于 polish LLM 调用。回退顺序：`write_model` → `google_model`。
 
 Execute -> Verify -> (pass | retry | redecompose) 是原子周期，在 semaphore 内完成。
 

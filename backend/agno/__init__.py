@@ -8,7 +8,6 @@ from backend.agno.models import create_model
 from backend.pipeline.research import ResearchStage
 from backend.team.refine import RefineStage
 from backend.team.write import WriteStage
-from backend.team.polish import PolishStage
 
 
 def create_agno_stages(
@@ -49,8 +48,8 @@ def create_agno_stages(
             model=research_model, tools=all_research_tools, db=db,
             max_iterations=max_iterations,
         ),
-        "write": WriteStage(model=write_model, writer_tools=writer_tools,
+        "write": WriteStage(model=write_model, polish_model=polish_model,
+                            writer_tools=writer_tools,
                             reviewer_tools=reviewer_tools, db=db,
                             max_delegations=max_delegations),
-        "polish": PolishStage(model=polish_model, db=db),
     }

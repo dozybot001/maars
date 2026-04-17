@@ -2,9 +2,9 @@
 
 [中文](../CN/architecture.md) | English
 
-> Boundary: runtime controls flow and state; agents handle open-ended tasks. Four stages connected via file-based session DB.
+> Boundary: runtime controls flow and state; agents handle open-ended tasks. Three stages connected via file-based session DB.
 >
-> Stage details: [Refine / Write](refine-write.md) | [Research](research.md) | [Polish](polish.md)
+> Stage details: [Refine / Write](refine-write.md) | [Research](research.md)
 
 ## 1. Goals & Responsibilities
 
@@ -12,14 +12,14 @@
 
 **Split**: `if/for/while`, scheduling, retries, termination -> runtime; search, coding, reasoning -> agent.
 
-**Pattern**: All four stages are multi-agent — agents produce artifacts, runtime orchestrates, next agent restores context from persisted files. Stages differ in complexity but share the same core: Python controls flow, agents execute open-ended work, state lives on disk.
+**Pattern**: All three stages are multi-agent — agents produce artifacts, runtime orchestrates, next agent restores context from persisted files. Stages differ in complexity but share the same core: Python controls flow, agents execute open-ended work, state lives on disk.
 
 ## 2. System Overview
 
 ### 2.1 Five-Layer Architecture
 
 1. **Entry layer**: Frontend + FastAPI
-2. **Orchestration layer**: Four-stage sequencing and lifecycle control
+2. **Orchestration layer**: Three-stage sequencing and lifecycle control
 3. **Stage layer**: Each stage is a stable boundary, connected via session DB
 4. **Execution layer**: Multi-Agent (all stages)
 5. **Tools & State layer**: Tools for external interaction, file-based DB for state
@@ -29,10 +29,9 @@
 ```
 Stage                          -- lifecycle + SSE (_send) + LLM streaming (_stream_llm)
 ├── ResearchStage              -- multi-agent (task decomposition + parallel execution + evaluation loop)
-├── PolishStage                -- single-pass LLM refinement + deterministic metadata appendix
 └── TeamStage                  -- Multi-Agent (primary + reviewer + IterationState)
     ├── RefineStage
-    └── WriteStage
+    └── WriteStage             -- overrides _execute() to add polish + metadata sub-phases after the Writer/Reviewer loop
 ```
 
 ### 2.3 End-to-End Pipeline
@@ -67,20 +66,15 @@ flowchart TB
     Evaluate -- "done" --> RArt[(Research Artifacts)]
     RArt --> Write
 
-    subgraph Write ["Write (Writer <-> Reviewer)"]
+    subgraph Write ["Write (Writer <-> Reviewer -> Polish + Metadata)"]
         WW[Writer] -- "draft" --> IS2[(IterationState)]
         IS2 -- "draft + issues" --> WR[Reviewer]
         WR -- "{issues, resolved, pass}" --> IS2
         IS2 -- "draft + issues" --> WW
+        IS2 -- "paper.md" --> PL[Polish + Metadata]
     end
 
-    Write -- "paper.md" --> Polish
-
-    subgraph Polish ["Polish (single LLM pass)"]
-        PM[paper.md] --> LLM[LLM Refinement]
-        LLM --> MA[Metadata Appendix]
-        MA --> PP[paper_polished.md]
-    end
+    Write -- "paper_polished.md" --> Final[(Final Output)]
 ```
 
 ### 2.4 Stage Responsibilities
@@ -89,8 +83,7 @@ flowchart TB
 |---|---|---|---|
 | **Refine** | Multi-Agent (Explorer + Critic) | Intent -> actionable research goal | [refine-write.md](refine-write.md) |
 | **Research** | Multi-Agent (Decompose + Execute + Evaluate) | Decompose -> Execute <-> Verify -> Evaluate | [research.md](research.md) |
-| **Write** | Multi-Agent (Writer + Reviewer) | Synthesize into paper | [refine-write.md](refine-write.md) |
-| **Polish** | `paper.md` → single-pass LLM refinement + metadata appendix → `paper_polished.md` | Final polish and metadata | [polish.md](polish.md) |
+| **Write** | Multi-Agent (Writer + Reviewer) + polish/metadata sub-phases | Synthesize into paper, then polish + append metadata | [refine-write.md](refine-write.md) |
 
 ## 3. SSE
 
@@ -148,11 +141,10 @@ DECOMPOSE   (tree)
 
 TASKS       (execution list)
 
-WRITE       Drafts  [round_0] [round_1] ...
-            Reviews [round_0] [round_1] ...
-            Final   [paper]
-
-POLISH      Final   [paper_polished]
+WRITE       Drafts   [round_0] [round_1] ...
+            Reviews  [round_0] [round_1] ...
+            Draft    [paper]
+            Polished [paper_polished]
 ```
 
 > Note: round files are 0-indexed (`round_0`, `round_1`, ...).
@@ -185,8 +177,8 @@ results/{session}/
 ├── reviews/                    # Write: Reviewer reviews
 │   ├── round_N.md
 │   └── round_N.json
-├── paper.md                    # Write final output
-├── paper_polished.md           # Polish final output
+├── paper.md                    # Write: draft output (after Writer/Reviewer loop)
+├── paper_polished.md           # Write: final output (after polish + metadata sub-phases)
 ├── meta.json                   # Metadata (tokens, score)
 ├── log.jsonl                   # Streaming chunk log
 ├── execution_log.jsonl         # Docker execution log
@@ -201,7 +193,7 @@ results/{session}/
 ```
 backend/
 ├── pipeline/
-│   ├── orchestrator.py          # Four-stage sequencing
+│   ├── orchestrator.py          # Three-stage sequencing
 │   ├── stage.py                 # Stage base class (lifecycle + SSE + _stream_llm)
 │   ├── research.py              # ResearchStage -- Multi-Agent engine
 │   ├── decompose.py             # Recursive decomposition engine
@@ -210,10 +202,10 @@ backend/
 ├── team/
 │   ├── stage.py                 # TeamStage -- IterationState + Multi-Agent loop
 │   ├── refine.py                # RefineStage: Explorer + Critic
-│   ├── write.py                 # WriteStage: Writer + Reviewer
-│   ├── polish.py                # PolishStage: single-pass LLM refinement + metadata appendix
+│   ├── write.py                 # WriteStage: Writer + Reviewer + polish/metadata sub-phases
+│   ├── polish.py                # Utility module: build_polish_input, build_metadata_appendix
 │   ├── prompts.py               # Language dispatcher
-│   └── prompts_zh.py / _en.py   # Team prompts + _REVIEWER_OUTPUT_FORMAT
+│   └── prompts_zh.py / _en.py   # Team prompts + _REVIEWER_OUTPUT_FORMAT + POLISH_SYSTEM
 ├── agno/
 │   ├── __init__.py              # Stage factory + tool assembly
 │   ├── models.py                # Model factory (Gemini search=True)

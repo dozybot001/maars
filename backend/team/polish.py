@@ -1,47 +1,13 @@
-"""Polish stage: single-pass paper refinement + deterministic metadata appendix."""
+"""Polish utilities: input builder and deterministic metadata appendix.
+
+Used by WriteStage._execute() after the Writer/Reviewer loop completes.
+Not a Stage subclass — polish is a phase within Write, not a separate stage.
+"""
 
 from backend.config import settings
-from backend.pipeline.stage import Stage
 
 
-class PolishStage(Stage):
-
-    def __init__(self, name: str = "polish", model=None, db=None):
-        super().__init__(name=name, db=db)
-        self._model = model
-
-    async def _execute(self) -> str:
-        paper = self.db.get_document("paper") if self.db else ""
-        if not paper:
-            raise RuntimeError("No paper.md found — run the Write stage first.")
-
-        # 1. LLM polish
-        self._current_phase = "polish"
-        from backend.team.prompts import POLISH_SYSTEM
-        polished = await self._stream_llm(
-            self._model, [], POLISH_SYSTEM,
-            _build_input(paper, self.db),
-            call_id="Polish", content_level=3,
-            label=True, label_level=2,
-        )
-
-        # 2. Deterministic metadata appendix
-        self._current_phase = "metadata"
-        appendix = build_metadata_appendix(self.db)
-        self._send(chunk={"text": appendix, "call_id": "Metadata", "level": 3})
-
-        final = polished.rstrip() + "\n\n" + appendix
-        if self.db:
-            self.db.save_paper_polished(final)
-        self._current_phase = ""
-        return final
-
-
-# ------------------------------------------------------------------
-# Input builder
-# ------------------------------------------------------------------
-
-def _build_input(paper: str, db) -> str:
+def build_polish_input(paper: str, db) -> str:
     zh = settings.is_chinese()
     parts: list[str] = []
 

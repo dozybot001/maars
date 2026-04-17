@@ -122,7 +122,7 @@ Each `execute_task` acquires `_get_api_semaphore()` to limit LLM concurrency (`M
 
 Additional config knobs:
 - `MAARS_API_REQUEST_INTERVAL`: minimum seconds between consecutive LLM calls (rate limiting). Enforced by `_rate_limit()` inside `_stream_llm`.
-- `MAARS_POLISH_MODEL`: optional model override for the polish stage. When set, polish uses this model instead of the default.
+- `MAARS_POLISH_MODEL`: optional model override for the polish sub-phase inside Write. Passed to `WriteStage` as the `polish_model` parameter and used only for the polish LLM call. Falls back to `write_model` → `google_model`.
 
 Execute -> Verify -> (pass | retry | redecompose) is an atomic cycle, completed within the semaphore.
 

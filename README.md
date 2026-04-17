@@ -9,7 +9,7 @@
 
 ---
 
-MAARS takes a vague research idea (or a Kaggle competition URL) and produces structured research artifacts and a polished paper through a four-stage pipeline: **Refine → Research → Write → Polish**.
+MAARS takes a vague research idea (or a Kaggle competition URL) and produces structured research artifacts and a polished paper through a three-stage pipeline: **Refine → Research → Write**.
 
 Each stage is orchestrated by Python runtime with LLM agents executing the open-ended work — literature surveys, code experiments, paper writing, and peer review — all running autonomously with iterative self-improvement.
 
@@ -29,18 +29,14 @@ graph LR
         Eval -.->|strategy update| Str
     end
     subgraph Write
-        W[Writer] <--> R[Reviewer]
+        W[Writer] <--> R[Reviewer] --> P[Polish + Metadata]
     end
-    subgraph Polish
-        P[Polish LLM] --> M[Metadata]
-    end
-    Refine -->|refined_idea| Research -->|artifacts| Write -->|paper.md| Polish -->|paper_polished.md| Final((Done))
+    Refine -->|refined_idea| Research -->|artifacts| Write -->|paper_polished.md| Final((Done))
 ```
 
 - **Refine**: Explorer surveys literature and drafts a proposal; Critic reviews within declared scope. Iterates until zero issues remain.
 - **Research**: Decomposes the proposal into atomic tasks, executes them in Docker sandboxes with parallel scheduling, verifies outputs, and evaluates results — looping with strategy updates when critical gaps exist.
-- **Write**: Writer reads all research outputs and produces a complete paper; Reviewer critiques and drives revisions until zero issues remain.
-- **Polish**: Single-pass LLM refinement for prose quality, plus a deterministic execution metadata appendix.
+- **Write**: Writer reads all research outputs and produces a draft; Reviewer critiques and drives revisions until zero issues remain. A final Polish sub-phase refines prose quality and appends deterministic execution metadata.
 
 ## Quick Start
 

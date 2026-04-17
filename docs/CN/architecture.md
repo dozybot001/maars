@@ -2,9 +2,9 @@
 
 中文 | [English](../EN/architecture.md)
 
-> 架构边界：runtime 管控制流与状态；agent 管开放任务。四阶段经文件型 session DB 衔接。
+> 架构边界：runtime 管控制流与状态；agent 管开放任务。三阶段经文件型 session DB 衔接。
 >
-> 阶段详情：[Refine / Write](refine-write.md) | [Research](research.md) | [Polish](polish.md)
+> 阶段详情：[Refine / Write](refine-write.md) | [Research](research.md)
 
 ## 1. 目标与分工
 
@@ -12,14 +12,14 @@
 
 **分工**：`if/for/while`、调度、重试、迭代终止 -> runtime；检索、编码、解释 -> agent。
 
-**形态**：四个阶段均为 Multi-Agent——agent 产出落盘，runtime 编排，下一个 agent 从持久化文件恢复上下文。各阶段复杂度不同，但核心一致：Python 控制流程，Agent 执行开放性工作，状态存于磁盘。
+**形态**：三个阶段均为 Multi-Agent——agent 产出落盘，runtime 编排，下一个 agent 从持久化文件恢复上下文。各阶段复杂度不同，但核心一致：Python 控制流程，Agent 执行开放性工作，状态存于磁盘。
 
 ## 2. 系统全景
 
 ### 2.1 五层架构
 
 1. **入口层**：前端 + FastAPI
-2. **编排层**：四阶段顺序和生命周期控制
+2. **编排层**：三阶段顺序和生命周期控制
 3. **阶段层**：每个 stage 是稳定边界，通过 session DB 连接
 4. **智能执行层**：Multi-Agent（所有阶段）
 5. **工具与状态层**：工具与外部交互，文件型 DB 保存状态
@@ -29,13 +29,12 @@
 ```
 Stage                          -- 生命周期 + 统一 SSE (_send) + LLM streaming (_stream_llm)
 ├── ResearchStage              -- Multi-Agent（任务分解 + 并行执行 + 评估循环）
-├── PolishStage                -- 单次 LLM 润色 + 确定性元数据附录
 └── TeamStage                  -- Multi-Agent（primary + reviewer + IterationState）
     ├── RefineStage
-    └── WriteStage
+    └── WriteStage             -- 覆写 _execute()，在 Writer/Reviewer 循环之后追加 polish + metadata 子阶段
 ```
 
-### 2.3 四阶段工作流（端到端）
+### 2.3 三阶段工作流（端到端）
 
 ```mermaid
 flowchart TB
@@ -67,20 +66,15 @@ flowchart TB
     Evaluate -- "done" --> RArt[(Research Artifacts)]
     RArt --> Write
 
-    subgraph Write ["Write (Writer <-> Reviewer)"]
+    subgraph Write ["Write (Writer <-> Reviewer -> Polish + Metadata)"]
         WW[Writer] -- "draft" --> IS2[(IterationState)]
         IS2 -- "draft + issues" --> WR[Reviewer]
         WR -- "{issues, resolved, pass}" --> IS2
         IS2 -- "draft + issues" --> WW
+        IS2 -- "paper.md" --> PL[Polish + Metadata]
     end
 
-    Write -- "paper.md" --> Polish
-
-    subgraph Polish ["Polish (single LLM pass)"]
-        PM[paper.md] --> LLM[LLM Refinement]
-        LLM --> MA[Metadata Appendix]
-        MA --> PP[paper_polished.md]
-    end
+    Write -- "paper_polished.md" --> Final[(Final Output)]
 ```
 
 ### 2.4 阶段职责
@@ -89,8 +83,7 @@ flowchart TB
 |---|---|---|---|
 | **Refine** | Multi-Agent（Explorer + Critic） | 意图 -> 可执行研究目标 | [refine-write.md](refine-write.md) |
 | **Research** | Multi-Agent（Decompose + Execute + Evaluate） | 分解 -> 执行 <-> 验证 -> 评估 | [research.md](research.md) |
-| **Write** | Multi-Agent（Writer + Reviewer） | 综合为论文 | [refine-write.md](refine-write.md) |
-| **Polish** | 单次 LLM + 确定性后处理 | 润色论文 + 附加元数据 | [polish.md](polish.md) |
+| **Write** | Multi-Agent（Writer + Reviewer）+ polish/metadata 子阶段 | 综合为论文，随后润色并附加元数据 | [refine-write.md](refine-write.md) |
 
 ## 3. SSE
 
@@ -148,11 +141,10 @@ DECOMPOSE   (tree)
 
 TASKS       (execution list)
 
-WRITE       Drafts  [round_0] [round_1] ...
-            Reviews [round_0] [round_1] ...
-            Final   [paper]
-
-POLISH      Final   [paper_polished]
+WRITE       Drafts   [round_0] [round_1] ...
+            Reviews  [round_0] [round_1] ...
+            Draft    [paper]
+            Polished [paper_polished]
 ```
 
 ## 4. 数据存储
@@ -183,8 +175,8 @@ results/{session}/
 ├── reviews/                    # Write: Reviewer 各轮评审
 │   ├── round_N.md
 │   └── round_N.json
-├── paper.md                    # Write 最终产出
-├── paper_polished.md           # Polish 最终产出
+├── paper.md                    # Write: 草稿产出（Writer/Reviewer 循环结束后）
+├── paper_polished.md           # Write: 最终产出（polish + metadata 子阶段之后）
 ├── meta.json                   # 元信息（tokens、score）
 ├── log.jsonl                   # 流式 chunk 日志
 ├── execution_log.jsonl         # Docker 执行记录
@@ -199,7 +191,7 @@ results/{session}/
 ```
 backend/
 ├── pipeline/
-│   ├── orchestrator.py          # 四阶段顺序控制
+│   ├── orchestrator.py          # 三阶段顺序控制
 │   ├── stage.py                 # Stage 基类（生命周期 + SSE + _stream_llm）
 │   ├── research.py              # ResearchStage -- Multi-Agent 引擎
 │   ├── decompose.py             # 通用分解引擎（支持 root_id）
@@ -208,10 +200,10 @@ backend/
 ├── team/
 │   ├── stage.py                 # TeamStage -- IterationState + Multi-Agent 循环
 │   ├── refine.py                # RefineStage: Explorer + Critic
-│   ├── write.py                 # WriteStage: Writer + Reviewer
-│   ├── polish.py                # PolishStage: 单次 LLM 润色 + 元数据附录
+│   ├── write.py                 # WriteStage: Writer + Reviewer + polish/metadata 子阶段
+│   ├── polish.py                # 工具模块：build_polish_input、build_metadata_appendix
 │   ├── prompts.py               # 语言分发层
-│   └── prompts_zh.py / _en.py   # Team prompts + _REVIEWER_OUTPUT_FORMAT
+│   └── prompts_zh.py / _en.py   # Team prompts + _REVIEWER_OUTPUT_FORMAT + POLISH_SYSTEM
 ├── agno/
 │   ├── __init__.py              # Stage factory + 工具组装
 │   ├── models.py                # Model factory（Gemini search=True）

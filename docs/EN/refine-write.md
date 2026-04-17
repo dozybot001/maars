@@ -4,7 +4,7 @@
 
 > Back to [Architecture Overview](architecture.md)
 
-Refine and Write share the same `TeamStage` base class, driven by an `IterationState` Multi-Agent loop. They are fully symmetric — only configuration differs. A separate **Polish** stage runs after Write as a single-pass cleanup.
+Refine and Write share the same `TeamStage` base class, driven by an `IterationState` Multi-Agent loop. They are symmetric at the loop level — only configuration differs. Write additionally overrides `_execute()` to run **polish** and **metadata** sub-phases after the Writer/Reviewer loop completes.
 
 ## 1. IterationState
 
@@ -124,26 +124,28 @@ Round 3:
 
 Core pattern is the same: **Python controls flow, agents execute single steps, state managed at runtime layer.**
 
-## 7. Polish Stage
+## 7. Polish + Metadata Sub-Phases
 
-Polish is a **separate stage** that runs after Write. Unlike Refine/Write, it is not a `TeamStage` — it inherits directly from `Stage` (single agent, no iteration).
+Polish and metadata are **sub-phases of Write**, not an independent stage. `WriteStage` overrides `TeamStage._execute()`: after the Writer/Reviewer iteration completes and `paper.md` is saved, it runs two additional sub-phases before emitting the stage `done` signal.
 
-**How it works**:
-- Single LLM pass — no reviewer, no iteration loop
-- Reads `paper.md` produced by Write
-- Outputs `paper_polished.md` with a metadata appendix (timestamps, model info, etc.)
+**Sub-phase sequence** (inside `WriteStage._execute()`):
 
-**Key differences from Write**:
+1. **Writer/Reviewer loop** — standard `TeamStage` iteration (via `super()`), producing `paper.md`.
+2. **`phase='polish'`** — single LLM call with `POLISH_SYSTEM` prompt. Uses `polish_model` (from `MAARS_POLISH_MODEL` → falls back to `write_model` → `google_model`). Reads `paper.md`, emits polished content.
+3. **`phase='metadata'`** — deterministic (no LLM). `build_metadata_appendix()` appends a metadata block (timestamps, model info, config, etc.).
+4. Saves `paper_polished.md` and emits the Write stage `done` signal.
 
-| | Write | Polish |
-|---|---|---|
-| Base class | `TeamStage` | `Stage` |
-| Agents | Writer + Reviewer (iterative) | Single polisher |
-| Iteration | Up to `max_delegations` rounds | Single pass |
-| Input | Task data via DB tools | `paper.md` |
-| Output | `paper.md` | `paper_polished.md` (+ metadata appendix) |
+**Contrast with the Writer/Reviewer loop**:
 
-Polish exists to handle formatting cleanup, consistency checks, and metadata injection that don't benefit from iterative review.
+| | Writer/Reviewer loop | Polish sub-phase | Metadata sub-phase |
+|---|---|---|---|
+| Trigger | Main TeamStage loop | After loop, `phase='polish'` | After polish, `phase='metadata'` |
+| LLM | Iterative, up to `max_delegations` | Single call | None (deterministic) |
+| Input | Task data via DB tools | `paper.md` | Polished content + session meta |
+| Output | `paper.md` | Polished body | Appended metadata block |
+| Final artifact | `paper.md` | (in-memory) | `paper_polished.md` |
+
+Polish exists to handle formatting cleanup, consistency checks, and metadata injection that don't benefit from iterative review. Because it lives inside Write, the frontend progress bar has **no separate "polish" node** — only `refine / calibrate / strategy / decompose / execute / evaluate / write`.
 
 ## 8. Code Locations
 
@@ -151,7 +153,7 @@ Polish exists to handle formatting cleanup, consistency checks, and metadata inj
 |---|---|
 | `backend/team/stage.py` | TeamStage base class + IterationState |
 | `backend/team/refine.py` | RefineStage configuration |
-| `backend/team/write.py` | WriteStage configuration |
-| `backend/team/polish.py` | PolishStage (inherits Stage, single pass) |
-| `backend/team/prompts_en.py` | EN prompts + `_REVIEWER_OUTPUT_FORMAT` |
+| `backend/team/write.py` | WriteStage: Writer + Reviewer loop + overridden `_execute()` that runs polish + metadata sub-phases |
+| `backend/team/polish.py` | Utility module: `build_polish_input`, `build_metadata_appendix` (NOT a Stage subclass) |
+| `backend/team/prompts_en.py` | EN prompts + `_REVIEWER_OUTPUT_FORMAT` + `POLISH_SYSTEM` |
 | `backend/team/prompts_zh.py` | ZH prompts |

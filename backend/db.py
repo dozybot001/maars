@@ -366,7 +366,6 @@ class ResearchDB:
             "refine": ("proposals", "critiques"),
             "research": ("tasks", "evaluations", "strategy", "artifacts", "reproduce"),
             "write": ("drafts", "reviews"),
-            "polish": (),
         }
         stage_files = {
             "refine": ("refined_idea.md",),
@@ -374,8 +373,7 @@ class ResearchDB:
                 "calibration.md", "plan_tree.json", "plan_list.json",
                 "results_summary.json", "results_summary.md", "execution_log.jsonl",
             ),
-            "write": ("paper.md",),
-            "polish": ("paper_polished.md",),
+            "write": ("paper.md", "paper_polished.md"),
         }
         for dirname in stage_dirs.get(stage_name, ()):
             path = self._root / dirname

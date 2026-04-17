@@ -6,8 +6,7 @@
  *   - Research: documents (calibration/strategy/evaluation), score
  *   - Decompose: tree
  *   - Tasks: execution list
- *   - Write: paper
- *   - Polish: paper_polished
+ *   - Write: paper (draft) + paper_polished (final)
  */
 import { on } from './events.js';
 import { fetchPlanTree, fetchPlanList, fetchDocument, fetchMeta, fetchTaskOutput, listDocuments } from './api.js';
@@ -23,8 +22,7 @@ let refineSection, refineProposals, refineCritiques, refineFinal;
 let researchSection, researchCalibration, researchStrategies, researchEvaluations, scoreContainer;
 let treeSection, treeContainer;
 let taskSection, execContainer;
-let writeSection, writeDrafts, writeReviews, writeFinal;
-let polishSection, polishFinal;
+let writeSection, writeDrafts, writeReviews, writeFinal, writePolished;
 
 export function initProcessViewer() {
   processBody = document.getElementById('process-body');
@@ -63,23 +61,19 @@ export function initProcessViewer() {
   execContainer.id = 'exec-output';
   taskSection = stageSection('Tasks', [execContainer]);
 
-  // Write section
+  // Write section (includes polish as final sub-row)
   writeDrafts = el('div', 'po-docs-row');
   writeReviews = el('div', 'po-docs-row');
   writeFinal = el('div', 'po-docs-row');
+  writePolished = el('div', 'po-docs-row');
   writeSection = stageSection('Write', [
     subRow('Drafts', writeDrafts),
     subRow('Reviews', writeReviews),
-    subRow('Final', writeFinal),
+    subRow('Draft', writeFinal),
+    subRow('Polished', writePolished),
   ]);
 
-  // Polish section
-  polishFinal = el('div', 'po-docs-row');
-  polishSection = stageSection('Polish', [
-    subRow('Final', polishFinal),
-  ]);
-
-  for (const s of [refineSection, researchSection, treeSection, taskSection, writeSection, polishSection]) {
+  for (const s of [refineSection, researchSection, treeSection, taskSection, writeSection]) {
     processBody.appendChild(s);
   }
 
@@ -172,23 +166,24 @@ async function handleDoneSignal(stage, phase, taskId) {
       await loadDocCards('drafts', writeDrafts);
     } else if (phase === 'review') {
       await loadDocCards('reviews', writeReviews);
-    } else if (!phase) {
-      const doc = await fetchDocument('paper');
-      if (doc && doc.content) {
-        documentCache['paper'] = doc.content;
-        ensureDocCard('paper', writeFinal);
-      }
-    }
-    return;
-  }
-
-  // --- Polish stage ---
-  if (stage === 'polish') {
-    if (!phase) {
+    } else if (phase === 'polish' || phase === 'metadata') {
+      // Polish is a sub-phase of Write; update when it finishes
       const doc = await fetchDocument('paper_polished');
       if (doc && doc.content) {
         documentCache['paper_polished'] = doc.content;
-        ensureDocCard('paper_polished', polishFinal);
+        ensureDocCard('paper_polished', writePolished);
+      }
+    } else if (!phase) {
+      // Write stage done — load both paper and paper_polished
+      const draft = await fetchDocument('paper');
+      if (draft && draft.content) {
+        documentCache['paper'] = draft.content;
+        ensureDocCard('paper', writeFinal);
+      }
+      const polished = await fetchDocument('paper_polished');
+      if (polished && polished.content) {
+        documentCache['paper_polished'] = polished.content;
+        ensureDocCard('paper_polished', writePolished);
       }
     }
     return;
