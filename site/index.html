@@ -173,8 +173,8 @@
 
   <!-- mini flow -->
   <div class="glass rounded-2xl p-6 md:p-8">
-    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-5 font-mono" data-i18n="hero.loop_label">/ the four-stage loop</div>
-    <div class="grid grid-cols-4 gap-2 md:gap-6 items-center">
+    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-5 font-mono" data-i18n="hero.loop_label">/ the three-stage loop</div>
+    <div class="grid grid-cols-3 gap-2 md:gap-6 items-center">
       <div class="text-center">
         <div class="font-mono text-xs text-violet-300 mb-1">01</div>
         <div class="font-semibold" data-i18n="stage.refine">Refine</div>
@@ -188,12 +188,7 @@
       <div class="text-center">
         <div class="font-mono text-xs text-pink-300 mb-1">03</div>
         <div class="font-semibold" data-i18n="stage.write">Write</div>
-        <div class="text-xs text-slate-500 mt-1" data-i18n="hero.write_agents">Writer ↔ Reviewer</div>
-      </div>
-      <div class="text-center">
-        <div class="font-mono text-xs text-amber-300 mb-1">04</div>
-        <div class="font-semibold" data-i18n="stage.polish">Polish</div>
-        <div class="text-xs text-slate-500 mt-1" data-i18n="hero.polish_agents">LLM + Metadata</div>
+        <div class="text-xs text-slate-500 mt-1" data-i18n="hero.write_agents">Writer ↔ Reviewer → Polish</div>
       </div>
     </div>
   </div>
@@ -221,7 +216,7 @@
     </div>
     <div class="grid grid-cols-2 gap-4">
       <div class="glass rounded-xl p-5">
-        <div class="text-3xl font-bold gradient-text">4</div>
+        <div class="text-3xl font-bold gradient-text">3</div>
         <div class="text-sm text-slate-400 mt-1" data-i18n="gap.stat1">autonomous stages</div>
       </div>
       <div class="glass rounded-xl p-5">
@@ -244,7 +239,7 @@
 <section id="pipeline" class="max-w-6xl mx-auto px-6 py-24 border-t border-white/5">
   <div class="mb-14">
     <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono" data-i18n="pipe.label">/ pipeline</div>
-    <h2 class="text-3xl md:text-5xl font-bold tracking-tight" data-i18n="pipe.title">Four stages.<br/><span class="gradient-text">One coherent loop.</span></h2>
+    <h2 class="text-3xl md:text-5xl font-bold tracking-tight" data-i18n="pipe.title">Three stages.<br/><span class="gradient-text">One coherent loop.</span></h2>
     <p class="text-slate-400 mt-4 max-w-2xl" data-i18n="pipe.sub">Each stage has a stable I/O boundary: a runtime orchestrates control flow and persistence, while agents do the open-ended work.</p>
   </div>
 
@@ -276,29 +271,16 @@
       </div>
     </div>
 
-    <!-- Write -->
-    <div class="stage-card stage-accent-write relative rounded-2xl p-7 glass card-hover">
+    <!-- Write (includes Polish sub-step) -->
+    <div class="stage-card stage-accent-write relative rounded-2xl p-7 glass card-hover md:col-span-2">
       <div class="flex items-center justify-between mb-5">
         <div class="font-mono text-xs text-slate-500"><span data-i18n="pipe.stage">stage</span> 03</div>
         <div class="stage-badge font-bold tracking-tight text-xl" data-i18n="stage.write">Write</div>
       </div>
-      <p class="text-slate-300 leading-relaxed mb-5" data-i18n="pipe.write_body"><b>Writer</b> reads all research outputs and drafts a complete paper. <b>Reviewer</b> critiques and drives revisions — same IterationState pattern as Refine.</p>
+      <p class="text-slate-300 leading-relaxed mb-5" data-i18n="pipe.write_body"><b>Writer</b> reads all research outputs and drafts a complete paper. <b>Reviewer</b> critiques and drives revisions — same IterationState pattern as Refine. A final <b>Polish</b> sub-step runs a single-pass LLM refinement and appends a deterministic metadata appendix (tokens, timings, scores).</p>
       <div class="text-xs font-mono text-slate-500 space-y-1.5">
         <div><span class="text-slate-400" data-i18n="pipe.in">in</span>  &nbsp;→&nbsp; <span class="kbd">artifacts/</span> · <span class="kbd">refined_idea.md</span></div>
-        <div><span class="text-slate-400" data-i18n="pipe.out">out</span> →&nbsp; <span class="kbd">paper.md</span></div>
-      </div>
-    </div>
-
-    <!-- Polish -->
-    <div class="stage-card stage-accent-polish relative rounded-2xl p-7 glass card-hover">
-      <div class="flex items-center justify-between mb-5">
-        <div class="font-mono text-xs text-slate-500"><span data-i18n="pipe.stage">stage</span> 04</div>
-        <div class="stage-badge font-bold tracking-tight text-xl" data-i18n="stage.polish">Polish</div>
-      </div>
-      <p class="text-slate-300 leading-relaxed mb-5" data-i18n="pipe.polish_body">A single-pass LLM refinement for prose quality, plus a deterministic metadata appendix (tokens, timings, scores). Ready to read.</p>
-      <div class="text-xs font-mono text-slate-500 space-y-1.5">
-        <div><span class="text-slate-400" data-i18n="pipe.in">in</span>  &nbsp;→&nbsp; <span class="kbd">paper.md</span></div>
-        <div><span class="text-slate-400" data-i18n="pipe.out">out</span> →&nbsp; <span class="kbd">paper_polished.md</span></div>
+        <div><span class="text-slate-400" data-i18n="pipe.out">out</span> →&nbsp; <span class="kbd">paper.md</span> → <span class="kbd">paper_polished.md</span></div>
       </div>
     </div>
   </div>
@@ -348,7 +330,7 @@
       <div class="font-mono text-xs text-slate-500 w-8">L3</div>
       <div class="flex-1">
         <div class="font-semibold text-slate-100" data-i18n="arch.l3_t">Stage layer</div>
-        <div class="text-sm text-slate-400" data-i18n="arch.l3_b"><span class="font-mono text-xs text-slate-300">Stage</span> base → <span class="font-mono text-xs text-slate-300">ResearchStage</span> · <span class="font-mono text-xs text-slate-300">TeamStage</span> → Refine / Write · <span class="font-mono text-xs text-slate-300">PolishStage</span></div>
+        <div class="text-sm text-slate-400" data-i18n="arch.l3_b"><span class="font-mono text-xs text-slate-300">Stage</span> base → <span class="font-mono text-xs text-slate-300">ResearchStage</span> · <span class="font-mono text-xs text-slate-300">TeamStage</span> → Refine / Write (Polish sub-step)</div>
       </div>
       <span class="chip" data-i18n="arch.l3_chip">stable I/O</span>
     </div>
@@ -460,12 +442,12 @@
       </div>
       <div class="flex gap-3">
         <div class="glass rounded-lg px-4 py-2">
-          <div class="text-[10px] uppercase tracking-wider text-slate-500" data-i18n="sc.tokens">tokens</div>
-          <div class="font-mono text-sm text-slate-200">347k</div>
+          <div class="text-[10px] uppercase tracking-wider text-slate-500" data-i18n="sc.time">time</div>
+          <div class="font-mono text-sm text-slate-200">11 min</div>
         </div>
         <div class="glass rounded-lg px-4 py-2">
-          <div class="text-[10px] uppercase tracking-wider text-slate-500" data-i18n="sc.score">score</div>
-          <div class="font-mono text-sm text-emerald-300">0.93</div>
+          <div class="text-[10px] uppercase tracking-wider text-slate-500" data-i18n="sc.tokens">tokens</div>
+          <div class="font-mono text-sm text-slate-200">347k</div>
         </div>
       </div>
     </div>
@@ -499,12 +481,12 @@
       </div>
       <div class="flex gap-3">
         <div class="glass rounded-lg px-4 py-2">
-          <div class="text-[10px] uppercase tracking-wider text-slate-500" data-i18n="sc.tokens">tokens</div>
-          <div class="font-mono text-sm text-slate-200">2.47M</div>
+          <div class="text-[10px] uppercase tracking-wider text-slate-500" data-i18n="sc.time">time</div>
+          <div class="font-mono text-sm text-slate-200">3 h</div>
         </div>
         <div class="glass rounded-lg px-4 py-2">
-          <div class="text-[10px] uppercase tracking-wider text-slate-500" data-i18n="sc.rounds">rounds</div>
-          <div class="font-mono text-sm text-slate-200">3</div>
+          <div class="text-[10px] uppercase tracking-wider text-slate-500" data-i18n="sc.tokens">tokens</div>
+          <div class="font-mono text-sm text-slate-200">2.47M</div>
         </div>
       </div>
     </div>
@@ -673,13 +655,12 @@ bash start.sh</code></pre>
       "hero.cta_github": "View on GitHub",
       "hero.cta_how": "How it works",
       "hero.cta_sample": "See a sample paper →",
-      "hero.loop_label": "/ the four-stage loop",
+      "hero.loop_label": "/ the three-stage loop",
       "hero.refine_agents": "Explorer ↔ Critic",
       "hero.research_agents": "Decompose · Execute · Evaluate",
-      "hero.write_agents": "Writer ↔ Reviewer",
-      "hero.polish_agents": "LLM + Metadata",
+      "hero.write_agents": "Writer ↔ Reviewer → Polish",
 
-      "stage.refine": "Refine", "stage.research": "Research", "stage.write": "Write", "stage.polish": "Polish",
+      "stage.refine": "Refine", "stage.research": "Research", "stage.write": "Write",
 
       "video.badge": "live run — Lorenz attractor",
 
@@ -692,14 +673,13 @@ bash start.sh</code></pre>
       "gap.stat4": "polished paper out",
 
       "pipe.label": "/ pipeline",
-      "pipe.title": "Four stages.<br/><span class=\"gradient-text\">One coherent loop.</span>",
+      "pipe.title": "Three stages.<br/><span class=\"gradient-text\">One coherent loop.</span>",
       "pipe.sub": "Each stage has a stable I/O boundary: a runtime orchestrates control flow and persistence, while agents do the open-ended work.",
       "pipe.stage": "stage",
       "pipe.in": "in", "pipe.out": "out",
       "pipe.refine_body": "<b>Explorer</b> drafts a proposal from the user's raw idea. <b>Critic</b> reviews it within a declared scope, surfacing gaps and ambiguities. They iterate until zero issues remain.",
       "pipe.research_body": "The core engine. A <b>strategy</b> decomposes the proposal into atomic tasks, which execute in <b>Docker sandboxes</b> with parallel scheduling. Outputs are verified, then evaluated — loops with strategy updates when gaps exist.",
-      "pipe.write_body": "<b>Writer</b> reads all research outputs and drafts a complete paper. <b>Reviewer</b> critiques and drives revisions — same IterationState pattern as Refine.",
-      "pipe.polish_body": "A single-pass LLM refinement for prose quality, plus a deterministic metadata appendix (tokens, timings, scores). Ready to read.",
+      "pipe.write_body": "<b>Writer</b> reads all research outputs and drafts a complete paper. <b>Reviewer</b> critiques and drives revisions — same IterationState pattern as Refine. A final <b>Polish</b> sub-step runs a single-pass LLM refinement and appends a deterministic metadata appendix (tokens, timings, scores).",
       "pipe.d1_title": "Runtime vs Agent",
       "pipe.d1_body": "<span class=\"font-mono text-xs text-violet-300\">if · for · while</span>, scheduling, retries, termination → <b>runtime</b>. Search, coding, reasoning → <b>agent</b>.",
       "pipe.d2_title": "IterationState pattern",
@@ -714,7 +694,7 @@ bash start.sh</code></pre>
       "arch.l4_t": "Orchestration layer",
       "arch.l4_b": "Sequences the four stages; manages lifecycle, session recovery, termination",
       "arch.l3_t": "Stage layer",
-      "arch.l3_b": "<span class=\"font-mono text-xs text-slate-300\">Stage</span> base → <span class=\"font-mono text-xs text-slate-300\">ResearchStage</span> · <span class=\"font-mono text-xs text-slate-300\">TeamStage</span> → Refine / Write · <span class=\"font-mono text-xs text-slate-300\">PolishStage</span>",
+      "arch.l3_b": "<span class=\"font-mono text-xs text-slate-300\">Stage</span> base → <span class=\"font-mono text-xs text-slate-300\">ResearchStage</span> · <span class=\"font-mono text-xs text-slate-300\">TeamStage</span> → Refine / Write (Polish sub-step)",
       "arch.l3_chip": "stable I/O",
       "arch.l2_t": "Execution layer",
       "arch.l2_b": "Multi-agent — all four stages; Agno framework · Gemini with native Google Search",
@@ -748,7 +728,7 @@ bash start.sh</code></pre>
       "sc.label": "/ showcase",
       "sc.title": "<span class=\"gradient-text\">Real runs.</span><br/>Real papers.",
       "sc.sub": "Two end-to-end runs from the repo's <span class=\"kbd\">showcase/</span> folder — each one producing code, figures, a polished paper, and a reproduce bundle.",
-      "sc.tokens": "tokens", "sc.score": "score", "sc.rounds": "rounds",
+      "sc.tokens": "tokens", "sc.time": "time",
 
       "sc.lo_label": "case · scientific visualization",
       "sc.lo_title": "Lorenz attractor — 4 figures that tell the chaos story",
@@ -823,13 +803,12 @@ bash start.sh</code></pre>
       "hero.cta_github": "查看 GitHub 仓库",
       "hero.cta_how": "工作原理",
       "hero.cta_sample": "查看示例论文 →",
-      "hero.loop_label": "/ 四阶段闭环",
+      "hero.loop_label": "/ 三阶段闭环",
       "hero.refine_agents": "Explorer ↔ Critic",
       "hero.research_agents": "分解 · 执行 · 评估",
-      "hero.write_agents": "Writer ↔ Reviewer",
-      "hero.polish_agents": "LLM + 元数据",
+      "hero.write_agents": "Writer ↔ Reviewer → Polish",
 
-      "stage.refine": "Refine", "stage.research": "Research", "stage.write": "Write", "stage.polish": "Polish",
+      "stage.refine": "Refine", "stage.research": "Research", "stage.write": "Write",
 
       "video.badge": "实况运行 — Lorenz 吸引子",
 
@@ -842,14 +821,13 @@ bash start.sh</code></pre>
       "gap.stat4": "篇精炼论文产出",
 
       "pipe.label": "/ 流水线",
-      "pipe.title": "四个阶段。<br/><span class=\"gradient-text\">一个连贯循环。</span>",
+      "pipe.title": "三个阶段。<br/><span class=\"gradient-text\">一个连贯循环。</span>",
       "pipe.sub": "每个阶段都有稳定的输入输出边界:运行时负责控制流与持久化,智能体负责开放式的工作。",
       "pipe.stage": "阶段",
       "pipe.in": "入", "pipe.out": "出",
       "pipe.refine_body": "<b>Explorer</b> 根据用户的原始想法起草研究提案,<b>Critic</b> 在既定范围内审查,发现缺口与歧义。两者迭代,直到问题归零。",
       "pipe.research_body": "核心引擎。<b>strategy</b> 将提案分解为原子任务,在 <b>Docker 沙箱</b>中并行调度执行。输出经验证后再评估——若存在关键缺口,则循环更新策略。",
-      "pipe.write_body": "<b>Writer</b> 通读所有研究输出,起草完整论文。<b>Reviewer</b> 点评并驱动修订——与 Refine 同样的 IterationState 模式。",
-      "pipe.polish_body": "对文本质量做一次性 LLM 润色,并附上确定性的元数据附录(token、耗时、分数)。至此可读。",
+      "pipe.write_body": "<b>Writer</b> 通读所有研究输出,起草完整论文。<b>Reviewer</b> 点评并驱动修订——与 Refine 同样的 IterationState 模式。最后的 <b>Polish</b> 子阶段做一次 LLM 润色,并附加确定性元数据附录(token、耗时、分数)。",
       "pipe.d1_title": "运行时 vs 智能体",
       "pipe.d1_body": "<span class=\"font-mono text-xs text-violet-300\">if · for · while</span>、调度、重试、终止 → <b>运行时</b>。搜索、编码、推理 → <b>智能体</b>。",
       "pipe.d2_title": "IterationState 模式",
@@ -864,7 +842,7 @@ bash start.sh</code></pre>
       "arch.l4_t": "编排层",
       "arch.l4_b": "顺序调度四阶段,管理生命周期、会话恢复与终止",
       "arch.l3_t": "阶段层",
-      "arch.l3_b": "<span class=\"font-mono text-xs text-slate-300\">Stage</span> 基类 → <span class=\"font-mono text-xs text-slate-300\">ResearchStage</span> · <span class=\"font-mono text-xs text-slate-300\">TeamStage</span> → Refine / Write · <span class=\"font-mono text-xs text-slate-300\">PolishStage</span>",
+      "arch.l3_b": "<span class=\"font-mono text-xs text-slate-300\">Stage</span> 基类 → <span class=\"font-mono text-xs text-slate-300\">ResearchStage</span> · <span class=\"font-mono text-xs text-slate-300\">TeamStage</span> → Refine / Write(Polish 子阶段)",
       "arch.l3_chip": "稳定接口",
       "arch.l2_t": "执行层",
       "arch.l2_b": "所有四阶段均为多智能体;Agno 框架 · Gemini 原生 Google 搜索",
@@ -898,7 +876,7 @@ bash start.sh</code></pre>
       "sc.label": "/ 案例",
       "sc.title": "<span class=\"gradient-text\">真实运行。</span><br/>真实论文。",
       "sc.sub": "仓库 <span class=\"kbd\">showcase/</span> 目录下的两次端到端运行——每次都产出代码、图表、一篇润色论文和一份复现包。",
-      "sc.tokens": "token", "sc.score": "分数", "sc.rounds": "轮数",
+      "sc.tokens": "token", "sc.time": "耗时",
 
       "sc.lo_label": "案例 · 科学可视化",
       "sc.lo_title": "Lorenz 吸引子 — 用 4 张图讲清混沌",
