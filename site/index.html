@@ -74,6 +74,14 @@
   }
   .io-row { line-height: 2.1; }
   .io-row > div { word-break: break-word; overflow-wrap: anywhere; }
+
+  /* matplotlib charts on dark bg — tone down the white canvas */
+  .chart-img {
+    background:#e5e7eb;
+    filter: brightness(.78) contrast(1.04) saturate(.78);
+    transition: filter .3s ease;
+  }
+  figure:hover .chart-img { filter: brightness(.92) contrast(1.02) saturate(.9); }
   .card-hover { transition: transform .25s ease, border-color .25s ease; }
   .card-hover:hover { transform: translateY(-2px); }
   pre, code { font-family:'JetBrains Mono',monospace; }
@@ -459,19 +467,19 @@
     </div>
     <div class="grid md:grid-cols-2 gap-4">
       <figure class="glass rounded-xl p-3 card-hover">
-        <img src="assets/lorenz_3d.png" alt="Lorenz 3D trajectory" class="rounded-lg w-full bg-white" loading="lazy" />
+        <img src="assets/lorenz_3d.png" alt="Lorenz 3D trajectory" class="rounded-lg w-full chart-img" loading="lazy" />
         <figcaption class="text-xs text-slate-500 mt-2 font-mono" data-i18n="sc.lo_fig1">fig.1 &nbsp;3D phase-space trajectory (σ=10, ρ=28, β=8/3)</figcaption>
       </figure>
       <figure class="glass rounded-xl p-3 card-hover">
-        <img src="assets/lorenz_bifurcation.png" alt="Bifurcation diagram" class="rounded-lg w-full bg-white" loading="lazy" />
+        <img src="assets/lorenz_bifurcation.png" alt="Bifurcation diagram" class="rounded-lg w-full chart-img" loading="lazy" />
         <figcaption class="text-xs text-slate-500 mt-2 font-mono" data-i18n="sc.lo_fig2">fig.2 &nbsp;bifurcation over ρ ∈ [0, 50]</figcaption>
       </figure>
       <figure class="glass rounded-xl p-3 card-hover">
-        <img src="assets/lorenz_divergence.png" alt="Divergence plot" class="rounded-lg w-full bg-white" loading="lazy" />
+        <img src="assets/lorenz_divergence.png" alt="Divergence plot" class="rounded-lg w-full chart-img" loading="lazy" />
         <figcaption class="text-xs text-slate-500 mt-2 font-mono" data-i18n="sc.lo_fig3">fig.3 &nbsp;trajectory divergence → max Lyapunov exponent</figcaption>
       </figure>
       <figure class="glass rounded-xl p-3 card-hover">
-        <img src="assets/lorenz_heatmap.png" alt="Lyapunov heatmap" class="rounded-lg w-full bg-white" loading="lazy" />
+        <img src="assets/lorenz_heatmap.png" alt="Lyapunov heatmap" class="rounded-lg w-full chart-img" loading="lazy" />
         <figcaption class="text-xs text-slate-500 mt-2 font-mono" data-i18n="sc.lo_fig4">fig.4 &nbsp;(σ,ρ) stability heatmap, 30×30 grid</figcaption>
       </figure>
     </div>
@@ -498,19 +506,19 @@
     </div>
     <div class="grid md:grid-cols-2 gap-4">
       <figure class="glass rounded-xl p-3 card-hover">
-        <img src="assets/cifar_decay.png" alt="Watermark decay curve" class="rounded-lg w-full bg-white" loading="lazy" />
+        <img src="assets/cifar_decay.png" alt="Watermark decay curve" class="rounded-lg w-full chart-img" loading="lazy" />
         <figcaption class="text-xs text-slate-500 mt-2 font-mono" data-i18n="sc.ci_fig1">fig.1 &nbsp;watermark persistence across fine-tuning</figcaption>
       </figure>
       <figure class="glass rounded-xl p-3 card-hover">
-        <img src="assets/cifar_final.png" alt="Final comparison" class="rounded-lg w-full bg-white" loading="lazy" />
+        <img src="assets/cifar_final.png" alt="Final comparison" class="rounded-lg w-full chart-img" loading="lazy" />
         <figcaption class="text-xs text-slate-500 mt-2 font-mono" data-i18n="sc.ci_fig2">fig.2 &nbsp;Head-only vs Full FT — accuracy vs watermark</figcaption>
       </figure>
       <figure class="glass rounded-xl p-3 card-hover">
-        <img src="assets/cifar_anchor.png" alt="Anchor class metrics" class="rounded-lg w-full bg-white" loading="lazy" />
+        <img src="assets/cifar_anchor.png" alt="Anchor class metrics" class="rounded-lg w-full chart-img" loading="lazy" />
         <figcaption class="text-xs text-slate-500 mt-2 font-mono" data-i18n="sc.ci_fig3">fig.3 &nbsp;anchor-class metrics on CIFAR-100</figcaption>
       </figure>
       <figure class="glass rounded-xl p-3 card-hover">
-        <img src="assets/cifar_pred.png" alt="Prediction distribution" class="rounded-lg w-full bg-white" loading="lazy" />
+        <img src="assets/cifar_pred.png" alt="Prediction distribution" class="rounded-lg w-full chart-img" loading="lazy" />
         <figcaption class="text-xs text-slate-500 mt-2 font-mono" data-i18n="sc.ci_fig4">fig.4 &nbsp;trigger-input prediction distribution</figcaption>
       </figure>
     </div>
