@@ -34,7 +34,7 @@ class _FakeTeamStage(TeamStage):
 
 
 class TeamStageTests(unittest.IsolatedAsyncioTestCase):
-    async def test_final_round_still_runs_review_before_failing(self):
+    async def test_final_round_still_runs_review_before_returning_last_draft(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             db = ResearchDB(base_dir=tmpdir)
             db.create_session("team stage test")
@@ -50,16 +50,16 @@ class TeamStageTests(unittest.IsolatedAsyncioTestCase):
                 ],
             )
 
-            with self.assertRaisesRegex(RuntimeError, "without reviewer approval"):
-                await stage._execute()
+            result = await stage._execute()
 
             root = Path(tmpdir) / db.research_id
+            self.assertEqual(result, "draft round 2")
+            self.assertTrue((root / "drafts" / "round_0.md").exists())
             self.assertTrue((root / "drafts" / "round_1.md").exists())
-            self.assertTrue((root / "drafts" / "round_2.md").exists())
+            self.assertTrue((root / "reviews" / "round_0.md").exists())
+            self.assertTrue((root / "reviews" / "round_0.json").exists())
             self.assertTrue((root / "reviews" / "round_1.md").exists())
             self.assertTrue((root / "reviews" / "round_1.json").exists())
-            self.assertTrue((root / "reviews" / "round_2.md").exists())
-            self.assertTrue((root / "reviews" / "round_2.json").exists())
 
     async def test_reviewer_pass_allows_finalize(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -73,7 +73,7 @@ class TeamStageTests(unittest.IsolatedAsyncioTestCase):
                     "draft round 1",
                     json.dumps({"pass": False, "issues": [{"id": "i1", "problem": "fix one"}]}),
                     "draft round 2",
-                    json.dumps({"pass": True}),
+                    json.dumps({"issues": []}),
                 ],
             )
 

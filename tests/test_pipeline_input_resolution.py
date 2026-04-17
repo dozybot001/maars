@@ -19,8 +19,8 @@ class ResolveResearchInputTests(unittest.TestCase):
         self.assertEqual(_resolve_research_input(text), text)
 
     def test_reads_existing_relative_file(self):
-        resolved = _resolve_research_input("showcase/example-idea.md")
-        self.assertTrue(resolved.startswith("研究主题：合法迁移学习是否会削弱后门水印的所有权验证能力？"))
+        resolved = _resolve_research_input("showcase/example_idea.md")
+        self.assertTrue(resolved.startswith("Lorenz 吸引子可视化：4 张图讲清混沌"))
 
     def test_rejects_missing_path_like_input(self):
         with self.assertRaises(HTTPException) as ctx:
