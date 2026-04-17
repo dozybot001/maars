@@ -59,9 +59,9 @@ I'll scrub through to give you a sense of how the system works in real time. `·
 
 ---
 
-Full documentation is on the website — click a link below to open it. `·`
+Full documentation is on the website. `·`
 The Research doc walks through every phase — Calibrate through Evaluate — with code references. `·`
-*[点击字幕条里的链接打开对应文档]* `· ↓ scroll → Quickstart`
+*[press **O** for Research doc, **1** for Architecture, **2** for Refine & Write]* `· ↓ scroll → Quickstart`
 
 ---
 

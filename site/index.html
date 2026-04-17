@@ -1148,14 +1148,11 @@ bash start.sh</code></pre>
     },
     {
       scrollTo: '#docs',
-      links: [
-        { label: 'Architecture',    url: 'docs/architecture.html' },
-        { label: 'Refine & Write',  url: 'docs/refine-write.html' },
-        { label: 'Research',        url: 'docs/research.html'     },
-      ],
+      openUrl: 'docs/research.html',
       lines: [
-        'Full documentation is on the website — click a link below to open it.',
-        'The Research doc walks through every phase — Calibrate through Evaluate — with code references.',
+        'Full documentation is on the website.',
+        'The Research doc walks through every phase — Calibrate, Strategy, Decompose, Execute, Verify, Evaluate — with code references.',
+        '[ O — open Research doc  ·  1 — Architecture  ·  2 — Refine & Write ]',
       ],
     },
     {
@@ -1196,12 +1193,7 @@ bash start.sh</code></pre>
     color: '#475569', lineHeight: '1.4',
   });
 
-  const linksEl = document.createElement('div');
-  Object.assign(linksEl.style, {
-    marginTop: '8px', display: 'none', gap: '16px', flexWrap: 'wrap',
-  });
-
-  overlay.append(statusEl, currentEl, nextEl, linksEl);
+  overlay.append(statusEl, currentEl, nextEl);
   document.body.appendChild(overlay);
 
   // ── helpers ───────────────────────────────────────────────────────────────
@@ -1228,20 +1220,6 @@ bash start.sh</code></pre>
     currentEl.textContent = s.lines[ln];
     const peek = s.lines[ln + 1] ?? SEGMENTS[seg + 1]?.lines[0];
     nextEl.textContent = peek ? `↓  ${peek}` : '';
-
-    if (s.links && s.links.length) {
-      linksEl.style.display = 'flex';
-      linksEl.innerHTML = s.links.map(l =>
-        `<a href="${l.url}" target="_blank" rel="noopener"
-            style="font-family:JetBrains Mono,monospace;font-size:13px;color:#a5b4fc;
-                   text-decoration:underline;text-underline-offset:3px;cursor:pointer;
-                   padding:3px 10px;border:1px solid rgba(129,140,248,.3);border-radius:6px;"
-         >${l.label} →</a>`
-      ).join('');
-    } else {
-      linksEl.style.display = 'none';
-      linksEl.innerHTML = '';
-    }
   }
 
   function enterSegment(newSeg) {
