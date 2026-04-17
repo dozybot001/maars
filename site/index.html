@@ -266,7 +266,7 @@
   <div class="grid md:grid-cols-3 gap-5">
 
     <!-- Refine -->
-    <div class="stage-card stage-accent-refine relative rounded-2xl p-7 glass card-hover">
+    <div id="card-refine" class="stage-card stage-accent-refine relative rounded-2xl p-7 glass card-hover">
       <div class="flex items-center justify-between mb-5">
         <div class="font-mono text-xs text-slate-500"><span data-i18n="pipe.stage">stage</span> 01</div>
         <div class="stage-badge font-bold tracking-tight text-xl" data-i18n="stage.refine">Refine</div>
@@ -279,7 +279,7 @@
     </div>
 
     <!-- Research -->
-    <div class="stage-card stage-accent-research relative rounded-2xl p-7 glass card-hover">
+    <div id="card-research" class="stage-card stage-accent-research relative rounded-2xl p-7 glass card-hover">
       <div class="flex items-center justify-between mb-5">
         <div class="font-mono text-xs text-slate-500"><span data-i18n="pipe.stage">stage</span> 02</div>
         <div class="stage-badge font-bold tracking-tight text-xl" data-i18n="stage.research">Research</div>
@@ -292,7 +292,7 @@
     </div>
 
     <!-- Write (includes Polish sub-step) -->
-    <div class="stage-card stage-accent-write relative rounded-2xl p-7 glass card-hover">
+    <div id="card-write" class="stage-card stage-accent-write relative rounded-2xl p-7 glass card-hover">
       <div class="flex items-center justify-between mb-5">
         <div class="font-mono text-xs text-slate-500"><span data-i18n="pipe.stage">stage</span> 03</div>
         <div class="stage-badge font-bold tracking-tight text-xl" data-i18n="stage.write">Write</div>
@@ -457,7 +457,7 @@
   </div>
 
   <!-- Lorenz -->
-  <div class="mb-16">
+  <div id="showcase-lorenz" class="mb-16">
     <div class="flex flex-wrap items-end justify-between gap-4 mb-5">
       <div>
         <div class="text-xs text-slate-500 font-mono mb-1" data-i18n="sc.lo_label">case · scientific visualization</div>
@@ -496,7 +496,7 @@
   </div>
 
   <!-- CIFAR -->
-  <div>
+  <div id="showcase-cifar">
     <div class="flex flex-wrap items-end justify-between gap-4 mb-5">
       <div>
         <div class="text-xs text-slate-500 font-mono mb-1" data-i18n="sc.ci_label">case · deep learning empirical study</div>
@@ -538,7 +538,7 @@
 </section>
 
 <!-- ============ SCREENS ============ -->
-<section class="max-w-6xl mx-auto px-6 py-24 border-t border-white/5">
+<section id="screens" class="max-w-6xl mx-auto px-6 py-24 border-t border-white/5">
   <div class="mb-10">
     <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono" data-i18n="ui.label">/ interface</div>
     <h2 class="text-3xl md:text-5xl font-bold tracking-tight" data-i18n="ui.title">A window into the loop.</h2>
@@ -1066,146 +1066,204 @@ bash start.sh</code></pre>
 (function () {
   if (!new URLSearchParams(location.search).has('tp')) return;
 
+  // Highlight style for stage cards
+  const hlStyle = document.createElement('style');
+  hlStyle.textContent = '.tp-hl{outline:2px solid rgba(129,140,248,.8);box-shadow:0 0 28px rgba(129,140,248,.22);transition:outline .25s,box-shadow .25s;}';
+  document.head.appendChild(hlStyle);
+
+  const VIDEO_URL = 'https://github.com/user-attachments/assets/f0d8ef94-c98e-4666-8dec-85e1332dc2df';
+
+  // Each segment: scrollTo, highlight (card to ring), openUrl (O key), lines
   const SEGMENTS = [
     {
       scrollTo: '#top',
       lines: [
         'Welcome to MAARS — Multi-Agent Automated Research System.',
-        'The pitch is on the screen: bring a research idea, walk away with a paper.',
-        'Fully automated, end-to-end.',
+        'Bring a research idea, walk away with a paper. Fully automated, end-to-end.',
       ],
     },
     {
       scrollTo: '#pipeline',
       lines: [
-        'MAARS runs three stages.',
-        'In Refine, an Explorer agent surveys the literature and drafts a proposal; a Critic reviews it.',
-        'They loop until the critic finds nothing left to fix.',
-        'Write works the same way — Writer drafts a complete paper from the research outputs, Reviewer critiques, they iterate until zero issues remain.',
-        'A Polish sub-step then does one final LLM pass and appends a deterministic metadata appendix.',
+        'MAARS runs three stages, each with a clean input-output boundary.',
+        'The runtime handles control flow and persistence; agents do the open-ended work.',
       ],
     },
     {
-      scrollTo: null,
+      scrollTo: '#pipeline', highlight: '#card-refine',
       lines: [
-        'The middle stage — Research — is where the real work happens.',
-        "Calibrate runs once: one LLM call that looks at your dataset and sandbox capabilities and defines what an 'atomic task' looks like for this specific problem.",
-        'Then Strategy drafts a research plan and a scoring direction.',
-        'Decompose turns that plan into a dependency DAG — tasks split recursively until each leaf is atomic.',
-        "Sibling judges run in parallel, so one bad branch doesn't stall the whole tree.",
-        'Execute runs those tasks in parallel, respecting dependency order.',
-        'Key design decision: instead of spinning up a fresh container per task, MAARS keeps one persistent Docker container alive for the whole session, reusing it via exec_run.',
-        'That eliminates roughly 190 seconds of package-install overhead per task.',
-        'Every task then goes through Verify — three possible verdicts: pass, retry, or redecompose.',
-        'Redecompose splits a failed task into subtasks and passes prior partial outputs as context, so the system refines rather than restarts from scratch.',
-        'Finally, Evaluate looks at the full picture.',
-        "It's deliberately biased toward stopping — it only triggers another iteration when there's a critical gap in the results.",
+        'In Refine, Explorer surveys the literature and drafts a research proposal.',
+        'Critic reviews it within scope, surfaces gaps and ambiguities.',
+        'They iterate until zero issues remain — the IterationState pattern.',
       ],
     },
     {
-      scrollTo: '#showcase',
+      scrollTo: '#pipeline', highlight: '#card-research',
       lines: [
-        'The outputs are real.',
-        'Here MAARS worked on a CIFAR image classification problem — real training curves, real accuracy numbers, real generated figures.',
-        'Everything in the paper came from actual code execution inside the sandbox.',
+        'Research is the core engine.',
+        "Calibrate runs once — one LLM call that defines what an 'atomic task' looks like for this specific problem.",
+        'Strategy then drafts a research plan and a scoring direction.',
+        'Decompose turns that into a dependency DAG. Tasks split recursively; sibling judges run in parallel.',
+        'Execute runs tasks in topological batches. Key design: one persistent Docker container stays alive for the whole session — no per-task startup overhead.',
+        'Verify returns one of three verdicts: pass, retry, or redecompose.',
+        'Redecompose splits a failed task and passes prior partial outputs to the new subtasks — the system refines rather than restarts.',
+        'Finally, Evaluate. Biased toward stopping — it only triggers another round when there is a critical gap.',
+      ],
+    },
+    {
+      scrollTo: '#pipeline', highlight: '#card-write',
+      lines: [
+        'Write follows the same IterationState pattern: Writer drafts, Reviewer critiques, loop until zero issues.',
+        'A Polish sub-step does one final LLM pass and appends a deterministic metadata appendix — tokens, timings, scores.',
+      ],
+    },
+    {
+      scrollTo: '#architecture',
+      lines: [
+        'Under the hood: five layers — from the FastAPI entry point down to Docker sandboxes and a file-based session DB.',
+        'Every run is just a directory of files. No hidden state — you can cd into any session and read exactly what each agent said.',
+      ],
+    },
+    {
+      scrollTo: '#showcase-lorenz',
+      lines: [
+        "Let's look at real outputs. A one-line prompt: solve the Lorenz system and produce four chaos figures.",
+        'Out came derivations, code, and four publication-quality plots. Eleven minutes, 347k tokens.',
+      ],
+    },
+    {
+      scrollTo: '#showcase-cifar',
+      lines: [
+        'A harder run: does legitimate fine-tuning erase a backdoor watermark in a neural network?',
+        'MAARS designed the experiments, poisoned a CIFAR-10 source model, ran two fine-tuning strategies on CIFAR-100, and delivered the comparative figures that went into the paper.',
+        'Three hours. 2.47 million tokens.',
+      ],
+    },
+    {
+      scrollTo: '#screens', openUrl: VIDEO_URL,
+      lines: [
+        "Here is a live screen recording of a complete MAARS run.",
+        "I'll scrub through to give you a sense of how the system works in real time.",
+        '[ O — open recording ]',
       ],
     },
     {
       scrollTo: '#docs',
+      openUrl: 'docs/research.html',
       lines: [
-        'If you want to go deeper, the website has full documentation covering the five-layer architecture, the agent loop design in Refine and Write, and the Research stage internals — Calibrate through Evaluate — in detail.',
+        'Full documentation is on the website.',
+        'The Research doc walks through every phase — Calibrate, Strategy, Decompose, Execute, Verify, Evaluate — with code references.',
+        '[ O — open Research doc  ·  1 — Architecture  ·  2 — Refine & Write ]',
       ],
     },
     {
       scrollTo: '#quickstart',
       lines: [
-        'Getting started is one command: bash start.sh.',
-        'It sets up the environment, builds the Docker image, and opens the server at localhost:8000.',
-        'MAARS is open source on GitHub at dozybot001/MAARS. Thanks for watching.',
+        'One command to get started: bash start.sh.',
+        'It sets up the environment, builds the Docker image, and serves on localhost:8000.',
+        'MAARS is open source at dozybot001/MAARS. Thanks for watching.',
       ],
     },
   ];
 
   let seg = 0, ln = 0;
 
+  // ── overlay ──────────────────────────────────────────────────────────────
   const overlay = document.createElement('div');
   Object.assign(overlay.style, {
     position: 'fixed', bottom: '0', left: '0', right: '0', zIndex: '9999',
-    background: 'rgba(0,0,0,0.88)', borderTop: '1px solid rgba(255,255,255,0.08)',
-    padding: '14px 36px 18px', boxSizing: 'border-box',
+    background: 'rgba(0,0,0,0.9)', borderTop: '1px solid rgba(255,255,255,0.07)',
+    padding: '12px 36px 16px', boxSizing: 'border-box',
   });
 
   const statusEl = document.createElement('div');
   Object.assign(statusEl.style, {
-    fontFamily: 'JetBrains Mono,monospace', fontSize: '11px', color: '#475569', marginBottom: '8px',
+    fontFamily: 'JetBrains Mono,monospace', fontSize: '11px',
+    color: '#475569', marginBottom: '7px',
   });
 
   const currentEl = document.createElement('div');
   Object.assign(currentEl.style, {
-    fontFamily: 'Inter,sans-serif', fontSize: '19px', lineHeight: '1.55',
-    color: '#f1f5f9', marginBottom: '6px',
+    fontFamily: 'Inter,sans-serif', fontSize: '19px',
+    lineHeight: '1.55', color: '#f1f5f9', marginBottom: '5px',
   });
 
   const nextEl = document.createElement('div');
   Object.assign(nextEl.style, {
-    fontFamily: 'Inter,sans-serif', fontSize: '13px', color: '#475569', lineHeight: '1.4',
+    fontFamily: 'Inter,sans-serif', fontSize: '13px',
+    color: '#475569', lineHeight: '1.4',
   });
 
   overlay.append(statusEl, currentEl, nextEl);
   document.body.appendChild(overlay);
 
-  function scrollTo(id) {
+  // ── helpers ───────────────────────────────────────────────────────────────
+  function smoothTo(id) {
     if (!id) return;
     const el = document.querySelector(id);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  function applyHighlight(id) {
+    document.querySelectorAll('.tp-hl').forEach(el => el.classList.remove('tp-hl'));
+    if (id) { const el = document.querySelector(id); if (el) el.classList.add('tp-hl'); }
+  }
+
   function totalLines() { return SEGMENTS.reduce((a, s) => a + s.lines.length, 0); }
-  function doneLines() { return SEGMENTS.slice(0, seg).reduce((a, s) => a + s.lines.length, 0) + ln + 1; }
+  function doneLines()  { return SEGMENTS.slice(0, seg).reduce((a, s) => a + s.lines.length, 0) + ln + 1; }
 
   function render() {
     const s = SEGMENTS[seg];
+    const hint = s.openUrl ? '  ·  O open' : '';
     statusEl.textContent =
-      `seg ${seg + 1}/${SEGMENTS.length}  ·  line ${doneLines()}/${totalLines()}  ·  Space next  ·  ← prev  ·  H hide`;
+      `seg ${seg + 1}/${SEGMENTS.length}  ·  line ${doneLines()}/${totalLines()}` +
+      `  ·  Space next  ·  ← prev  ·  H hide${hint}`;
     currentEl.textContent = s.lines[ln];
     const peek = s.lines[ln + 1] ?? SEGMENTS[seg + 1]?.lines[0];
     nextEl.textContent = peek ? `↓  ${peek}` : '';
   }
 
-  function advance() {
+  function enterSegment(newSeg) {
+    seg = newSeg; ln = 0;
     const s = SEGMENTS[seg];
-    if (ln < s.lines.length - 1) {
-      ln++;
-    } else if (seg < SEGMENTS.length - 1) {
-      seg++;
-      ln = 0;
-      scrollTo(SEGMENTS[seg].scrollTo);
-    }
+    smoothTo(s.scrollTo);
+    applyHighlight(s.highlight ?? null);
     render();
   }
 
+  function advance() {
+    const s = SEGMENTS[seg];
+    if (ln < s.lines.length - 1) { ln++; render(); }
+    else if (seg < SEGMENTS.length - 1) { enterSegment(seg + 1); }
+  }
+
   function retreat() {
-    if (ln > 0) {
-      ln--;
-    } else if (seg > 0) {
-      seg--;
-      ln = SEGMENTS[seg].lines.length - 1;
+    if (ln > 0) { ln--; render(); }
+    else if (seg > 0) {
+      seg--; ln = SEGMENTS[seg].lines.length - 1;
+      applyHighlight(SEGMENTS[seg].highlight ?? null);
+      render();
     }
-    render();
   }
 
   let hidden = false;
   document.addEventListener('keydown', e => {
-    if (e.key === ' ')          { e.preventDefault(); advance(); }
+    if (e.key === ' ')              { e.preventDefault(); advance(); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); retreat(); }
     else if (e.key === 'h' || e.key === 'H') {
       hidden = !hidden;
       overlay.style.display = hidden ? 'none' : 'block';
     }
+    else if (e.key === 'o' || e.key === 'O') {
+      const url = SEGMENTS[seg].openUrl;
+      if (url) window.open(url, '_blank');
+    }
+    else if (e.key === '1') { window.open('docs/architecture.html', '_blank'); }
+    else if (e.key === '2') { window.open('docs/refine-write.html', '_blank'); }
+    else if (e.key === '3') { window.open('docs/research.html',     '_blank'); }
   });
 
-  scrollTo(SEGMENTS[0].scrollTo);
-  render();
+  enterSegment(0);
 })();
 </script>
 </body>
