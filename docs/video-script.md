@@ -49,7 +49,7 @@ Out came derivations, code, and four publication-quality plots. Eleven minutes, 
 
 A harder run: does legitimate fine-tuning erase a backdoor watermark in a neural network? `·`
 MAARS designed the experiments, poisoned a CIFAR-10 source model, ran two fine-tuning strategies on CIFAR-100, and delivered the comparative figures that went into the paper. `·`
-Three hours. 2.47 million tokens. `· ↓ scroll → Screens`
+Three hours. 2.47 million tokens. `· ↓ 停留原地`
 
 ---
 
