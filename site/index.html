@@ -12,14 +12,14 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
   tailwind.config = {
     theme: {
       extend: {
         fontFamily: {
-          sans: ['Inter','ui-sans-serif','system-ui'],
+          sans: ['Inter','Noto Sans SC','ui-sans-serif','system-ui'],
           mono: ['JetBrains Mono','ui-monospace','SFMono-Regular'],
         },
       }
@@ -28,6 +28,7 @@
 </script>
 <style>
   html { scroll-behavior: smooth; }
+  html[lang="zh"] body { font-family: 'Inter','Noto Sans SC','ui-sans-serif','system-ui'; }
   body {
     background:
       radial-gradient(1200px 600px at 85% -10%, rgba(168,85,247,.25), transparent 60%),
@@ -66,15 +67,6 @@
     background: linear-gradient(135deg, var(--from), var(--to));
     -webkit-background-clip:text; background-clip:text; color:transparent;
   }
-  .flow-arrow {
-    width:100%; height:2px;
-    background: linear-gradient(90deg, transparent, rgba(148,163,184,.3), transparent);
-    position:relative;
-  }
-  .flow-arrow::after {
-    content:"▶"; position:absolute; right:-2px; top:50%; transform: translateY(-50%);
-    font-size:.7rem; color:rgba(148,163,184,.55);
-  }
   .kbd {
     font-family:'JetBrains Mono',monospace; font-size:.78rem;
     background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12);
@@ -82,8 +74,7 @@
   }
   .card-hover { transition: transform .25s ease, border-color .25s ease; }
   .card-hover:hover { transform: translateY(-2px); }
-  pre { font-family:'JetBrains Mono',monospace; }
-  code { font-family:'JetBrains Mono',monospace; }
+  pre, code { font-family:'JetBrains Mono',monospace; }
   .nav-link { position:relative; }
   .nav-link::after {
     content:""; position:absolute; left:0; right:100%; bottom:-4px; height:1px;
@@ -108,6 +99,22 @@
   @keyframes shine { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
   .fade-in { opacity:0; transform: translateY(12px); transition: opacity .6s ease, transform .6s ease; }
   .fade-in.visible { opacity:1; transform:none; }
+
+  /* language toggle pill */
+  .lang-toggle {
+    display:inline-flex; align-items:center; gap:4px;
+    padding:4px; border-radius:999px;
+    background: rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.10);
+    font-family:'JetBrains Mono',monospace; font-size:.72rem; font-weight:600;
+  }
+  .lang-toggle button {
+    padding:3px 10px; border-radius:999px; color:#94a3b8;
+    transition: color .15s ease, background .15s ease;
+  }
+  .lang-toggle button.active {
+    color:#f8fafc; background: linear-gradient(135deg,#7c3aed,#06b6d4);
+  }
+  .lang-toggle button:not(.active):hover { color:#e2e8f0; }
 </style>
 </head>
 
@@ -123,17 +130,23 @@
       <span class="hidden sm:inline text-xs text-slate-500 font-mono">v13.4</span>
     </a>
     <div class="hidden md:flex items-center gap-7 text-sm text-slate-300">
-      <a class="nav-link" href="#pipeline">Pipeline</a>
-      <a class="nav-link" href="#architecture">Architecture</a>
-      <a class="nav-link" href="#stack">Stack</a>
-      <a class="nav-link" href="#showcase">Showcase</a>
-      <a class="nav-link" href="#quickstart">Quick&nbsp;Start</a>
+      <a class="nav-link" href="#pipeline" data-i18n="nav.pipeline">Pipeline</a>
+      <a class="nav-link" href="#architecture" data-i18n="nav.architecture">Architecture</a>
+      <a class="nav-link" href="#stack" data-i18n="nav.stack">Stack</a>
+      <a class="nav-link" href="#showcase" data-i18n="nav.showcase">Showcase</a>
+      <a class="nav-link" href="#quickstart" data-i18n="nav.quickstart">Quick&nbsp;Start</a>
     </div>
-    <a href="https://github.com/dozybot001/MAARS" target="_blank" rel="noopener"
-       class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm bg-white/5 border border-white/10 hover:bg-white/10 transition">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5A11.5 11.5 0 0 0 .5 12 11.5 11.5 0 0 0 8.4 22.9c.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.2-1.7-1.2-1.7-1-.7.1-.7.1-.7 1.1.1 1.7 1.2 1.7 1.2 1 1.7 2.7 1.2 3.3.9.1-.7.4-1.2.7-1.5-2.5-.3-5.2-1.3-5.2-5.7 0-1.3.4-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2.9-.3 1.9-.4 2.9-.4s2 .1 2.9.4c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.9 1.2 3.1 0 4.4-2.7 5.4-5.2 5.7.4.3.7 1 .7 2v3c0 .3.2.7.8.6A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5z"/></svg>
-      GitHub
-    </a>
+    <div class="flex items-center gap-2">
+      <div class="lang-toggle" role="tablist" aria-label="Language">
+        <button type="button" data-lang-btn="en" class="active" aria-label="English">EN</button>
+        <button type="button" data-lang-btn="zh" aria-label="中文">中</button>
+      </div>
+      <a href="https://github.com/dozybot001/MAARS" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm bg-white/5 border border-white/10 hover:bg-white/10 transition">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5A11.5 11.5 0 0 0 .5 12 11.5 11.5 0 0 0 8.4 22.9c.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.2-1.7-1.2-1.7-1-.7.1-.7.1-.7 1.1.1 1.7 1.2 1.7 1.2 1 1.7 2.7 1.2 3.3.9.1-.7.4-1.2.7-1.5-2.5-.3-5.2-1.3-5.2-5.7 0-1.3.4-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2.9-.3 1.9-.4 2.9-.4s2 .1 2.9.4c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.9 1.2 3.1 0 4.4-2.7 5.4-5.2 5.7.4.3.7 1 .7 2v3c0 .3.2.7.8.6A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5z"/></svg>
+        GitHub
+      </a>
+    </div>
   </nav>
 </header>
 
@@ -143,57 +156,44 @@
 <section class="max-w-6xl mx-auto px-6 pt-20 pb-24 md:pt-28 md:pb-32">
   <div class="chip mb-6">
     <span class="dot"></span>
-    <span>Multi-Agent · Fully Autonomous · End-to-End</span>
+    <span data-i18n="hero.badge">Multi-Agent · Fully Autonomous · End-to-End</span>
   </div>
-  <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.05] mb-6">
-    From a research idea<br />
-    to a <span class="gradient-text">polished paper</span>.
-  </h1>
-  <p class="text-lg md:text-xl text-slate-400 max-w-2xl leading-relaxed mb-10">
-    <b class="text-slate-200">MAARS</b> is a multi-agent system that takes a vague idea — or a Kaggle competition URL —
-    and autonomously runs the full research loop: literature survey, task decomposition,
-    sandboxed experiments, paper drafting, and peer review.
-  </p>
+  <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.05] mb-6" data-i18n="hero.title">From a research idea<br />to a <span class="gradient-text">polished paper</span>.</h1>
+  <p class="text-lg md:text-xl text-slate-400 max-w-2xl leading-relaxed mb-10" data-i18n="hero.sub"><b class="text-slate-200">MAARS</b> is a multi-agent system that takes a vague idea — or a Kaggle competition URL — and autonomously runs the full research loop: literature survey, task decomposition, sandboxed experiments, paper drafting, and peer review.</p>
 
   <div class="flex flex-wrap gap-3 mb-14">
     <a href="https://github.com/dozybot001/MAARS" target="_blank" rel="noopener"
        class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white font-medium shadow-[0_8px_30px_-10px_rgba(168,85,247,.7)] hover:shadow-[0_8px_40px_-5px_rgba(168,85,247,.8)] transition">
-      View on GitHub
+      <span data-i18n="hero.cta_github">View on GitHub</span>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M8 7h9v9"/></svg>
     </a>
-    <a href="#pipeline"
-       class="inline-flex items-center gap-2 px-5 py-3 rounded-xl glass text-slate-100 font-medium hover:bg-white/10 transition">
-      How it works
-    </a>
-    <a href="#showcase"
-       class="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-slate-300 hover:text-white transition">
-      See a sample paper →
-    </a>
+    <a href="#pipeline" class="inline-flex items-center gap-2 px-5 py-3 rounded-xl glass text-slate-100 font-medium hover:bg-white/10 transition" data-i18n="hero.cta_how">How it works</a>
+    <a href="#showcase" class="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-slate-300 hover:text-white transition" data-i18n="hero.cta_sample">See a sample paper →</a>
   </div>
 
   <!-- mini flow -->
   <div class="glass rounded-2xl p-6 md:p-8">
-    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-5 font-mono">/ the four-stage loop</div>
+    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-5 font-mono" data-i18n="hero.loop_label">/ the four-stage loop</div>
     <div class="grid grid-cols-4 gap-2 md:gap-6 items-center">
       <div class="text-center">
         <div class="font-mono text-xs text-violet-300 mb-1">01</div>
-        <div class="font-semibold">Refine</div>
-        <div class="text-xs text-slate-500 mt-1">Explorer ↔ Critic</div>
+        <div class="font-semibold" data-i18n="stage.refine">Refine</div>
+        <div class="text-xs text-slate-500 mt-1" data-i18n="hero.refine_agents">Explorer ↔ Critic</div>
       </div>
       <div class="text-center">
         <div class="font-mono text-xs text-cyan-300 mb-1">02</div>
-        <div class="font-semibold">Research</div>
-        <div class="text-xs text-slate-500 mt-1">Decompose · Execute · Evaluate</div>
+        <div class="font-semibold" data-i18n="stage.research">Research</div>
+        <div class="text-xs text-slate-500 mt-1" data-i18n="hero.research_agents">Decompose · Execute · Evaluate</div>
       </div>
       <div class="text-center">
         <div class="font-mono text-xs text-pink-300 mb-1">03</div>
-        <div class="font-semibold">Write</div>
-        <div class="text-xs text-slate-500 mt-1">Writer ↔ Reviewer</div>
+        <div class="font-semibold" data-i18n="stage.write">Write</div>
+        <div class="text-xs text-slate-500 mt-1" data-i18n="hero.write_agents">Writer ↔ Reviewer</div>
       </div>
       <div class="text-center">
         <div class="font-mono text-xs text-amber-300 mb-1">04</div>
-        <div class="font-semibold">Polish</div>
-        <div class="text-xs text-slate-500 mt-1">LLM + Metadata</div>
+        <div class="font-semibold" data-i18n="stage.polish">Polish</div>
+        <div class="text-xs text-slate-500 mt-1" data-i18n="hero.polish_agents">LLM + Metadata</div>
       </div>
     </div>
   </div>
@@ -204,11 +204,9 @@
   <div class="relative rounded-3xl overflow-hidden border border-white/10">
     <video controls poster="assets/demo-cover.png" class="w-full bg-black" preload="metadata">
       <source src="https://github.com/user-attachments/assets/f0d8ef94-c98e-4666-8dec-85e1332dc2df" type="video/mp4" />
-      Your browser does not support inline video —
-      <a href="https://github.com/user-attachments/assets/f0d8ef94-c98e-4666-8dec-85e1332dc2df">open the demo</a>.
     </video>
     <div class="absolute top-3 left-3 chip bg-black/50 backdrop-blur">
-      <span class="dot"></span> live run — Lorenz attractor
+      <span class="dot"></span> <span data-i18n="video.badge">live run — Lorenz attractor</span>
     </div>
   </div>
 </section>
@@ -217,30 +215,26 @@
 <section class="max-w-6xl mx-auto px-6 pb-24">
   <div class="grid md:grid-cols-2 gap-10 items-start">
     <div>
-      <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono">/ the gap</div>
-      <h2 class="text-3xl md:text-4xl font-bold mb-5">Ideas are cheap.<br/><span class="text-slate-400">The paper is the hard part.</span></h2>
-      <p class="text-slate-400 leading-relaxed">
-        Between a one-sentence idea and a finished research artifact lies a long tail of dirty work:
-        scoping, literature surveys, experiment design, reproducible code, error recovery, writing,
-        revising. MAARS puts an agent-orchestrated loop around that tail — and runs it end to end.
-      </p>
+      <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono" data-i18n="gap.label">/ the gap</div>
+      <h2 class="text-3xl md:text-4xl font-bold mb-5" data-i18n="gap.title">Ideas are cheap.<br/><span class="text-slate-400">The paper is the hard part.</span></h2>
+      <p class="text-slate-400 leading-relaxed" data-i18n="gap.body">Between a one-sentence idea and a finished research artifact lies a long tail of dirty work: scoping, literature surveys, experiment design, reproducible code, error recovery, writing, revising. MAARS puts an agent-orchestrated loop around that tail — and runs it end to end.</p>
     </div>
     <div class="grid grid-cols-2 gap-4">
       <div class="glass rounded-xl p-5">
         <div class="text-3xl font-bold gradient-text">4</div>
-        <div class="text-sm text-slate-400 mt-1">autonomous stages</div>
+        <div class="text-sm text-slate-400 mt-1" data-i18n="gap.stat1">autonomous stages</div>
       </div>
       <div class="glass rounded-xl p-5">
         <div class="text-3xl font-bold gradient-text">0</div>
-        <div class="text-sm text-slate-400 mt-1">human loops to close</div>
+        <div class="text-sm text-slate-400 mt-1" data-i18n="gap.stat2">human loops to close</div>
       </div>
       <div class="glass rounded-xl p-5">
         <div class="text-3xl font-bold gradient-text">∞</div>
-        <div class="text-sm text-slate-400 mt-1">iterations until clean</div>
+        <div class="text-sm text-slate-400 mt-1" data-i18n="gap.stat3">iterations until clean</div>
       </div>
       <div class="glass rounded-xl p-5">
         <div class="text-3xl font-bold gradient-text">1</div>
-        <div class="text-sm text-slate-400 mt-1">polished paper out</div>
+        <div class="text-sm text-slate-400 mt-1" data-i18n="gap.stat4">polished paper out</div>
       </div>
     </div>
   </div>
@@ -249,14 +243,9 @@
 <!-- ============ PIPELINE ============ -->
 <section id="pipeline" class="max-w-6xl mx-auto px-6 py-24 border-t border-white/5">
   <div class="mb-14">
-    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono">/ pipeline</div>
-    <h2 class="text-3xl md:text-5xl font-bold tracking-tight">
-      Four stages.<br/>
-      <span class="gradient-text">One coherent loop.</span>
-    </h2>
-    <p class="text-slate-400 mt-4 max-w-2xl">
-      Each stage has a stable I/O boundary: a runtime orchestrates control flow and persistence, while agents do the open-ended work.
-    </p>
+    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono" data-i18n="pipe.label">/ pipeline</div>
+    <h2 class="text-3xl md:text-5xl font-bold tracking-tight" data-i18n="pipe.title">Four stages.<br/><span class="gradient-text">One coherent loop.</span></h2>
+    <p class="text-slate-400 mt-4 max-w-2xl" data-i18n="pipe.sub">Each stage has a stable I/O boundary: a runtime orchestrates control flow and persistence, while agents do the open-ended work.</p>
   </div>
 
   <div class="grid md:grid-cols-2 gap-5">
@@ -264,67 +253,52 @@
     <!-- Refine -->
     <div class="stage-card stage-accent-refine relative rounded-2xl p-7 glass card-hover">
       <div class="flex items-center justify-between mb-5">
-        <div class="font-mono text-xs text-slate-500">stage 01</div>
-        <div class="stage-badge font-bold tracking-tight text-xl">Refine</div>
+        <div class="font-mono text-xs text-slate-500"><span data-i18n="pipe.stage">stage</span> 01</div>
+        <div class="stage-badge font-bold tracking-tight text-xl" data-i18n="stage.refine">Refine</div>
       </div>
-      <p class="text-slate-300 leading-relaxed mb-5">
-        <b>Explorer</b> drafts a proposal from the user's raw idea.
-        <b>Critic</b> reviews it within a declared scope, surfacing gaps and ambiguities.
-        They iterate until zero issues remain.
-      </p>
+      <p class="text-slate-300 leading-relaxed mb-5" data-i18n="pipe.refine_body"><b>Explorer</b> drafts a proposal from the user's raw idea. <b>Critic</b> reviews it within a declared scope, surfacing gaps and ambiguities. They iterate until zero issues remain.</p>
       <div class="text-xs font-mono text-slate-500 space-y-1.5">
-        <div><span class="text-slate-400">in</span>  &nbsp;→&nbsp; <span class="kbd">idea.md</span></div>
-        <div><span class="text-slate-400">out</span> →&nbsp; <span class="kbd">refined_idea.md</span></div>
+        <div><span class="text-slate-400" data-i18n="pipe.in">in</span>  &nbsp;→&nbsp; <span class="kbd">idea.md</span></div>
+        <div><span class="text-slate-400" data-i18n="pipe.out">out</span> →&nbsp; <span class="kbd">refined_idea.md</span></div>
       </div>
     </div>
 
     <!-- Research -->
     <div class="stage-card stage-accent-research relative rounded-2xl p-7 glass card-hover">
       <div class="flex items-center justify-between mb-5">
-        <div class="font-mono text-xs text-slate-500">stage 02</div>
-        <div class="stage-badge font-bold tracking-tight text-xl">Research</div>
+        <div class="font-mono text-xs text-slate-500"><span data-i18n="pipe.stage">stage</span> 02</div>
+        <div class="stage-badge font-bold tracking-tight text-xl" data-i18n="stage.research">Research</div>
       </div>
-      <p class="text-slate-300 leading-relaxed mb-5">
-        The core engine. A <b>strategy</b> decomposes the proposal into atomic tasks,
-        which execute in <b>Docker sandboxes</b> with parallel scheduling.
-        Outputs are verified, then evaluated — loops with strategy updates when gaps exist.
-      </p>
+      <p class="text-slate-300 leading-relaxed mb-5" data-i18n="pipe.research_body">The core engine. A <b>strategy</b> decomposes the proposal into atomic tasks, which execute in <b>Docker sandboxes</b> with parallel scheduling. Outputs are verified, then evaluated — loops with strategy updates when gaps exist.</p>
       <div class="text-xs font-mono text-slate-500 space-y-1.5">
-        <div><span class="text-slate-400">in</span>  &nbsp;→&nbsp; <span class="kbd">refined_idea.md</span></div>
-        <div><span class="text-slate-400">out</span> →&nbsp; <span class="kbd">artifacts/</span> · <span class="kbd">tasks/</span> · <span class="kbd">evaluations/</span></div>
+        <div><span class="text-slate-400" data-i18n="pipe.in">in</span>  &nbsp;→&nbsp; <span class="kbd">refined_idea.md</span></div>
+        <div><span class="text-slate-400" data-i18n="pipe.out">out</span> →&nbsp; <span class="kbd">artifacts/</span> · <span class="kbd">tasks/</span> · <span class="kbd">evaluations/</span></div>
       </div>
     </div>
 
     <!-- Write -->
     <div class="stage-card stage-accent-write relative rounded-2xl p-7 glass card-hover">
       <div class="flex items-center justify-between mb-5">
-        <div class="font-mono text-xs text-slate-500">stage 03</div>
-        <div class="stage-badge font-bold tracking-tight text-xl">Write</div>
+        <div class="font-mono text-xs text-slate-500"><span data-i18n="pipe.stage">stage</span> 03</div>
+        <div class="stage-badge font-bold tracking-tight text-xl" data-i18n="stage.write">Write</div>
       </div>
-      <p class="text-slate-300 leading-relaxed mb-5">
-        <b>Writer</b> reads all research outputs and drafts a complete paper.
-        <b>Reviewer</b> critiques and drives revisions — same IterationState pattern as Refine.
-      </p>
+      <p class="text-slate-300 leading-relaxed mb-5" data-i18n="pipe.write_body"><b>Writer</b> reads all research outputs and drafts a complete paper. <b>Reviewer</b> critiques and drives revisions — same IterationState pattern as Refine.</p>
       <div class="text-xs font-mono text-slate-500 space-y-1.5">
-        <div><span class="text-slate-400">in</span>  &nbsp;→&nbsp; <span class="kbd">artifacts/</span> · <span class="kbd">refined_idea.md</span></div>
-        <div><span class="text-slate-400">out</span> →&nbsp; <span class="kbd">paper.md</span></div>
+        <div><span class="text-slate-400" data-i18n="pipe.in">in</span>  &nbsp;→&nbsp; <span class="kbd">artifacts/</span> · <span class="kbd">refined_idea.md</span></div>
+        <div><span class="text-slate-400" data-i18n="pipe.out">out</span> →&nbsp; <span class="kbd">paper.md</span></div>
       </div>
     </div>
 
     <!-- Polish -->
     <div class="stage-card stage-accent-polish relative rounded-2xl p-7 glass card-hover">
       <div class="flex items-center justify-between mb-5">
-        <div class="font-mono text-xs text-slate-500">stage 04</div>
-        <div class="stage-badge font-bold tracking-tight text-xl">Polish</div>
+        <div class="font-mono text-xs text-slate-500"><span data-i18n="pipe.stage">stage</span> 04</div>
+        <div class="stage-badge font-bold tracking-tight text-xl" data-i18n="stage.polish">Polish</div>
       </div>
-      <p class="text-slate-300 leading-relaxed mb-5">
-        A single-pass LLM refinement for prose quality,
-        plus a deterministic metadata appendix (tokens, timings, scores).
-        Ready to read.
-      </p>
+      <p class="text-slate-300 leading-relaxed mb-5" data-i18n="pipe.polish_body">A single-pass LLM refinement for prose quality, plus a deterministic metadata appendix (tokens, timings, scores). Ready to read.</p>
       <div class="text-xs font-mono text-slate-500 space-y-1.5">
-        <div><span class="text-slate-400">in</span>  &nbsp;→&nbsp; <span class="kbd">paper.md</span></div>
-        <div><span class="text-slate-400">out</span> →&nbsp; <span class="kbd">paper_polished.md</span></div>
+        <div><span class="text-slate-400" data-i18n="pipe.in">in</span>  &nbsp;→&nbsp; <span class="kbd">paper.md</span></div>
+        <div><span class="text-slate-400" data-i18n="pipe.out">out</span> →&nbsp; <span class="kbd">paper_polished.md</span></div>
       </div>
     </div>
   </div>
@@ -332,26 +306,16 @@
   <!-- design pattern -->
   <div class="mt-10 grid md:grid-cols-3 gap-5">
     <div class="rounded-xl glass p-6">
-      <div class="text-sm font-semibold mb-2 text-slate-200">Runtime vs Agent</div>
-      <p class="text-sm text-slate-400 leading-relaxed">
-        <span class="font-mono text-xs text-violet-300">if · for · while</span>,
-        scheduling, retries, termination → <b>runtime</b>.
-        Search, coding, reasoning → <b>agent</b>.
-      </p>
+      <div class="text-sm font-semibold mb-2 text-slate-200" data-i18n="pipe.d1_title">Runtime vs Agent</div>
+      <p class="text-sm text-slate-400 leading-relaxed" data-i18n="pipe.d1_body"><span class="font-mono text-xs text-violet-300">if · for · while</span>, scheduling, retries, termination → <b>runtime</b>. Search, coding, reasoning → <b>agent</b>.</p>
     </div>
     <div class="rounded-xl glass p-6">
-      <div class="text-sm font-semibold mb-2 text-slate-200">IterationState pattern</div>
-      <p class="text-sm text-slate-400 leading-relaxed">
-        Primary drafts → Reviewer returns <span class="font-mono text-xs text-cyan-300">&#123;issues, resolved, pass&#125;</span>
-        → Primary revises. Loops until <span class="font-mono text-xs">pass=true</span> or the iteration cap.
-      </p>
+      <div class="text-sm font-semibold mb-2 text-slate-200" data-i18n="pipe.d2_title">IterationState pattern</div>
+      <p class="text-sm text-slate-400 leading-relaxed" data-i18n="pipe.d2_body">Primary drafts → Reviewer returns <span class="font-mono text-xs text-cyan-300">{issues, resolved, pass}</span> → Primary revises. Loops until <span class="font-mono text-xs">pass=true</span> or the iteration cap.</p>
     </div>
     <div class="rounded-xl glass p-6">
-      <div class="text-sm font-semibold mb-2 text-slate-200">DB as single source of truth</div>
-      <p class="text-sm text-slate-400 leading-relaxed">
-        State lives on disk — JSON + Markdown under <span class="kbd">results/{session}/</span>.
-        SSE is notification only; the UI reads canonical data from the session DB.
-      </p>
+      <div class="text-sm font-semibold mb-2 text-slate-200" data-i18n="pipe.d3_title">DB as single source of truth</div>
+      <p class="text-sm text-slate-400 leading-relaxed" data-i18n="pipe.d3_body">State lives on disk — JSON + Markdown under <span class="kbd">results/{session}/</span>. SSE is notification only; the UI reads canonical data from the session DB.</p>
     </div>
   </div>
 </section>
@@ -359,81 +323,72 @@
 <!-- ============ ARCHITECTURE ============ -->
 <section id="architecture" class="max-w-6xl mx-auto px-6 py-24 border-t border-white/5">
   <div class="mb-14">
-    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono">/ architecture</div>
-    <h2 class="text-3xl md:text-5xl font-bold tracking-tight">
-      Five layers.<br/>
-      <span class="gradient-text">One clear boundary.</span>
-    </h2>
+    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono" data-i18n="arch.label">/ architecture</div>
+    <h2 class="text-3xl md:text-5xl font-bold tracking-tight" data-i18n="arch.title">Five layers.<br/><span class="gradient-text">One clear boundary.</span></h2>
   </div>
 
-  <!-- 5-layer stack -->
   <div class="space-y-3">
     <div class="glass rounded-xl p-5 flex items-center gap-5 card-hover">
       <div class="font-mono text-xs text-slate-500 w-8">L5</div>
       <div class="flex-1">
-        <div class="font-semibold text-slate-100">Entry layer</div>
-        <div class="text-sm text-slate-400">Frontend (Vanilla JS, SSE streaming, marked.js) · FastAPI server</div>
+        <div class="font-semibold text-slate-100" data-i18n="arch.l5_t">Entry layer</div>
+        <div class="text-sm text-slate-400" data-i18n="arch.l5_b">Frontend (Vanilla JS, SSE streaming, marked.js) · FastAPI server</div>
       </div>
       <span class="chip">HTTP · SSE</span>
     </div>
     <div class="glass rounded-xl p-5 flex items-center gap-5 card-hover">
       <div class="font-mono text-xs text-slate-500 w-8">L4</div>
       <div class="flex-1">
-        <div class="font-semibold text-slate-100">Orchestration layer</div>
-        <div class="text-sm text-slate-400">Sequences the four stages; manages lifecycle, session recovery, termination</div>
+        <div class="font-semibold text-slate-100" data-i18n="arch.l4_t">Orchestration layer</div>
+        <div class="text-sm text-slate-400" data-i18n="arch.l4_b">Sequences the four stages; manages lifecycle, session recovery, termination</div>
       </div>
       <span class="chip">orchestrator.py</span>
     </div>
     <div class="glass rounded-xl p-5 flex items-center gap-5 card-hover">
       <div class="font-mono text-xs text-slate-500 w-8">L3</div>
       <div class="flex-1">
-        <div class="font-semibold text-slate-100">Stage layer</div>
-        <div class="text-sm text-slate-400"><span class="font-mono text-xs text-slate-300">Stage</span> base → <span class="font-mono text-xs text-slate-300">ResearchStage</span> · <span class="font-mono text-xs text-slate-300">TeamStage</span> → Refine / Write · <span class="font-mono text-xs text-slate-300">PolishStage</span></div>
+        <div class="font-semibold text-slate-100" data-i18n="arch.l3_t">Stage layer</div>
+        <div class="text-sm text-slate-400" data-i18n="arch.l3_b"><span class="font-mono text-xs text-slate-300">Stage</span> base → <span class="font-mono text-xs text-slate-300">ResearchStage</span> · <span class="font-mono text-xs text-slate-300">TeamStage</span> → Refine / Write · <span class="font-mono text-xs text-slate-300">PolishStage</span></div>
       </div>
-      <span class="chip">stable I/O</span>
+      <span class="chip" data-i18n="arch.l3_chip">stable I/O</span>
     </div>
     <div class="glass rounded-xl p-5 flex items-center gap-5 card-hover">
       <div class="font-mono text-xs text-slate-500 w-8">L2</div>
       <div class="flex-1">
-        <div class="font-semibold text-slate-100">Execution layer</div>
-        <div class="text-sm text-slate-400">Multi-agent — all four stages; Agno framework · Gemini with native Google Search</div>
+        <div class="font-semibold text-slate-100" data-i18n="arch.l2_t">Execution layer</div>
+        <div class="text-sm text-slate-400" data-i18n="arch.l2_b">Multi-agent — all four stages; Agno framework · Gemini with native Google Search</div>
       </div>
       <span class="chip">Agno · Gemini</span>
     </div>
     <div class="glass rounded-xl p-5 flex items-center gap-5 card-hover">
       <div class="font-mono text-xs text-slate-500 w-8">L1</div>
       <div class="flex-1">
-        <div class="font-semibold text-slate-100">Tools &amp; State layer</div>
-        <div class="text-sm text-slate-400">ArXiv · Wikipedia · DDGS · Kaggle API · PyPDF · Docker sandbox · file-based session DB</div>
+        <div class="font-semibold text-slate-100" data-i18n="arch.l1_t">Tools &amp; State layer</div>
+        <div class="text-sm text-slate-400" data-i18n="arch.l1_b">ArXiv · Wikipedia · DDGS · Kaggle API · PyPDF · Docker sandbox · file-based session DB</div>
       </div>
-      <span class="chip">persistent</span>
+      <span class="chip" data-i18n="arch.l1_chip">persistent</span>
     </div>
   </div>
 
-  <!-- session db layout -->
   <div class="mt-12 grid md:grid-cols-5 gap-6 items-start">
     <div class="md:col-span-2">
-      <h3 class="text-xl font-semibold mb-3">Every run is a directory.</h3>
-      <p class="text-slate-400 text-sm leading-relaxed">
-        State is just files. No hidden database, no vector store. You can
-        <span class="kbd">cd</span> into any session and read exactly what each agent said
-        — drafts, critiques, plan trees, execution logs, polished paper. Reproducible by construction.
-      </p>
+      <h3 class="text-xl font-semibold mb-3" data-i18n="arch.db_title">Every run is a directory.</h3>
+      <p class="text-slate-400 text-sm leading-relaxed" data-i18n="arch.db_body">State is just files. No hidden database, no vector store. You can <span class="kbd">cd</span> into any session and read exactly what each agent said — drafts, critiques, plan trees, execution logs, polished paper. Reproducible by construction.</p>
     </div>
     <div class="md:col-span-3">
       <pre class="glass rounded-xl p-5 text-xs overflow-x-auto leading-relaxed"><code><span class="text-slate-500">results/{session}/</span>
-<span class="text-violet-300">├── idea.md</span>                  <span class="text-slate-500"># user input</span>
-<span class="text-violet-300">├── refined_idea.md</span>          <span class="text-slate-500"># Refine output</span>
-├── proposals/ critiques/    <span class="text-slate-500"># Refine rounds</span>
-<span class="text-cyan-300">├── calibration.md</span>          <span class="text-slate-500"># Research calibration</span>
-├── strategy/ plan_tree.json <span class="text-slate-500"># Research plan</span>
-├── tasks/ artifacts/        <span class="text-slate-500"># code · figures · data</span>
-├── evaluations/             <span class="text-slate-500"># Research rounds</span>
-<span class="text-pink-300">├── drafts/ reviews/</span>         <span class="text-slate-500"># Write rounds</span>
-<span class="text-pink-300">├── paper.md</span>                 <span class="text-slate-500"># Write output</span>
-<span class="text-amber-300">├── paper_polished.md</span>        <span class="text-slate-500"># Polish output</span>
-├── meta.json log.jsonl      <span class="text-slate-500"># metadata · SSE log</span>
-└── reproduce/               <span class="text-slate-500"># Dockerfile · run.sh</span></code></pre>
+<span class="text-violet-300">├── idea.md</span>                  <span class="text-slate-500"># <span data-i18n="tree.c1">user input</span></span>
+<span class="text-violet-300">├── refined_idea.md</span>          <span class="text-slate-500"># <span data-i18n="tree.c2">Refine output</span></span>
+├── proposals/ critiques/    <span class="text-slate-500"># <span data-i18n="tree.c3">Refine rounds</span></span>
+<span class="text-cyan-300">├── calibration.md</span>          <span class="text-slate-500"># <span data-i18n="tree.c4">Research calibration</span></span>
+├── strategy/ plan_tree.json <span class="text-slate-500"># <span data-i18n="tree.c5">Research plan</span></span>
+├── tasks/ artifacts/        <span class="text-slate-500"># <span data-i18n="tree.c6">code · figures · data</span></span>
+├── evaluations/             <span class="text-slate-500"># <span data-i18n="tree.c7">Research rounds</span></span>
+<span class="text-pink-300">├── drafts/ reviews/</span>         <span class="text-slate-500"># <span data-i18n="tree.c8">Write rounds</span></span>
+<span class="text-pink-300">├── paper.md</span>                 <span class="text-slate-500"># <span data-i18n="tree.c9">Write output</span></span>
+<span class="text-amber-300">├── paper_polished.md</span>        <span class="text-slate-500"># <span data-i18n="tree.c10">Polish output</span></span>
+├── meta.json log.jsonl      <span class="text-slate-500"># <span data-i18n="tree.c11">metadata · SSE log</span></span>
+└── reproduce/               <span class="text-slate-500"># <span data-i18n="tree.c12">Dockerfile · run.sh</span></span></code></pre>
     </div>
   </div>
 </section>
@@ -441,50 +396,48 @@
 <!-- ============ STACK ============ -->
 <section id="stack" class="max-w-6xl mx-auto px-6 py-24 border-t border-white/5">
   <div class="mb-10">
-    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono">/ stack</div>
-    <h2 class="text-3xl md:text-5xl font-bold tracking-tight">
-      Boring where it counts.<br/><span class="gradient-text">Interesting where it matters.</span>
-    </h2>
+    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono" data-i18n="stack.label">/ stack</div>
+    <h2 class="text-3xl md:text-5xl font-bold tracking-tight" data-i18n="stack.title">Boring where it counts.<br/><span class="gradient-text">Interesting where it matters.</span></h2>
   </div>
 
   <div class="grid md:grid-cols-4 gap-4">
     <div class="glass rounded-xl p-6">
-      <div class="text-xs text-slate-500 font-mono mb-2">backend</div>
+      <div class="text-xs text-slate-500 font-mono mb-2" data-i18n="stack.backend_l">backend</div>
       <div class="font-semibold text-slate-100 mb-2">Python · FastAPI</div>
-      <p class="text-sm text-slate-400">Runtime, API server, SSE broadcast, session DB.</p>
+      <p class="text-sm text-slate-400" data-i18n="stack.backend_b">Runtime, API server, SSE broadcast, session DB.</p>
     </div>
     <div class="glass rounded-xl p-6">
-      <div class="text-xs text-slate-500 font-mono mb-2">agents</div>
+      <div class="text-xs text-slate-500 font-mono mb-2" data-i18n="stack.agents_l">agents</div>
       <div class="font-semibold text-slate-100 mb-2">Agno · Gemini</div>
-      <p class="text-sm text-slate-400">Multi-agent framework; per-stage model override; native Google Search.</p>
+      <p class="text-sm text-slate-400" data-i18n="stack.agents_b">Multi-agent framework; per-stage model override; native Google Search.</p>
     </div>
     <div class="glass rounded-xl p-6">
-      <div class="text-xs text-slate-500 font-mono mb-2">execution</div>
-      <div class="font-semibold text-slate-100 mb-2">Docker sandbox</div>
-      <p class="text-sm text-slate-400">Isolated Python exec with CPU/RAM/GPU quotas, network toggle, timeouts.</p>
+      <div class="text-xs text-slate-500 font-mono mb-2" data-i18n="stack.exec_l">execution</div>
+      <div class="font-semibold text-slate-100 mb-2" data-i18n="stack.exec_t">Docker sandbox</div>
+      <p class="text-sm text-slate-400" data-i18n="stack.exec_b">Isolated Python exec with CPU/RAM/GPU quotas, network toggle, timeouts.</p>
     </div>
     <div class="glass rounded-xl p-6">
-      <div class="text-xs text-slate-500 font-mono mb-2">frontend</div>
+      <div class="text-xs text-slate-500 font-mono mb-2" data-i18n="stack.fe_l">frontend</div>
       <div class="font-semibold text-slate-100 mb-2">Vanilla JS · SSE</div>
-      <p class="text-sm text-slate-400">Streaming log viewer + right-panel state dashboard reading from DB.</p>
+      <p class="text-sm text-slate-400" data-i18n="stack.fe_b">Streaming log viewer + right-panel state dashboard reading from DB.</p>
     </div>
   </div>
 
   <div class="mt-6 grid md:grid-cols-3 gap-4">
     <div class="glass rounded-xl p-6">
-      <div class="text-xs text-slate-500 font-mono mb-2">tools</div>
+      <div class="text-xs text-slate-500 font-mono mb-2" data-i18n="stack.tools_l">tools</div>
       <div class="font-semibold text-slate-100 mb-2">ArXiv · Wikipedia · DDGS · Kaggle · PyPDF</div>
-      <p class="text-sm text-slate-400">Literature survey, web search, competition data, paper parsing — wired into agents.</p>
+      <p class="text-sm text-slate-400" data-i18n="stack.tools_b">Literature survey, web search, competition data, paper parsing — wired into agents.</p>
     </div>
     <div class="glass rounded-xl p-6">
-      <div class="text-xs text-slate-500 font-mono mb-2">storage</div>
-      <div class="font-semibold text-slate-100 mb-2">File-based DB</div>
-      <p class="text-sm text-slate-400">JSON &amp; Markdown on disk. No cloud, no migrations. <span class="kbd">grep</span>-friendly.</p>
+      <div class="text-xs text-slate-500 font-mono mb-2" data-i18n="stack.store_l">storage</div>
+      <div class="font-semibold text-slate-100 mb-2" data-i18n="stack.store_t">File-based DB</div>
+      <p class="text-sm text-slate-400" data-i18n="stack.store_b">JSON &amp; Markdown on disk. No cloud, no migrations. <span class="kbd">grep</span>-friendly.</p>
     </div>
     <div class="glass rounded-xl p-6">
-      <div class="text-xs text-slate-500 font-mono mb-2">reproducibility</div>
+      <div class="text-xs text-slate-500 font-mono mb-2" data-i18n="stack.repro_l">reproducibility</div>
       <div class="font-semibold text-slate-100 mb-2">Dockerfile + run.sh</div>
-      <p class="text-sm text-slate-400">Every session emits a reproduce bundle — rerun any experiment from scratch.</p>
+      <p class="text-sm text-slate-400" data-i18n="stack.repro_b">Every session emits a reproduce bundle — rerun any experiment from scratch.</p>
     </div>
   </div>
 </section>
@@ -492,35 +445,26 @@
 <!-- ============ SHOWCASE ============ -->
 <section id="showcase" class="max-w-6xl mx-auto px-6 py-24 border-t border-white/5">
   <div class="mb-12">
-    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono">/ showcase</div>
-    <h2 class="text-3xl md:text-5xl font-bold tracking-tight">
-      <span class="gradient-text">Real runs.</span><br/>Real papers.
-    </h2>
-    <p class="text-slate-400 mt-4 max-w-2xl">
-      Two end-to-end runs from the repo's <span class="kbd">showcase/</span> folder —
-      each one producing code, figures, a polished paper, and a reproduce bundle.
-    </p>
+    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono" data-i18n="sc.label">/ showcase</div>
+    <h2 class="text-3xl md:text-5xl font-bold tracking-tight" data-i18n="sc.title"><span class="gradient-text">Real runs.</span><br/>Real papers.</h2>
+    <p class="text-slate-400 mt-4 max-w-2xl" data-i18n="sc.sub">Two end-to-end runs from the repo's <span class="kbd">showcase/</span> folder — each one producing code, figures, a polished paper, and a reproduce bundle.</p>
   </div>
 
   <!-- Lorenz -->
   <div class="mb-16">
     <div class="flex flex-wrap items-end justify-between gap-4 mb-5">
       <div>
-        <div class="text-xs text-slate-500 font-mono mb-1">case · scientific visualization</div>
-        <h3 class="text-2xl font-bold">Lorenz attractor — 4 figures that tell the chaos story</h3>
-        <p class="text-slate-400 mt-2 max-w-2xl text-sm leading-relaxed">
-          Input: <i>"Solve the Lorenz system with <span class="kbd">scipy.integrate.solve_ivp</span> (RK45).
-          Produce 4 figures: 3D trajectory, bifurcation diagram, divergence curve, (σ,ρ) Lyapunov heatmap."</i>
-          Output: a full paper with derivations, code, and the plots below.
-        </p>
+        <div class="text-xs text-slate-500 font-mono mb-1" data-i18n="sc.lo_label">case · scientific visualization</div>
+        <h3 class="text-2xl font-bold" data-i18n="sc.lo_title">Lorenz attractor — 4 figures that tell the chaos story</h3>
+        <p class="text-slate-400 mt-2 max-w-2xl text-sm leading-relaxed" data-i18n="sc.lo_body">Input: <i>"Solve the Lorenz system with <span class="kbd">scipy.integrate.solve_ivp</span> (RK45). Produce 4 figures: 3D trajectory, bifurcation diagram, divergence curve, (σ,ρ) Lyapunov heatmap."</i> Output: a full paper with derivations, code, and the plots below.</p>
       </div>
       <div class="flex gap-3">
         <div class="glass rounded-lg px-4 py-2">
-          <div class="text-[10px] uppercase tracking-wider text-slate-500">tokens</div>
+          <div class="text-[10px] uppercase tracking-wider text-slate-500" data-i18n="sc.tokens">tokens</div>
           <div class="font-mono text-sm text-slate-200">347k</div>
         </div>
         <div class="glass rounded-lg px-4 py-2">
-          <div class="text-[10px] uppercase tracking-wider text-slate-500">score</div>
+          <div class="text-[10px] uppercase tracking-wider text-slate-500" data-i18n="sc.score">score</div>
           <div class="font-mono text-sm text-emerald-300">0.93</div>
         </div>
       </div>
@@ -528,19 +472,19 @@
     <div class="grid md:grid-cols-2 gap-4">
       <figure class="glass rounded-xl p-3 card-hover">
         <img src="assets/lorenz_3d.png" alt="Lorenz 3D trajectory" class="rounded-lg w-full bg-white" loading="lazy" />
-        <figcaption class="text-xs text-slate-500 mt-2 font-mono">fig.1 &nbsp;3D phase-space trajectory (σ=10, ρ=28, β=8/3)</figcaption>
+        <figcaption class="text-xs text-slate-500 mt-2 font-mono" data-i18n="sc.lo_fig1">fig.1 &nbsp;3D phase-space trajectory (σ=10, ρ=28, β=8/3)</figcaption>
       </figure>
       <figure class="glass rounded-xl p-3 card-hover">
         <img src="assets/lorenz_bifurcation.png" alt="Bifurcation diagram" class="rounded-lg w-full bg-white" loading="lazy" />
-        <figcaption class="text-xs text-slate-500 mt-2 font-mono">fig.2 &nbsp;bifurcation over ρ ∈ [0, 50]</figcaption>
+        <figcaption class="text-xs text-slate-500 mt-2 font-mono" data-i18n="sc.lo_fig2">fig.2 &nbsp;bifurcation over ρ ∈ [0, 50]</figcaption>
       </figure>
       <figure class="glass rounded-xl p-3 card-hover">
         <img src="assets/lorenz_divergence.png" alt="Divergence plot" class="rounded-lg w-full bg-white" loading="lazy" />
-        <figcaption class="text-xs text-slate-500 mt-2 font-mono">fig.3 &nbsp;trajectory divergence → max Lyapunov exponent</figcaption>
+        <figcaption class="text-xs text-slate-500 mt-2 font-mono" data-i18n="sc.lo_fig3">fig.3 &nbsp;trajectory divergence → max Lyapunov exponent</figcaption>
       </figure>
       <figure class="glass rounded-xl p-3 card-hover">
         <img src="assets/lorenz_heatmap.png" alt="Lyapunov heatmap" class="rounded-lg w-full bg-white" loading="lazy" />
-        <figcaption class="text-xs text-slate-500 mt-2 font-mono">fig.4 &nbsp;(σ,ρ) stability heatmap, 30×30 grid</figcaption>
+        <figcaption class="text-xs text-slate-500 mt-2 font-mono" data-i18n="sc.lo_fig4">fig.4 &nbsp;(σ,ρ) stability heatmap, 30×30 grid</figcaption>
       </figure>
     </div>
   </div>
@@ -549,21 +493,17 @@
   <div>
     <div class="flex flex-wrap items-end justify-between gap-4 mb-5">
       <div>
-        <div class="text-xs text-slate-500 font-mono mb-1">case · deep learning empirical study</div>
-        <h3 class="text-2xl font-bold">Does legitimate transfer learning weaken backdoor watermarks?</h3>
-        <p class="text-slate-400 mt-2 max-w-3xl text-sm leading-relaxed">
-          A constrained, time-boxed empirical run: CIFAR-10 → CIFAR-100 with a BadNets-style trigger on ResNet-18.
-          MAARS decomposes the proposal, trains the poisoned source model, fine-tunes under two policies (Head-only vs Full FT),
-          and produces the comparative figures, tables, and analysis that land in the paper.
-        </p>
+        <div class="text-xs text-slate-500 font-mono mb-1" data-i18n="sc.ci_label">case · deep learning empirical study</div>
+        <h3 class="text-2xl font-bold" data-i18n="sc.ci_title">Does legitimate transfer learning weaken backdoor watermarks?</h3>
+        <p class="text-slate-400 mt-2 max-w-3xl text-sm leading-relaxed" data-i18n="sc.ci_body">A constrained, time-boxed empirical run: CIFAR-10 → CIFAR-100 with a BadNets-style trigger on ResNet-18. MAARS decomposes the proposal, trains the poisoned source model, fine-tunes under two policies (Head-only vs Full FT), and produces the comparative figures, tables, and analysis that land in the paper.</p>
       </div>
       <div class="flex gap-3">
         <div class="glass rounded-lg px-4 py-2">
-          <div class="text-[10px] uppercase tracking-wider text-slate-500">tokens</div>
+          <div class="text-[10px] uppercase tracking-wider text-slate-500" data-i18n="sc.tokens">tokens</div>
           <div class="font-mono text-sm text-slate-200">2.47M</div>
         </div>
         <div class="glass rounded-lg px-4 py-2">
-          <div class="text-[10px] uppercase tracking-wider text-slate-500">rounds</div>
+          <div class="text-[10px] uppercase tracking-wider text-slate-500" data-i18n="sc.rounds">rounds</div>
           <div class="font-mono text-sm text-slate-200">3</div>
         </div>
       </div>
@@ -571,53 +511,41 @@
     <div class="grid md:grid-cols-3 gap-4">
       <div class="glass rounded-xl p-5 card-hover">
         <div class="text-xs font-mono text-cyan-300 mb-2">plan_tree.json</div>
-        <div class="font-semibold text-slate-100 mb-2">Task decomposition</div>
-        <p class="text-sm text-slate-400">
-          Recursive decomposition into atomic, dependency-ordered tasks —
-          executed in parallel when the DAG allows.
-        </p>
+        <div class="font-semibold text-slate-100 mb-2" data-i18n="sc.ci_c1_t">Task decomposition</div>
+        <p class="text-sm text-slate-400" data-i18n="sc.ci_c1_b">Recursive decomposition into atomic, dependency-ordered tasks — executed in parallel when the DAG allows.</p>
       </div>
       <div class="glass rounded-xl p-5 card-hover">
         <div class="text-xs font-mono text-cyan-300 mb-2">artifacts/</div>
-        <div class="font-semibold text-slate-100 mb-2">Executed code &amp; checkpoints</div>
-        <p class="text-sm text-slate-400">
-          Poisoned <span class="kbd">.pth</span> checkpoints, metrics JSON, per-round analysis reports, plots.
-        </p>
+        <div class="font-semibold text-slate-100 mb-2" data-i18n="sc.ci_c2_t">Executed code &amp; checkpoints</div>
+        <p class="text-sm text-slate-400" data-i18n="sc.ci_c2_b">Poisoned <span class="kbd">.pth</span> checkpoints, metrics JSON, per-round analysis reports, plots.</p>
       </div>
       <div class="glass rounded-xl p-5 card-hover">
         <div class="text-xs font-mono text-cyan-300 mb-2">paper_polished.md</div>
-        <div class="font-semibold text-slate-100 mb-2">Final paper</div>
-        <p class="text-sm text-slate-400">
-          Headline claim, quantitative table, Head-only vs Full FT comparison, limitations — all LLM-written, all grounded in the artifacts.
-        </p>
+        <div class="font-semibold text-slate-100 mb-2" data-i18n="sc.ci_c3_t">Final paper</div>
+        <p class="text-sm text-slate-400" data-i18n="sc.ci_c3_b">Headline claim, quantitative table, Head-only vs Full FT comparison, limitations — all LLM-written, all grounded in the artifacts.</p>
       </div>
     </div>
 
-    <div class="mt-6 text-sm text-slate-400">
-      → Browse the full <a class="text-slate-200 underline decoration-white/20 hover:decoration-white/60" href="https://github.com/dozybot001/MAARS/tree/main/showcase" target="_blank" rel="noopener">showcase/</a> directory in the repo.
-    </div>
+    <div class="mt-6 text-sm text-slate-400" data-i18n="sc.ci_foot">→ Browse the full <a class="text-slate-200 underline decoration-white/20 hover:decoration-white/60" href="https://github.com/dozybot001/MAARS/tree/main/showcase" target="_blank" rel="noopener">showcase/</a> directory in the repo.</div>
   </div>
 </section>
 
 <!-- ============ SCREENS ============ -->
 <section class="max-w-6xl mx-auto px-6 py-24 border-t border-white/5">
   <div class="mb-10">
-    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono">/ interface</div>
-    <h2 class="text-3xl md:text-5xl font-bold tracking-tight">A window into the loop.</h2>
-    <p class="text-slate-400 mt-4 max-w-2xl">
-      The left panel streams what every agent is thinking. The right panel is a live dashboard that
-      reads canonical state from the session DB — proposals, plan trees, drafts, reviews.
-    </p>
+    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono" data-i18n="ui.label">/ interface</div>
+    <h2 class="text-3xl md:text-5xl font-bold tracking-tight" data-i18n="ui.title">A window into the loop.</h2>
+    <p class="text-slate-400 mt-4 max-w-2xl" data-i18n="ui.sub">The left panel streams what every agent is thinking. The right panel is a live dashboard that reads canonical state from the session DB — proposals, plan trees, drafts, reviews.</p>
   </div>
 
   <div class="grid md:grid-cols-2 gap-5">
     <figure class="glass rounded-xl p-3">
       <img src="assets/tui.png" alt="MAARS startup TUI" class="rounded-lg w-full" loading="lazy" />
-      <figcaption class="text-xs text-slate-500 mt-2 font-mono px-2 pb-1">start.sh — one command boot</figcaption>
+      <figcaption class="text-xs text-slate-500 mt-2 font-mono px-2 pb-1" data-i18n="ui.cap1">start.sh — one command boot</figcaption>
     </figure>
     <figure class="glass rounded-xl p-3">
       <img src="assets/ui.png" alt="MAARS web UI" class="rounded-lg w-full" loading="lazy" />
-      <figcaption class="text-xs text-slate-500 mt-2 font-mono px-2 pb-1">web UI — streaming left, state right</figcaption>
+      <figcaption class="text-xs text-slate-500 mt-2 font-mono px-2 pb-1" data-i18n="ui.cap2">web UI — streaming left, state right</figcaption>
     </figure>
   </div>
 </section>
@@ -625,59 +553,42 @@
 <!-- ============ QUICKSTART ============ -->
 <section id="quickstart" class="max-w-6xl mx-auto px-6 py-24 border-t border-white/5">
   <div class="mb-10">
-    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono">/ quick start</div>
-    <h2 class="text-3xl md:text-5xl font-bold tracking-tight">
-      <span class="gradient-text">One command.</span>
-    </h2>
-    <p class="text-slate-400 mt-4 max-w-2xl">
-      Requirements: Python 3.10+, Docker running, a <a href="https://aistudio.google.com/apikey" class="underline decoration-white/20 hover:decoration-white/60">Gemini API key</a>.
-    </p>
+    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono" data-i18n="qs.label">/ quick start</div>
+    <h2 class="text-3xl md:text-5xl font-bold tracking-tight" data-i18n="qs.title"><span class="gradient-text">One command.</span></h2>
+    <p class="text-slate-400 mt-4 max-w-2xl" data-i18n="qs.sub">Requirements: Python 3.10+, Docker running, a <a href="https://aistudio.google.com/apikey" class="underline decoration-white/20 hover:decoration-white/60">Gemini API key</a>.</p>
   </div>
 
   <div class="grid md:grid-cols-2 gap-6">
     <div>
-      <pre class="glass rounded-xl p-6 text-sm overflow-x-auto leading-relaxed shine"><code><span class="text-slate-500"># clone &amp; run</span>
+      <pre class="glass rounded-xl p-6 text-sm overflow-x-auto leading-relaxed shine"><code><span class="text-slate-500"># <span data-i18n="qs.code_c">clone &amp; run</span></span>
 git clone https://github.com/dozybot001/MAARS.git
 cd MAARS
 bash start.sh</code></pre>
 
-      <p class="text-sm text-slate-500 mt-4 leading-relaxed">
-        On first boot <span class="kbd">start.sh</span> creates a venv, installs deps,
-        scaffolds <span class="kbd">.env</span> from the example, builds the sandbox image,
-        and serves on <span class="kbd">localhost:8000</span>. GPU is auto-detected.
-      </p>
+      <p class="text-sm text-slate-500 mt-4 leading-relaxed" data-i18n="qs.post">On first boot <span class="kbd">start.sh</span> creates a venv, installs deps, scaffolds <span class="kbd">.env</span> from the example, builds the sandbox image, and serves on <span class="kbd">localhost:8000</span>. GPU is auto-detected.</p>
     </div>
 
     <div class="space-y-3">
       <details class="glass rounded-xl p-5 group">
         <summary class="flex items-center justify-between">
-          <span class="font-semibold text-slate-100">Drop in an idea</span>
+          <span class="font-semibold text-slate-100" data-i18n="qs.a_t">Drop in an idea</span>
           <span class="text-slate-500 group-open:rotate-90 transition">›</span>
         </summary>
-        <p class="text-sm text-slate-400 mt-3">
-          Paste a research idea, a path to a UTF-8 text/markdown file, or a Kaggle competition URL.
-          Kaggle mode auto-extracts the competition ID, downloads data, and skips Refine.
-        </p>
+        <p class="text-sm text-slate-400 mt-3" data-i18n="qs.a_b">Paste a research idea, a path to a UTF-8 text/markdown file, or a Kaggle competition URL. Kaggle mode auto-extracts the competition ID, downloads data, and skips Refine.</p>
       </details>
       <details class="glass rounded-xl p-5 group">
         <summary class="flex items-center justify-between">
-          <span class="font-semibold text-slate-100">Tune per stage</span>
+          <span class="font-semibold text-slate-100" data-i18n="qs.b_t">Tune per stage</span>
           <span class="text-slate-500 group-open:rotate-90 transition">›</span>
         </summary>
-        <p class="text-sm text-slate-400 mt-3">
-          Set <span class="kbd">MAARS_REFINE_MODEL</span>, <span class="kbd">MAARS_RESEARCH_MODEL</span>, etc.
-          to override the default Gemini model per stage.
-        </p>
+        <p class="text-sm text-slate-400 mt-3" data-i18n="qs.b_b">Set <span class="kbd">MAARS_REFINE_MODEL</span>, <span class="kbd">MAARS_RESEARCH_MODEL</span>, etc. to override the default Gemini model per stage.</p>
       </details>
       <details class="glass rounded-xl p-5 group">
         <summary class="flex items-center justify-between">
-          <span class="font-semibold text-slate-100">GPU passthrough</span>
+          <span class="font-semibold text-slate-100" data-i18n="qs.c_t">GPU passthrough</span>
           <span class="text-slate-500 group-open:rotate-90 transition">›</span>
         </summary>
-        <p class="text-sm text-slate-400 mt-3">
-          Install the NVIDIA Container Toolkit, set <span class="kbd">MAARS_DOCKER_SANDBOX_GPU=true</span>,
-          and the sandbox gets <span class="kbd">--gpus all</span> for PyTorch training.
-        </p>
+        <p class="text-sm text-slate-400 mt-3" data-i18n="qs.c_b">Install the NVIDIA Container Toolkit, set <span class="kbd">MAARS_DOCKER_SANDBOX_GPU=true</span>, and the sandbox gets <span class="kbd">--gpus all</span> for PyTorch training.</p>
       </details>
     </div>
   </div>
@@ -686,30 +597,27 @@ bash start.sh</code></pre>
 <!-- ============ DOCS ============ -->
 <section class="max-w-6xl mx-auto px-6 py-24 border-t border-white/5">
   <div class="mb-10">
-    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono">/ docs</div>
-    <h2 class="text-3xl md:text-4xl font-bold tracking-tight">Go deeper.</h2>
+    <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-4 font-mono" data-i18n="docs.label">/ docs</div>
+    <h2 class="text-3xl md:text-4xl font-bold tracking-tight" data-i18n="docs.title">Go deeper.</h2>
   </div>
   <div class="grid md:grid-cols-3 gap-4">
-    <a href="https://github.com/dozybot001/MAARS/blob/main/docs/EN/architecture.md" target="_blank" rel="noopener"
-       class="glass rounded-xl p-6 card-hover block">
-      <div class="text-xs text-slate-500 font-mono mb-2">doc · architecture</div>
-      <div class="font-semibold text-slate-100 mb-2">System overview</div>
-      <p class="text-sm text-slate-400">Five layers, SSE protocol, storage layout, stage inheritance.</p>
-      <div class="text-xs text-slate-500 mt-4 font-mono">read →</div>
+    <a data-i18n-href="docs.d1_href" href="https://github.com/dozybot001/MAARS/blob/main/docs/EN/architecture.md" target="_blank" rel="noopener" class="glass rounded-xl p-6 card-hover block">
+      <div class="text-xs text-slate-500 font-mono mb-2" data-i18n="docs.d1_l">doc · architecture</div>
+      <div class="font-semibold text-slate-100 mb-2" data-i18n="docs.d1_t">System overview</div>
+      <p class="text-sm text-slate-400" data-i18n="docs.d1_b">Five layers, SSE protocol, storage layout, stage inheritance.</p>
+      <div class="text-xs text-slate-500 mt-4 font-mono" data-i18n="docs.read">read →</div>
     </a>
-    <a href="https://github.com/dozybot001/MAARS/blob/main/docs/EN/refine-write.md" target="_blank" rel="noopener"
-       class="glass rounded-xl p-6 card-hover block">
-      <div class="text-xs text-slate-500 font-mono mb-2">doc · refine &amp; write</div>
-      <div class="font-semibold text-slate-100 mb-2">IterationState pattern</div>
-      <p class="text-sm text-slate-400">How Primary ↔ Reviewer loops converge to zero issues.</p>
-      <div class="text-xs text-slate-500 mt-4 font-mono">read →</div>
+    <a data-i18n-href="docs.d2_href" href="https://github.com/dozybot001/MAARS/blob/main/docs/EN/refine-write.md" target="_blank" rel="noopener" class="glass rounded-xl p-6 card-hover block">
+      <div class="text-xs text-slate-500 font-mono mb-2" data-i18n="docs.d2_l">doc · refine &amp; write</div>
+      <div class="font-semibold text-slate-100 mb-2" data-i18n="docs.d2_t">IterationState pattern</div>
+      <p class="text-sm text-slate-400" data-i18n="docs.d2_b">How Primary ↔ Reviewer loops converge to zero issues.</p>
+      <div class="text-xs text-slate-500 mt-4 font-mono" data-i18n="docs.read">read →</div>
     </a>
-    <a href="https://github.com/dozybot001/MAARS/blob/main/docs/EN/research.md" target="_blank" rel="noopener"
-       class="glass rounded-xl p-6 card-hover block">
-      <div class="text-xs text-slate-500 font-mono mb-2">doc · research</div>
-      <div class="font-semibold text-slate-100 mb-2">Decompose · execute · evaluate</div>
-      <p class="text-sm text-slate-400">Recursive decomposition, parallel DAG, strategy update loop.</p>
-      <div class="text-xs text-slate-500 mt-4 font-mono">read →</div>
+    <a data-i18n-href="docs.d3_href" href="https://github.com/dozybot001/MAARS/blob/main/docs/EN/research.md" target="_blank" rel="noopener" class="glass rounded-xl p-6 card-hover block">
+      <div class="text-xs text-slate-500 font-mono mb-2" data-i18n="docs.d3_l">doc · research</div>
+      <div class="font-semibold text-slate-100 mb-2" data-i18n="docs.d3_t">Decompose · execute · evaluate</div>
+      <p class="text-sm text-slate-400" data-i18n="docs.d3_b">Recursive decomposition, parallel DAG, strategy update loop.</p>
+      <div class="text-xs text-slate-500 mt-4 font-mono" data-i18n="docs.read">read →</div>
     </a>
   </div>
 </section>
@@ -720,22 +628,16 @@ bash start.sh</code></pre>
     <div class="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-gradient-to-br from-violet-500/30 to-fuchsia-500/20 blur-3xl"></div>
     <div class="absolute -bottom-24 -left-24 w-80 h-80 rounded-full bg-gradient-to-br from-cyan-400/20 to-violet-500/10 blur-3xl"></div>
     <div class="relative">
-      <h2 class="text-3xl md:text-5xl font-bold tracking-tight mb-4">
-        Bring an idea.<br/><span class="gradient-text">Walk away with a paper.</span>
-      </h2>
-      <p class="text-slate-400 max-w-xl mb-8">
-        MAARS is MIT-licensed, self-hostable, and reproducible by construction. Fork it, run it, break it.
-      </p>
+      <h2 class="text-3xl md:text-5xl font-bold tracking-tight mb-4" data-i18n="cta.title">Bring an idea.<br/><span class="gradient-text">Walk away with a paper.</span></h2>
+      <p class="text-slate-400 max-w-xl mb-8" data-i18n="cta.body">MAARS is MIT-licensed, self-hostable, and reproducible by construction. Fork it, run it, break it.</p>
       <div class="flex flex-wrap gap-3">
         <a href="https://github.com/dozybot001/MAARS" target="_blank" rel="noopener"
            class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white font-medium shadow-[0_8px_30px_-10px_rgba(168,85,247,.7)] hover:shadow-[0_8px_40px_-5px_rgba(168,85,247,.8)] transition">
-          Star on GitHub
+          <span data-i18n="cta.btn1">Star on GitHub</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12 2 2.9 6.6 7.1.6-5.4 4.8 1.6 7-6.2-3.8L5.8 21l1.6-7L2 9.2l7.1-.6z"/></svg>
         </a>
         <a href="https://github.com/dozybot001/MAARS#quick-start" target="_blank" rel="noopener"
-           class="inline-flex items-center gap-2 px-5 py-3 rounded-xl glass text-slate-100 font-medium hover:bg-white/10 transition">
-          Read quick start →
-        </a>
+           class="inline-flex items-center gap-2 px-5 py-3 rounded-xl glass text-slate-100 font-medium hover:bg-white/10 transition" data-i18n="cta.btn2">Read quick start →</a>
       </div>
     </div>
   </div>
@@ -747,11 +649,11 @@ bash start.sh</code></pre>
     <div class="flex items-center gap-3">
       <span class="w-2 h-2 rounded-sm bg-gradient-to-br from-violet-400 to-cyan-400"></span>
       <span class="text-slate-300 font-medium">MAARS</span>
-      <span>· MIT License</span>
+      <span>· <span data-i18n="footer.license">MIT License</span></span>
     </div>
     <div class="flex items-center gap-5">
       <a href="https://github.com/dozybot001/MAARS" target="_blank" rel="noopener" class="hover:text-slate-200">GitHub</a>
-      <a href="https://github.com/dozybot001/MAARS/blob/main/README_CN.md" target="_blank" rel="noopener" class="hover:text-slate-200">中文 README</a>
+      <a data-i18n-href="footer.alt_href" href="https://github.com/dozybot001/MAARS/blob/main/README_CN.md" target="_blank" rel="noopener" class="hover:text-slate-200" data-i18n="footer.alt">中文 README</a>
       <a href="https://github.com/dozybot001/MAARS/issues" target="_blank" rel="noopener" class="hover:text-slate-200">Issues</a>
     </div>
   </div>
@@ -760,6 +662,340 @@ bash start.sh</code></pre>
 </main>
 
 <script>
+  const T = {
+    en: {
+      "nav.pipeline": "Pipeline", "nav.architecture": "Architecture", "nav.stack": "Stack",
+      "nav.showcase": "Showcase", "nav.quickstart": "Quick&nbsp;Start",
+
+      "hero.badge": "Multi-Agent · Fully Autonomous · End-to-End",
+      "hero.title": "From a research idea<br/>to a <span class=\"gradient-text\">polished paper</span>.",
+      "hero.sub": "<b class=\"text-slate-200\">MAARS</b> is a multi-agent system that takes a vague idea — or a Kaggle competition URL — and autonomously runs the full research loop: literature survey, task decomposition, sandboxed experiments, paper drafting, and peer review.",
+      "hero.cta_github": "View on GitHub",
+      "hero.cta_how": "How it works",
+      "hero.cta_sample": "See a sample paper →",
+      "hero.loop_label": "/ the four-stage loop",
+      "hero.refine_agents": "Explorer ↔ Critic",
+      "hero.research_agents": "Decompose · Execute · Evaluate",
+      "hero.write_agents": "Writer ↔ Reviewer",
+      "hero.polish_agents": "LLM + Metadata",
+
+      "stage.refine": "Refine", "stage.research": "Research", "stage.write": "Write", "stage.polish": "Polish",
+
+      "video.badge": "live run — Lorenz attractor",
+
+      "gap.label": "/ the gap",
+      "gap.title": "Ideas are cheap.<br/><span class=\"text-slate-400\">The paper is the hard part.</span>",
+      "gap.body": "Between a one-sentence idea and a finished research artifact lies a long tail of dirty work: scoping, literature surveys, experiment design, reproducible code, error recovery, writing, revising. MAARS puts an agent-orchestrated loop around that tail — and runs it end to end.",
+      "gap.stat1": "autonomous stages",
+      "gap.stat2": "human loops to close",
+      "gap.stat3": "iterations until clean",
+      "gap.stat4": "polished paper out",
+
+      "pipe.label": "/ pipeline",
+      "pipe.title": "Four stages.<br/><span class=\"gradient-text\">One coherent loop.</span>",
+      "pipe.sub": "Each stage has a stable I/O boundary: a runtime orchestrates control flow and persistence, while agents do the open-ended work.",
+      "pipe.stage": "stage",
+      "pipe.in": "in", "pipe.out": "out",
+      "pipe.refine_body": "<b>Explorer</b> drafts a proposal from the user's raw idea. <b>Critic</b> reviews it within a declared scope, surfacing gaps and ambiguities. They iterate until zero issues remain.",
+      "pipe.research_body": "The core engine. A <b>strategy</b> decomposes the proposal into atomic tasks, which execute in <b>Docker sandboxes</b> with parallel scheduling. Outputs are verified, then evaluated — loops with strategy updates when gaps exist.",
+      "pipe.write_body": "<b>Writer</b> reads all research outputs and drafts a complete paper. <b>Reviewer</b> critiques and drives revisions — same IterationState pattern as Refine.",
+      "pipe.polish_body": "A single-pass LLM refinement for prose quality, plus a deterministic metadata appendix (tokens, timings, scores). Ready to read.",
+      "pipe.d1_title": "Runtime vs Agent",
+      "pipe.d1_body": "<span class=\"font-mono text-xs text-violet-300\">if · for · while</span>, scheduling, retries, termination → <b>runtime</b>. Search, coding, reasoning → <b>agent</b>.",
+      "pipe.d2_title": "IterationState pattern",
+      "pipe.d2_body": "Primary drafts → Reviewer returns <span class=\"font-mono text-xs text-cyan-300\">{issues, resolved, pass}</span> → Primary revises. Loops until <span class=\"font-mono text-xs\">pass=true</span> or the iteration cap.",
+      "pipe.d3_title": "DB as single source of truth",
+      "pipe.d3_body": "State lives on disk — JSON + Markdown under <span class=\"kbd\">results/{session}/</span>. SSE is notification only; the UI reads canonical data from the session DB.",
+
+      "arch.label": "/ architecture",
+      "arch.title": "Five layers.<br/><span class=\"gradient-text\">One clear boundary.</span>",
+      "arch.l5_t": "Entry layer",
+      "arch.l5_b": "Frontend (Vanilla JS, SSE streaming, marked.js) · FastAPI server",
+      "arch.l4_t": "Orchestration layer",
+      "arch.l4_b": "Sequences the four stages; manages lifecycle, session recovery, termination",
+      "arch.l3_t": "Stage layer",
+      "arch.l3_b": "<span class=\"font-mono text-xs text-slate-300\">Stage</span> base → <span class=\"font-mono text-xs text-slate-300\">ResearchStage</span> · <span class=\"font-mono text-xs text-slate-300\">TeamStage</span> → Refine / Write · <span class=\"font-mono text-xs text-slate-300\">PolishStage</span>",
+      "arch.l3_chip": "stable I/O",
+      "arch.l2_t": "Execution layer",
+      "arch.l2_b": "Multi-agent — all four stages; Agno framework · Gemini with native Google Search",
+      "arch.l1_t": "Tools & State layer",
+      "arch.l1_b": "ArXiv · Wikipedia · DDGS · Kaggle API · PyPDF · Docker sandbox · file-based session DB",
+      "arch.l1_chip": "persistent",
+      "arch.db_title": "Every run is a directory.",
+      "arch.db_body": "State is just files. No hidden database, no vector store. You can <span class=\"kbd\">cd</span> into any session and read exactly what each agent said — drafts, critiques, plan trees, execution logs, polished paper. Reproducible by construction.",
+      "tree.c1": "user input", "tree.c2": "Refine output", "tree.c3": "Refine rounds",
+      "tree.c4": "Research calibration", "tree.c5": "Research plan", "tree.c6": "code · figures · data",
+      "tree.c7": "Research rounds", "tree.c8": "Write rounds", "tree.c9": "Write output",
+      "tree.c10": "Polish output", "tree.c11": "metadata · SSE log", "tree.c12": "Dockerfile · run.sh",
+
+      "stack.label": "/ stack",
+      "stack.title": "Boring where it counts.<br/><span class=\"gradient-text\">Interesting where it matters.</span>",
+      "stack.backend_l": "backend",
+      "stack.backend_b": "Runtime, API server, SSE broadcast, session DB.",
+      "stack.agents_l": "agents",
+      "stack.agents_b": "Multi-agent framework; per-stage model override; native Google Search.",
+      "stack.exec_l": "execution", "stack.exec_t": "Docker sandbox",
+      "stack.exec_b": "Isolated Python exec with CPU/RAM/GPU quotas, network toggle, timeouts.",
+      "stack.fe_l": "frontend",
+      "stack.fe_b": "Streaming log viewer + right-panel state dashboard reading from DB.",
+      "stack.tools_l": "tools",
+      "stack.tools_b": "Literature survey, web search, competition data, paper parsing — wired into agents.",
+      "stack.store_l": "storage", "stack.store_t": "File-based DB",
+      "stack.store_b": "JSON & Markdown on disk. No cloud, no migrations. <span class=\"kbd\">grep</span>-friendly.",
+      "stack.repro_l": "reproducibility",
+      "stack.repro_b": "Every session emits a reproduce bundle — rerun any experiment from scratch.",
+
+      "sc.label": "/ showcase",
+      "sc.title": "<span class=\"gradient-text\">Real runs.</span><br/>Real papers.",
+      "sc.sub": "Two end-to-end runs from the repo's <span class=\"kbd\">showcase/</span> folder — each one producing code, figures, a polished paper, and a reproduce bundle.",
+      "sc.tokens": "tokens", "sc.score": "score", "sc.rounds": "rounds",
+
+      "sc.lo_label": "case · scientific visualization",
+      "sc.lo_title": "Lorenz attractor — 4 figures that tell the chaos story",
+      "sc.lo_body": "Input: <i>\"Solve the Lorenz system with <span class=\"kbd\">scipy.integrate.solve_ivp</span> (RK45). Produce 4 figures: 3D trajectory, bifurcation diagram, divergence curve, (σ,ρ) Lyapunov heatmap.\"</i> Output: a full paper with derivations, code, and the plots below.",
+      "sc.lo_fig1": "fig.1 &nbsp;3D phase-space trajectory (σ=10, ρ=28, β=8/3)",
+      "sc.lo_fig2": "fig.2 &nbsp;bifurcation over ρ ∈ [0, 50]",
+      "sc.lo_fig3": "fig.3 &nbsp;trajectory divergence → max Lyapunov exponent",
+      "sc.lo_fig4": "fig.4 &nbsp;(σ,ρ) stability heatmap, 30×30 grid",
+
+      "sc.ci_label": "case · deep learning empirical study",
+      "sc.ci_title": "Does legitimate transfer learning weaken backdoor watermarks?",
+      "sc.ci_body": "A constrained, time-boxed empirical run: CIFAR-10 → CIFAR-100 with a BadNets-style trigger on ResNet-18. MAARS decomposes the proposal, trains the poisoned source model, fine-tunes under two policies (Head-only vs Full FT), and produces the comparative figures, tables, and analysis that land in the paper.",
+      "sc.ci_c1_t": "Task decomposition",
+      "sc.ci_c1_b": "Recursive decomposition into atomic, dependency-ordered tasks — executed in parallel when the DAG allows.",
+      "sc.ci_c2_t": "Executed code & checkpoints",
+      "sc.ci_c2_b": "Poisoned <span class=\"kbd\">.pth</span> checkpoints, metrics JSON, per-round analysis reports, plots.",
+      "sc.ci_c3_t": "Final paper",
+      "sc.ci_c3_b": "Headline claim, quantitative table, Head-only vs Full FT comparison, limitations — all LLM-written, all grounded in the artifacts.",
+      "sc.ci_foot": "→ Browse the full <a class=\"text-slate-200 underline decoration-white/20 hover:decoration-white/60\" href=\"https://github.com/dozybot001/MAARS/tree/main/showcase\" target=\"_blank\" rel=\"noopener\">showcase/</a> directory in the repo.",
+
+      "ui.label": "/ interface",
+      "ui.title": "A window into the loop.",
+      "ui.sub": "The left panel streams what every agent is thinking. The right panel is a live dashboard that reads canonical state from the session DB — proposals, plan trees, drafts, reviews.",
+      "ui.cap1": "start.sh — one command boot",
+      "ui.cap2": "web UI — streaming left, state right",
+
+      "qs.label": "/ quick start",
+      "qs.title": "<span class=\"gradient-text\">One command.</span>",
+      "qs.sub": "Requirements: Python 3.10+, Docker running, a <a href=\"https://aistudio.google.com/apikey\" class=\"underline decoration-white/20 hover:decoration-white/60\">Gemini API key</a>.",
+      "qs.code_c": "clone & run",
+      "qs.post": "On first boot <span class=\"kbd\">start.sh</span> creates a venv, installs deps, scaffolds <span class=\"kbd\">.env</span> from the example, builds the sandbox image, and serves on <span class=\"kbd\">localhost:8000</span>. GPU is auto-detected.",
+      "qs.a_t": "Drop in an idea",
+      "qs.a_b": "Paste a research idea, a path to a UTF-8 text/markdown file, or a Kaggle competition URL. Kaggle mode auto-extracts the competition ID, downloads data, and skips Refine.",
+      "qs.b_t": "Tune per stage",
+      "qs.b_b": "Set <span class=\"kbd\">MAARS_REFINE_MODEL</span>, <span class=\"kbd\">MAARS_RESEARCH_MODEL</span>, etc. to override the default Gemini model per stage.",
+      "qs.c_t": "GPU passthrough",
+      "qs.c_b": "Install the NVIDIA Container Toolkit, set <span class=\"kbd\">MAARS_DOCKER_SANDBOX_GPU=true</span>, and the sandbox gets <span class=\"kbd\">--gpus all</span> for PyTorch training.",
+
+      "docs.label": "/ docs",
+      "docs.title": "Go deeper.",
+      "docs.d1_l": "doc · architecture",
+      "docs.d1_t": "System overview",
+      "docs.d1_b": "Five layers, SSE protocol, storage layout, stage inheritance.",
+      "docs.d1_href": "https://github.com/dozybot001/MAARS/blob/main/docs/EN/architecture.md",
+      "docs.d2_l": "doc · refine & write",
+      "docs.d2_t": "IterationState pattern",
+      "docs.d2_b": "How Primary ↔ Reviewer loops converge to zero issues.",
+      "docs.d2_href": "https://github.com/dozybot001/MAARS/blob/main/docs/EN/refine-write.md",
+      "docs.d3_l": "doc · research",
+      "docs.d3_t": "Decompose · execute · evaluate",
+      "docs.d3_b": "Recursive decomposition, parallel DAG, strategy update loop.",
+      "docs.d3_href": "https://github.com/dozybot001/MAARS/blob/main/docs/EN/research.md",
+      "docs.read": "read →",
+
+      "cta.title": "Bring an idea.<br/><span class=\"gradient-text\">Walk away with a paper.</span>",
+      "cta.body": "MAARS is MIT-licensed, self-hostable, and reproducible by construction. Fork it, run it, break it.",
+      "cta.btn1": "Star on GitHub",
+      "cta.btn2": "Read quick start →",
+
+      "footer.license": "MIT License",
+      "footer.alt": "中文 README",
+      "footer.alt_href": "https://github.com/dozybot001/MAARS/blob/main/README_CN.md",
+    },
+
+    zh: {
+      "nav.pipeline": "流水线", "nav.architecture": "架构", "nav.stack": "技术栈",
+      "nav.showcase": "案例", "nav.quickstart": "快速开始",
+
+      "hero.badge": "多智能体 · 全自动 · 端到端",
+      "hero.title": "从一个研究想法<br/>到一篇<span class=\"gradient-text\">完整论文</span>。",
+      "hero.sub": "<b class=\"text-slate-200\">MAARS</b> 是一个多智能体系统，接收一个模糊想法——或一个 Kaggle 竞赛链接——自主完成整条研究闭环：文献调研、任务分解、沙箱实验、论文撰写与同行评审。",
+      "hero.cta_github": "查看 GitHub 仓库",
+      "hero.cta_how": "工作原理",
+      "hero.cta_sample": "查看示例论文 →",
+      "hero.loop_label": "/ 四阶段闭环",
+      "hero.refine_agents": "Explorer ↔ Critic",
+      "hero.research_agents": "分解 · 执行 · 评估",
+      "hero.write_agents": "Writer ↔ Reviewer",
+      "hero.polish_agents": "LLM + 元数据",
+
+      "stage.refine": "Refine", "stage.research": "Research", "stage.write": "Write", "stage.polish": "Polish",
+
+      "video.badge": "实况运行 — Lorenz 吸引子",
+
+      "gap.label": "/ 差距",
+      "gap.title": "想法从来不值钱。<br/><span class=\"text-slate-400\">论文才是难点。</span>",
+      "gap.body": "从一句话的想法到一份完整的研究成果，中间横亘着一条长长的「脏活」清单：范围界定、文献调研、实验设计、可复现代码、错误恢复、写作、修订。MAARS 用一条智能体驱动的闭环把这条长尾包起来——端到端跑完。",
+      "gap.stat1": "个自主阶段",
+      "gap.stat2": "次人工介入",
+      "gap.stat3": "轮迭代直至收敛",
+      "gap.stat4": "篇精炼论文产出",
+
+      "pipe.label": "/ 流水线",
+      "pipe.title": "四个阶段。<br/><span class=\"gradient-text\">一个连贯循环。</span>",
+      "pipe.sub": "每个阶段都有稳定的输入输出边界:运行时负责控制流与持久化,智能体负责开放式的工作。",
+      "pipe.stage": "阶段",
+      "pipe.in": "入", "pipe.out": "出",
+      "pipe.refine_body": "<b>Explorer</b> 根据用户的原始想法起草研究提案,<b>Critic</b> 在既定范围内审查,发现缺口与歧义。两者迭代,直到问题归零。",
+      "pipe.research_body": "核心引擎。<b>strategy</b> 将提案分解为原子任务,在 <b>Docker 沙箱</b>中并行调度执行。输出经验证后再评估——若存在关键缺口,则循环更新策略。",
+      "pipe.write_body": "<b>Writer</b> 通读所有研究输出,起草完整论文。<b>Reviewer</b> 点评并驱动修订——与 Refine 同样的 IterationState 模式。",
+      "pipe.polish_body": "对文本质量做一次性 LLM 润色,并附上确定性的元数据附录(token、耗时、分数)。至此可读。",
+      "pipe.d1_title": "运行时 vs 智能体",
+      "pipe.d1_body": "<span class=\"font-mono text-xs text-violet-300\">if · for · while</span>、调度、重试、终止 → <b>运行时</b>。搜索、编码、推理 → <b>智能体</b>。",
+      "pipe.d2_title": "IterationState 模式",
+      "pipe.d2_body": "主智能体起草 → 评审返回 <span class=\"font-mono text-xs text-cyan-300\">{issues, resolved, pass}</span> → 主智能体修订。循环直至 <span class=\"font-mono text-xs\">pass=true</span> 或触达迭代上限。",
+      "pipe.d3_title": "DB 即唯一真源",
+      "pipe.d3_body": "状态存在磁盘上——<span class=\"kbd\">results/{session}/</span> 下的 JSON + Markdown。SSE 只做通知;UI 从 session DB 读权威数据。",
+
+      "arch.label": "/ 架构",
+      "arch.title": "五个层次。<br/><span class=\"gradient-text\">一条清晰边界。</span>",
+      "arch.l5_t": "入口层",
+      "arch.l5_b": "前端(Vanilla JS、SSE 流式、marked.js)· FastAPI 服务端",
+      "arch.l4_t": "编排层",
+      "arch.l4_b": "顺序调度四阶段,管理生命周期、会话恢复与终止",
+      "arch.l3_t": "阶段层",
+      "arch.l3_b": "<span class=\"font-mono text-xs text-slate-300\">Stage</span> 基类 → <span class=\"font-mono text-xs text-slate-300\">ResearchStage</span> · <span class=\"font-mono text-xs text-slate-300\">TeamStage</span> → Refine / Write · <span class=\"font-mono text-xs text-slate-300\">PolishStage</span>",
+      "arch.l3_chip": "稳定接口",
+      "arch.l2_t": "执行层",
+      "arch.l2_b": "所有四阶段均为多智能体;Agno 框架 · Gemini 原生 Google 搜索",
+      "arch.l1_t": "工具与状态层",
+      "arch.l1_b": "ArXiv · Wikipedia · DDGS · Kaggle API · PyPDF · Docker 沙箱 · 文件式 session DB",
+      "arch.l1_chip": "持久化",
+      "arch.db_title": "每一次运行就是一个目录。",
+      "arch.db_body": "状态就是文件。没有隐藏数据库,也没有向量库。你可以 <span class=\"kbd\">cd</span> 进任何一次会话,完整阅读每个智能体说过的话——草稿、评审、计划树、执行日志、润色论文。天生可复现。",
+      "tree.c1": "用户输入", "tree.c2": "Refine 最终输出", "tree.c3": "Refine 各轮",
+      "tree.c4": "Research 校准", "tree.c5": "Research 计划", "tree.c6": "代码 · 图 · 数据",
+      "tree.c7": "Research 各轮", "tree.c8": "Write 各轮", "tree.c9": "Write 最终输出",
+      "tree.c10": "Polish 最终输出", "tree.c11": "元数据 · SSE 日志", "tree.c12": "Dockerfile · run.sh",
+
+      "stack.label": "/ 技术栈",
+      "stack.title": "该稳的地方务实。<br/><span class=\"gradient-text\">该巧的地方精巧。</span>",
+      "stack.backend_l": "后端",
+      "stack.backend_b": "运行时、API 服务、SSE 广播、session DB。",
+      "stack.agents_l": "智能体",
+      "stack.agents_b": "多智能体框架;每阶段可独立配模型;原生 Google 搜索。",
+      "stack.exec_l": "执行", "stack.exec_t": "Docker 沙箱",
+      "stack.exec_b": "隔离式 Python 执行,支持 CPU/RAM/GPU 配额、网络开关、超时控制。",
+      "stack.fe_l": "前端",
+      "stack.fe_b": "流式日志查看器,右侧状态面板从 DB 读取权威数据。",
+      "stack.tools_l": "工具",
+      "stack.tools_b": "文献调研、网页搜索、Kaggle 数据、论文解析——全部接入智能体。",
+      "stack.store_l": "存储", "stack.store_t": "文件式 DB",
+      "stack.store_b": "磁盘上的 JSON 与 Markdown。无云、无迁移。<span class=\"kbd\">grep</span> 友好。",
+      "stack.repro_l": "可复现性",
+      "stack.repro_b": "每次会话都会输出复现包——从零重跑任何实验。",
+
+      "sc.label": "/ 案例",
+      "sc.title": "<span class=\"gradient-text\">真实运行。</span><br/>真实论文。",
+      "sc.sub": "仓库 <span class=\"kbd\">showcase/</span> 目录下的两次端到端运行——每次都产出代码、图表、一篇润色论文和一份复现包。",
+      "sc.tokens": "token", "sc.score": "分数", "sc.rounds": "轮数",
+
+      "sc.lo_label": "案例 · 科学可视化",
+      "sc.lo_title": "Lorenz 吸引子 — 用 4 张图讲清混沌",
+      "sc.lo_body": "输入：<i>「用 <span class=\"kbd\">scipy.integrate.solve_ivp</span>（RK45）求解 Lorenz 方程组，产出 4 张图：3D 相空间轨迹、分叉图、发散曲线、(σ,ρ) Lyapunov 热力图。」</i>输出：含推导、代码与下列图表的完整论文。",
+      "sc.lo_fig1": "图 1 &nbsp;3D 相空间轨迹 (σ=10, ρ=28, β=8/3)",
+      "sc.lo_fig2": "图 2 &nbsp;ρ ∈ [0, 50] 的分叉图",
+      "sc.lo_fig3": "图 3 &nbsp;轨迹发散 → 最大 Lyapunov 指数",
+      "sc.lo_fig4": "图 4 &nbsp;(σ,ρ) 稳定性热力图,30×30 网格",
+
+      "sc.ci_label": "案例 · 深度学习实证研究",
+      "sc.ci_title": "合法的迁移学习是否会削弱后门水印?",
+      "sc.ci_body": "一次限定时间预算的实证运行:ResNet-18 上做 CIFAR-10 → CIFAR-100,带 BadNets 风格触发器。MAARS 分解提案、训练带毒源模型、在两种策略下做微调(Head-only vs Full FT),产出论文所需的对比图表、数据表与分析。",
+      "sc.ci_c1_t": "任务分解",
+      "sc.ci_c1_b": "递归分解为原子任务,按依赖关系排序——DAG 允许时并行执行。",
+      "sc.ci_c2_t": "执行代码与权重",
+      "sc.ci_c2_b": "带毒 <span class=\"kbd\">.pth</span> 权重、指标 JSON、各轮分析报告、图表。",
+      "sc.ci_c3_t": "最终论文",
+      "sc.ci_c3_b": "主张、定量表、Head-only vs Full FT 对比、局限性——均由 LLM 撰写,基于实际产出。",
+      "sc.ci_foot": "→ 到仓库查看完整的 <a class=\"text-slate-200 underline decoration-white/20 hover:decoration-white/60\" href=\"https://github.com/dozybot001/MAARS/tree/main/showcase\" target=\"_blank\" rel=\"noopener\">showcase/</a> 目录。",
+
+      "ui.label": "/ 界面",
+      "ui.title": "一扇看进循环的窗。",
+      "ui.sub": "左侧面板实时流式展示每个智能体正在想什么。右侧是实时状态面板,从 session DB 读取提案、计划树、草稿、评审。",
+      "ui.cap1": "start.sh — 一条命令启动",
+      "ui.cap2": "Web UI — 左侧流式、右侧状态",
+
+      "qs.label": "/ 快速开始",
+      "qs.title": "<span class=\"gradient-text\">一条命令。</span>",
+      "qs.sub": "依赖:Python 3.10+、Docker 已启动、一枚 <a href=\"https://aistudio.google.com/apikey\" class=\"underline decoration-white/20 hover:decoration-white/60\">Gemini API key</a>。",
+      "qs.code_c": "克隆并运行",
+      "qs.post": "首次启动时,<span class=\"kbd\">start.sh</span> 会创建虚拟环境、安装依赖、从示例生成 <span class=\"kbd\">.env</span>、构建沙箱镜像,并在 <span class=\"kbd\">localhost:8000</span> 提供服务。GPU 会自动检测。",
+      "qs.a_t": "投进一个想法",
+      "qs.a_b": "粘贴一个研究想法、一个 UTF-8 文本/markdown 文件路径,或一个 Kaggle 竞赛 URL。Kaggle 模式会自动提取比赛 ID、下载数据并跳过 Refine。",
+      "qs.b_t": "按阶段调模型",
+      "qs.b_b": "设置 <span class=\"kbd\">MAARS_REFINE_MODEL</span>、<span class=\"kbd\">MAARS_RESEARCH_MODEL</span> 等,即可为每个阶段单独覆盖默认 Gemini 模型。",
+      "qs.c_t": "GPU 直通",
+      "qs.c_b": "安装 NVIDIA Container Toolkit、设置 <span class=\"kbd\">MAARS_DOCKER_SANDBOX_GPU=true</span>,沙箱即以 <span class=\"kbd\">--gpus all</span> 启动,供 PyTorch 训练。",
+
+      "docs.label": "/ 文档",
+      "docs.title": "继续深入。",
+      "docs.d1_l": "文档 · 架构",
+      "docs.d1_t": "系统概览",
+      "docs.d1_b": "五层架构、SSE 协议、存储布局、阶段继承。",
+      "docs.d1_href": "https://github.com/dozybot001/MAARS/blob/main/docs/CN/architecture.md",
+      "docs.d2_l": "文档 · refine & write",
+      "docs.d2_t": "IterationState 模式",
+      "docs.d2_b": "主智能体 ↔ 评审如何迭代收敛至问题归零。",
+      "docs.d2_href": "https://github.com/dozybot001/MAARS/blob/main/docs/CN/refine-write.md",
+      "docs.d3_l": "文档 · research",
+      "docs.d3_t": "分解 · 执行 · 评估",
+      "docs.d3_b": "递归分解、并行 DAG、策略更新循环。",
+      "docs.d3_href": "https://github.com/dozybot001/MAARS/blob/main/docs/CN/research.md",
+      "docs.read": "阅读 →",
+
+      "cta.title": "带来一个想法。<br/><span class=\"gradient-text\">带走一篇论文。</span>",
+      "cta.body": "MAARS 采用 MIT 许可证,可自托管,天然可复现。fork 它、跑它、把它拆了。",
+      "cta.btn1": "去 GitHub 点 Star",
+      "cta.btn2": "阅读快速开始 →",
+
+      "footer.license": "MIT 许可证",
+      "footer.alt": "English README",
+      "footer.alt_href": "https://github.com/dozybot001/MAARS/blob/main/README.md",
+    }
+  };
+
+  function applyLang(lang) {
+    const dict = T[lang] || T.en;
+    document.documentElement.lang = lang;
+
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.getAttribute('data-i18n');
+      if (dict[key] != null) el.innerHTML = dict[key];
+    });
+    document.querySelectorAll('[data-i18n-href]').forEach(el => {
+      const key = el.getAttribute('data-i18n-href');
+      if (dict[key] != null) el.setAttribute('href', dict[key]);
+    });
+
+    document.querySelectorAll('[data-lang-btn]').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-lang-btn') === lang);
+    });
+
+    localStorage.setItem('maars-lang', lang);
+  }
+
+  function initialLang() {
+    const saved = localStorage.getItem('maars-lang');
+    if (saved === 'en' || saved === 'zh') return saved;
+    return (navigator.language || 'en').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+  }
+
+  document.querySelectorAll('[data-lang-btn]').forEach(btn => {
+    btn.addEventListener('click', () => applyLang(btn.getAttribute('data-lang-btn')));
+  });
+
+  applyLang(initialLang());
+
   // reveal on scroll
   const io = new IntersectionObserver((entries) => {
     for (const e of entries) if (e.isIntersecting) e.target.classList.add('visible');
