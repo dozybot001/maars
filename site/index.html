@@ -49,7 +49,7 @@
   }
   .glass:hover { border-color: rgba(255,255,255,.18); }
   .gradient-text {
-    background: linear-gradient(120deg,#f8fafc 0%, #cbd5e1 55%, #64748b 100%);
+    background: linear-gradient(120deg,#f8fafc 0%, #c7d2fe 55%, #818cf8 100%);
     -webkit-background-clip:text; background-clip:text; color:transparent;
   }
   .stage-accent-refine,
@@ -87,7 +87,7 @@
   .nav-link { position:relative; }
   .nav-link::after {
     content:""; position:absolute; left:0; right:100%; bottom:-4px; height:1px;
-    background: linear-gradient(90deg,#e2e8f0,#64748b);
+    background: linear-gradient(90deg,#c7d2fe,#6366f1);
     transition: right .2s ease;
   }
   .nav-link:hover::after { right:0; }
@@ -97,7 +97,7 @@
     background: rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.09);
     font-size:.78rem; color:#cbd5e1;
   }
-  .dot { width:.4rem; height:.4rem; border-radius:999px; background:#cbd5e1; box-shadow:0 0 10px rgba(255,255,255,.35); }
+  .dot { width:.4rem; height:.4rem; border-radius:999px; background:#a5b4fc; box-shadow:0 0 10px rgba(129,140,248,.55); }
   details > summary { list-style:none; cursor:pointer; }
   details > summary::-webkit-details-marker { display:none; }
   .shine {
@@ -121,7 +121,7 @@
     transition: color .15s ease, background .15s ease;
   }
   .lang-toggle button.active {
-    color:#0f172a; background:#e2e8f0;
+    color:#f8fafc; background:#6366f1;
   }
   .lang-toggle button:not(.active):hover { color:#e2e8f0; }
 </style>
@@ -134,7 +134,7 @@
 <header class="sticky top-0 z-50 backdrop-blur-md bg-slate-950/60 border-b border-white/5">
   <nav class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
     <a href="#top" class="flex items-center gap-2 group">
-      <span class="w-2.5 h-2.5 rounded-sm bg-gradient-to-br from-slate-200 to-slate-500 shadow-[0_0_12px_rgba(255,255,255,.25)]"></span>
+      <span class="w-2.5 h-2.5 rounded-sm bg-gradient-to-br from-indigo-300 to-slate-400 shadow-[0_0_12px_rgba(129,140,248,.45)]"></span>
       <span class="font-semibold tracking-tight text-slate-100 group-hover:text-white">MAARS</span>
       <span class="hidden sm:inline text-xs text-slate-500 font-mono">v13.4</span>
     </a>
@@ -621,8 +621,8 @@ bash start.sh</code></pre>
 <!-- ============ CTA ============ -->
 <section class="max-w-6xl mx-auto px-6 py-24">
   <div class="relative glass rounded-3xl p-10 md:p-16 overflow-hidden">
-    <div class="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-gradient-to-br from-white/10 to-white/5 blur-3xl"></div>
-    <div class="absolute -bottom-24 -left-24 w-80 h-80 rounded-full bg-gradient-to-br from-white/8 to-white/3 blur-3xl"></div>
+    <div class="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-gradient-to-br from-indigo-500/25 to-white/5 blur-3xl"></div>
+    <div class="absolute -bottom-24 -left-24 w-80 h-80 rounded-full bg-gradient-to-br from-white/8 to-indigo-500/10 blur-3xl"></div>
     <div class="relative">
       <h2 class="text-3xl md:text-5xl font-bold tracking-tight mb-4" data-i18n="cta.title">Bring an idea.<br/><span class="gradient-text">Walk away with a paper.</span></h2>
       <p class="text-slate-400 max-w-xl mb-8" data-i18n="cta.body">MAARS is MIT-licensed, self-hostable, and reproducible by construction. Fork it, run it, break it.</p>
@@ -643,7 +643,7 @@ bash start.sh</code></pre>
 <footer class="border-t border-white/5 mt-8">
   <div class="max-w-6xl mx-auto px-6 py-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-sm text-slate-500">
     <div class="flex items-center gap-3">
-      <span class="w-2 h-2 rounded-sm bg-gradient-to-br from-slate-200 to-slate-500"></span>
+      <span class="w-2 h-2 rounded-sm bg-gradient-to-br from-indigo-300 to-slate-400"></span>
       <span class="text-slate-300 font-medium">MAARS</span>
       <span>· <span data-i18n="footer.license">MIT License</span></span>
     </div>
