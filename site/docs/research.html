@@ -131,6 +131,7 @@
       <li><a href="#preflight"  data-i18n="toc.preflight">Preflight</a></li>
       <li><a href="#principles" data-i18n="toc.principles">Principles</a></li>
       <li><a href="#phases"     data-i18n="toc.phases">Six phases</a></li>
+      <li><a href="#tools"      data-i18n="toc.tools">Tool scoping</a></li>
       <li><a href="#loop"       data-i18n="toc.loop">Main loop</a></li>
       <li><a href="#decisions"  data-i18n="toc.decisions">Key decisions</a></li>
       <li><a href="#parallel"   data-i18n="toc.parallel">Parallel execution</a></li>
@@ -151,6 +152,7 @@
         <li><a href="#preflight" data-i18n="toc.preflight">Preflight</a></li>
         <li><a href="#principles" data-i18n="toc.principles">Principles</a></li>
         <li><a href="#phases" data-i18n="toc.phases">Six phases</a></li>
+        <li><a href="#tools" data-i18n="toc.tools">Tool scoping</a></li>
         <li><a href="#loop" data-i18n="toc.loop">Main loop</a></li>
         <li><a href="#decisions" data-i18n="toc.decisions">Key decisions</a></li>
         <li><a href="#parallel" data-i18n="toc.parallel">Parallel execution</a></li>
@@ -291,9 +293,67 @@
       </div>
     </section>
 
+    <!-- ===== Tool scoping ===== -->
+    <section id="tools">
+      <h2><span class="num">05</span><span data-i18n="ts.title">Tool scoping</span></h2>
+      <p class="sub" data-i18n="ts.sub">Each phase receives only the tools it actually needs. Planning phases cannot run code; evaluation does not search for new papers.</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th data-i18n="ts.th_phase">Phase</th>
+            <th data-i18n="ts.th_tools">Tools</th>
+            <th data-i18n="ts.th_why">Rationale</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Calibrate</strong></td>
+            <td><em data-i18n="ts.none">none</em></td>
+            <td data-i18n="ts.cal_why">Pure reasoning from the capability profile text; no tools needed.</td>
+          </tr>
+          <tr>
+            <td><strong>Strategy</strong></td>
+            <td><code>arXiv</code> · <code>Wikipedia</code></td>
+            <td data-i18n="ts.str_why">Search for best practices only. No <code>code_execute</code> — must search, not run experiments.</td>
+          </tr>
+          <tr>
+            <td><strong>Decompose root</strong></td>
+            <td data-i18n="ts.dec_tools">read + search</td>
+            <td data-i18n="ts.dec_why">May inspect existing results and search for domain context; must not execute code during planning.</td>
+          </tr>
+          <tr>
+            <td><strong>Decompose non-root</strong></td>
+            <td><em data-i18n="ts.none">none</em></td>
+            <td data-i18n="ts.decnr_why">JSON output only.</td>
+          </tr>
+          <tr>
+            <td><strong>Execute</strong></td>
+            <td data-i18n="ts.exe_tools">full set</td>
+            <td data-i18n="ts.exe_why">Handles both code tasks (<code>code_execute</code>) and literature tasks (search), plus result inspection via read tools.</td>
+          </tr>
+          <tr>
+            <td><strong>Verify</strong></td>
+            <td><em data-i18n="ts.none">none</em></td>
+            <td data-i18n="ts.vfy_why">JSON verdict only.</td>
+          </tr>
+          <tr>
+            <td><strong>Evaluate</strong></td>
+            <td data-i18n="ts.evl_tools">read tools</td>
+            <td data-i18n="ts.evl_why">Inspect completed results only; no <code>code_execute</code>, no search — must not run new experiments or fetch new papers.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p style="font-size:.82rem;color:#64748b;margin-top:.9rem" data-i18n="ts.note">
+        <strong data-i18n="ts.note_b">Read tools</strong>: <code>read_task_output</code> · <code>list_tasks</code> · <code>read_refined_idea</code> · <code>read_plan_tree</code> · <code>read_results_summary</code> · <code>read_artifact_file</code> · <code>list_artifacts</code>.
+        The capability profile passed to Calibrate / Strategy / Evaluate always lists the full Execute tool set, so planning agents understand what execution tasks can do — even though they themselves cannot call those tools.
+      </p>
+    </section>
+
     <!-- ===== Main loop ===== -->
     <section id="loop">
-      <h2><span class="num">05</span><span data-i18n="lp.title">Main loop skeleton</span></h2>
+      <h2><span class="num">06</span><span data-i18n="lp.title">Main loop skeleton</span></h2>
       <p class="sub" data-i18n="lp.sub">Calibrate once, then iterate: Strategy → Decompose → Execute → Evaluate, until Evaluate emits no <code>strategy_update</code>.</p>
 
       <div class="copy-card" data-copy-target="loop-code" role="button" tabindex="0" aria-label="Copy">
@@ -320,7 +380,7 @@
 
     <!-- ===== Key decisions ===== -->
     <section id="decisions">
-      <h2><span class="num">06</span><span data-i18n="kd.title">Key decisions</span></h2>
+      <h2><span class="num">07</span><span data-i18n="kd.title">Key decisions</span></h2>
 
       <table class="decision-table">
         <thead><tr>
@@ -341,7 +401,7 @@
 
     <!-- ===== Parallel execution ===== -->
     <section id="parallel">
-      <h2><span class="num">07</span><span data-i18n="pe.title">Parallel execution model</span></h2>
+      <h2><span class="num">08</span><span data-i18n="pe.title">Parallel execution model</span></h2>
       <p class="sub" data-i18n="pe.sub">Tasks respect dependency ordering via topological batching; concurrency is capped by semaphore.</p>
 
       <div class="copy-card" data-copy-target="par-code" role="button" tabindex="0" aria-label="Copy">
@@ -369,7 +429,7 @@
 
     <!-- ===== _stream_llm ===== -->
     <section id="stream">
-      <h2><span class="num">08</span><span data-i18n="sl.title">_stream_llm internals</span></h2>
+      <h2><span class="num">09</span><span data-i18n="sl.title">_stream_llm internals</span></h2>
       <p class="sub" data-i18n="sl.sub">Single entry-point for all LLM calls, in <code>stage.py</code>.</p>
 
       <ul>
@@ -381,7 +441,7 @@
 
     <!-- ===== JSON parsing ===== -->
     <section id="json">
-      <h2><span class="num">09</span><span data-i18n="jp.title">JSON parsing + retry</span></h2>
+      <h2><span class="num">10</span><span data-i18n="jp.title">JSON parsing + retry</span></h2>
 
       <h3 data-i18n="jp.fn_t"><code>parse_json_fenced</code></h3>
       <p data-i18n="jp.fn_body">
@@ -409,7 +469,7 @@
 
     <!-- ===== Code locations ===== -->
     <section id="code">
-      <h2><span class="num">10</span><span data-i18n="cd.title">Code locations</span></h2>
+      <h2><span class="num">11</span><span data-i18n="cd.title">Code locations</span></h2>
 
       <table>
         <thead><tr>
@@ -453,6 +513,7 @@ const T = {
     "toc.preflight":  "Preflight",
     "toc.principles": "Principles",
     "toc.phases":     "Six phases",
+    "toc.tools":      "Tool scoping",
     "toc.loop":       "Main loop",
     "toc.decisions":  "Key decisions",
     "toc.parallel":   "Parallel execution",
@@ -500,6 +561,25 @@ const T = {
     "ph.vfy_note": "Encourages calling <code>list_artifacts</code> to verify. for/else retry loop (2 attempts) for JSON parsing.",
     "ph.evl_in":   "research goal + strategy + score trend + history + capability profile + task summaries",
     "ph.evl_note": "Prefer-stop: only critical gaps trigger <code>strategy_update</code>. Focuses on completeness / consistency — does not propose untried directions. <code>is_final=True</code> → summarise and halt.",
+
+    "ts.title":     "Tool scoping",
+    "ts.sub":       "Each phase receives only the tools it actually needs. Planning phases cannot run code; evaluation does not search for new papers.",
+    "ts.th_phase":  "Phase",
+    "ts.th_tools":  "Tools",
+    "ts.th_why":    "Rationale",
+    "ts.none":      "none",
+    "ts.cal_why":   "Pure reasoning from the capability profile text; no tools needed.",
+    "ts.str_why":   "Search for best practices only. No <code>code_execute</code> — must search, not run experiments.",
+    "ts.dec_tools":  "read + search",
+    "ts.dec_why":   "May inspect existing results and search for domain context; must not execute code during planning.",
+    "ts.decnr_why": "JSON output only.",
+    "ts.exe_tools":  "full set",
+    "ts.exe_why":   "Handles both code tasks (<code>code_execute</code>) and literature tasks (search), plus result inspection via read tools.",
+    "ts.vfy_why":   "JSON verdict only.",
+    "ts.evl_tools":  "read tools",
+    "ts.evl_why":   "Inspect completed results only; no <code>code_execute</code>, no search — must not run new experiments or fetch new papers.",
+    "ts.note":      "<strong>Read tools</strong>: <code>read_task_output</code> · <code>list_tasks</code> · <code>read_refined_idea</code> · <code>read_plan_tree</code> · <code>read_results_summary</code> · <code>read_artifact_file</code> · <code>list_artifacts</code>. The capability profile passed to Calibrate / Strategy / Evaluate always lists the full Execute tool set, so planning agents understand what execution tasks can do — even though they themselves cannot call those tools.",
+    "ts.note_b":    "Read tools",
 
     "lp.title": "Main loop skeleton",
     "lp.sub":   "Calibrate once, then iterate: Strategy → Decompose → Execute → Evaluate, until Evaluate emits no <code>strategy_update</code>.",
@@ -575,6 +655,7 @@ const T = {
     "toc.preflight":  "前置检查",
     "toc.principles": "原则",
     "toc.phases":     "六个阶段",
+    "toc.tools":      "工具分配",
     "toc.loop":       "主循环",
     "toc.decisions":  "关键决策",
     "toc.parallel":   "并行执行",
@@ -622,6 +703,25 @@ const T = {
     "ph.vfy_note": "鼓励调用 <code>list_artifacts</code> 进行验证。JSON 解析使用 for/else 重试循环（2 次尝试）。",
     "ph.evl_in":   "研究目标 + 策略 + 分数趋势 + 历史评估 + 能力画像 + 任务摘要",
     "ph.evl_note": "优先停止：仅关键空白才触发 <code>strategy_update</code>。聚焦完整性/一致性评估，不建议未尝试的新方向。<code>is_final=True</code> → 总结并停止。",
+
+    "ts.title":     "工具分配",
+    "ts.sub":       "每个阶段只接收它实际需要的工具。规划阶段不能执行代码；评估阶段不搜索新论文。",
+    "ts.th_phase":  "阶段",
+    "ts.th_tools":  "工具",
+    "ts.th_why":    "原因",
+    "ts.none":      "无",
+    "ts.cal_why":   "纯推理，从能力画像文本中得出结论；无需任何工具。",
+    "ts.str_why":   "只做最佳实践搜索。无 <code>code_execute</code>——只能搜索，不能运行实验。",
+    "ts.dec_tools":  "读工具 + 搜索",
+    "ts.dec_why":   "规划阶段可查看已有结果并搜索领域上下文；不得执行代码。",
+    "ts.decnr_why": "仅输出 JSON，无需工具调用。",
+    "ts.exe_tools":  "全集",
+    "ts.exe_why":   "同时处理代码任务（<code>code_execute</code>）和文献任务（搜索），以及通过读工具检索结果。",
+    "ts.vfy_why":   "仅输出 JSON 判决，无需工具调用。",
+    "ts.evl_tools":  "读工具",
+    "ts.evl_why":   "只检视已完成的结果；无 <code>code_execute</code>，无搜索——不得运行新实验或获取新论文。",
+    "ts.note":      "<strong>读工具</strong>：<code>read_task_output</code> · <code>list_tasks</code> · <code>read_refined_idea</code> · <code>read_plan_tree</code> · <code>read_results_summary</code> · <code>read_artifact_file</code> · <code>list_artifacts</code>。传给 Calibrate / Strategy / Evaluate 的能力画像始终列出完整的 Execute 工具集，让规划阶段的 Agent 了解执行任务能做什么——即使它们自己无法调用这些工具。",
+    "ts.note_b":    "读工具",
 
     "lp.title": "主循环骨架",
     "lp.sub":   "Calibrate 只执行一次，然后迭代：Strategy → Decompose → Execute → Evaluate，直到 Evaluate 不再输出 <code>strategy_update</code>。",
