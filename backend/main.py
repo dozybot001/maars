@@ -26,20 +26,24 @@ async def lifespan(app):
     from backend.agno import create_agno_stages
 
     orchestrator = PipelineOrchestrator()
-    stages = create_agno_stages(
-        model_id=settings.google_model,
-        refine_model_id=settings.model_for_stage("refine"),
-        research_model_id=settings.model_for_stage("research"),
-        write_model_id=settings.model_for_stage("write"),
-        polish_model_id=settings.model_for_stage("polish"),
-        api_key=settings.google_api_key,
-        db=orchestrator.db,
-        max_iterations=settings.research_max_iterations,
-        max_delegations=settings.team_max_delegations,
-    )
-    orchestrator.stages.update(stages)
-    orchestrator._wire_broadcast()
-    app.state.orchestrator = orchestrator
+    try:
+        stages = create_agno_stages(
+            model_id=settings.google_model,
+            refine_model_id=settings.model_for_stage("refine"),
+            research_model_id=settings.model_for_stage("research"),
+            write_model_id=settings.model_for_stage("write"),
+            polish_model_id=settings.model_for_stage("polish"),
+            api_key=settings.google_api_key,
+            db=orchestrator.db,
+            max_iterations=settings.research_max_iterations,
+            max_delegations=settings.team_max_delegations,
+        )
+        orchestrator.stages.update(stages)
+        orchestrator._wire_broadcast()
+        app.state.orchestrator = orchestrator
+    except Exception:
+        await orchestrator.shutdown()
+        raise
 
     yield
     await orchestrator.shutdown()

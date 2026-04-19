@@ -272,8 +272,10 @@ class ResearchDB:
         path = self._root / "execution_log.jsonl"
         if not path.exists():
             return []
+        with self._exec_log_lock:
+            lines = path.read_text(encoding="utf-8").splitlines()
         entries = []
-        for line in path.read_text(encoding="utf-8").splitlines():
+        for line in lines:
             try:
                 entries.append(json.loads(line))
             except json.JSONDecodeError:

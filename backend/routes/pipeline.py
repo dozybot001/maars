@@ -49,32 +49,36 @@ def _resolve_research_input(raw_input: str) -> str:
 
     if _looks_like_strict_file_path(candidate_text):
         raw_path = Path(candidate_text).expanduser()
-        candidates = [raw_path] if raw_path.is_absolute() else [WORKSPACE_ROOT / raw_path]
-        for candidate in candidates:
-            if not candidate.exists():
-                continue
-            if not candidate.is_file():
-                raise HTTPException(status_code=400, detail=f"Input path '{candidate_text}' is not a file")
-            try:
-                return candidate.read_text(encoding="utf-8").strip()
-            except UnicodeDecodeError as exc:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Input file '{candidate_text}' is not valid UTF-8 text",
-                ) from exc
-            except OSError as exc:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Could not read input file '{candidate_text}'",
-                ) from exc
-
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Input file '{candidate_text}' was not found. "
-                "Provide plain research text, a Kaggle URL, or a readable file path."
-            ),
-        )
+        base = raw_path if raw_path.is_absolute() else WORKSPACE_ROOT / raw_path
+        candidate = base.resolve()
+        allowed_roots = (WORKSPACE_ROOT.resolve(), Path.home().resolve())
+        if not any(str(candidate).startswith(str(r)) for r in allowed_roots):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Input file path '{candidate_text}' is outside allowed directories",
+            )
+        if not candidate.exists():
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Input file '{candidate_text}' was not found. "
+                    "Provide plain research text, a Kaggle URL, or a readable file path."
+                ),
+            )
+        if not candidate.is_file():
+            raise HTTPException(status_code=400, detail=f"Input path '{candidate_text}' is not a file")
+        try:
+            return candidate.read_text(encoding="utf-8").strip()
+        except UnicodeDecodeError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Input file '{candidate_text}' is not valid UTF-8 text",
+            ) from exc
+        except OSError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not read input file '{candidate_text}'",
+            ) from exc
 
     if extract_competition_id(candidate_text):
         return text

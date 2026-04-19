@@ -183,7 +183,9 @@ class PipelineOrchestrator:
             try:
                 q.put_nowait(event)
             except asyncio.QueueFull:
-                pass
+                logging.getLogger(__name__).warning(
+                    "SSE queue full, dropping event for stage=%s", event.get("stage")
+                )
 
     def _wire_broadcast(self):
         for stage in self.stages.values():
