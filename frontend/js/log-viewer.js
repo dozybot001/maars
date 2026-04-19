@@ -163,6 +163,13 @@ export function pauseTimers() {
   if (activityBadge) { activityBadge.textContent = 'Paused'; activityBadge.dataset.state = 'paused'; }
 }
 
+export function stopTimers() {
+  const wasRunning = !!timerInterval;
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  if (activityInterval) { clearInterval(activityInterval); activityInterval = null; }
+  if (wasRunning && activityBadge) { activityBadge.textContent = 'Done'; activityBadge.dataset.state = 'done'; }
+}
+
 export function resumeTimers() {
   if (pausedAt) {
     const paused = Date.now() - pausedAt;

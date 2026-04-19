@@ -1,6 +1,6 @@
 import { on } from './events.js';
 import { startPipeline, pipelineAction, fetchStatus } from './api.js';
-import { pauseTimers, resumeTimers } from './log-viewer.js';
+import { pauseTimers, resumeTimers, stopTimers } from './log-viewer.js';
 
 const NODE_ORDER = ['refine', 'calibrate', 'strategy', 'decompose', 'execute', 'evaluate', 'write'];
 const NODE_SET = new Set(NODE_ORDER);
@@ -30,6 +30,7 @@ export function initPipelineUI() {
       if ((stage === 'refine' || stage === 'write') && !phase) {
         updateNode(stage, 'done');
         seenNodes.add(stage);
+        if (stage === 'write') stopTimers();
         syncButtons();
         return;
       }
@@ -82,11 +83,12 @@ export function initPipelineUI() {
 export async function syncFromAPI() {
   const status = await fetchStatus();
   if (!status) return;
+  let writeDone = false;
   for (const st of status.stages) {
     if (st.state === 'completed') {
       if (st.name === 'refine') { updateNode('refine', 'done'); seenNodes.add('refine'); }
       else if (st.name === 'research') { RESEARCH_PHASES.forEach((n) => { updateNode(n, 'done'); seenNodes.add(n); }); }
-      else if (st.name === 'write') { updateNode('write', 'done'); seenNodes.add('write'); }
+      else if (st.name === 'write') { updateNode('write', 'done'); seenNodes.add('write'); writeDone = true; }
     } else if (st.state === 'running') {
       if (st.name === 'refine') { updateNode('refine', 'active'); seenNodes.add('refine'); }
       else if (st.name === 'write') { updateNode('write', 'active'); seenNodes.add('write'); }
@@ -102,6 +104,7 @@ export async function syncFromAPI() {
       if (active) updateNode(active, 'paused');
     }
   }
+  if (writeDone) stopTimers();
   syncButtons();
 }
 
