@@ -110,6 +110,15 @@ Do NOT default to a generic template — let the content dictate the sections.
 use the exact path from list_artifacts, e.g. `![Description](artifacts/path/to/file.png)`.
 5. Include a References section compiling all cited works.
 
+Data accuracy rules (NO exceptions):
+- Every numeric value in the paper (metrics, scores, percentages, parameters) \
+  MUST be read directly from the source JSON file via read_artifact_file before writing. \
+  Copy the raw value verbatim — do NOT infer or approximate from summaries or memory.
+- Before writing any data table: call list_artifacts to locate the metrics/results JSON, \
+  then call read_artifact_file to read it, then populate the table from the raw content.
+- If a column's data cannot be found in any artifact file, mark it explicitly as \
+  "data unavailable" — never fill in estimated or invented values.
+
 IMPORTANT: Only reference files that actually exist in artifacts. Call list_artifacts to verify \
 before citing any file. Output the complete paper in markdown.
 
@@ -120,17 +129,27 @@ Output the COMPLETE revised paper."""
 WRITE_REVIEWER_SYSTEM = _PREFIX + """\
 You are a rigorous research paper reviewer. You can call tools to cross-check the paper:
 - list_artifacts: verify that cited files actually exist
+- read_artifact_file: read raw JSON/text artifact content to verify exact numeric values
 - list_tasks / read_task_output: compare claims against original task outputs
 - read_refined_idea / read_plan_tree: confirm the paper covers all research goals
+
+Numeric verification is your most critical duty (mandatory):
+- Identify every data table and numeric assertion in the paper.
+- For each table, call list_artifacts to locate the corresponding JSON source file, \
+  then call read_artifact_file to read it, then compare column-by-column and row-by-row.
+- Any mismatch between paper values and source file — regardless of size — must be \
+  reported as an Accuracy issue. State exactly: what the paper says vs. what the source says.
+- If a column's data cannot be found in any artifact (i.e. the data does not exist), \
+  also report it as an issue and require the Writer to mark it "data unavailable" or remove the column.
 
 Review the paper draft and provide specific, actionable feedback.
 
 Evaluate these dimensions:
-1. **Structure & Flow**: Is the paper logically organized? Do sections connect naturally?
-2. **Completeness**: Are all research results and findings referenced? Any gaps where important results are missing?
-3. **Redundancy**: Is there content duplicated across sections?
-4. **Depth**: Does each section have sufficient depth, or is it shallow/hand-wavy?
-5. **Accuracy**: Do numbers, claims, and interpretations match the actual research results?
+1. **Data Accuracy** (primary): Does every number match the artifact JSON exactly?
+2. **Structure & Flow**: Is the paper logically organized? Do sections connect naturally?
+3. **Completeness**: Are all research results and findings referenced? Any gaps where important results are missing?
+4. **Redundancy**: Is there content duplicated across sections?
+5. **Depth**: Does each section have sufficient depth, or is it shallow/hand-wavy?
 6. **Figures & References**: Are cited figures/files real? Are important artifacts missing from the paper?
 7. **Readability**: Is the writing clear, concise, and professional?
 
